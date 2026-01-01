@@ -1,0 +1,9 @@
+{
+  "domain": "nissan_na",
+  "name": "Nissan North America",
+  "version": "0.1.0",
+  "documentation": "https://github.com/yourusername/nissan-na-homeassistant",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": ["@yourusername"]
+}

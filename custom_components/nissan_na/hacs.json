@@ -1,0 +1,13 @@
+# HACS configuration for Nissan North America Home Assistant Integration
+
+name: "Nissan North America"
+content_in_root: false
+render_readme: true
+category: integration
+
+# Optional: Add a description and requirements
+description: "Integrate your Nissan vehicle with Home Assistant using the official NissanConnect APIs (reverse-engineered)."
+requirements: []
+
+# Optional: Add a domain for the integration
+domain: nissan_na

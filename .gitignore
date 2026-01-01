@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.pdb
+*.egg-info/
+.eggs/
+*.egg
+*.manifest
+*.spec
+
+# Pipenv
+Pipfile.lock
+
+# VS Code
+.vscode/
+
+# Home Assistant
+home-assistant.log
+home-assistant_v2.db
+*.db-shm
+*.db-wal
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test/coverage
+.coverage
+htmlcov/
+.tox/
+.pytest_cache/
+
+# Env
+.env
+.venv/
+venv/
+ENV/
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# Custom Components
+custom_components/*/__pycache__/
+custom_components/*/*.pyc
