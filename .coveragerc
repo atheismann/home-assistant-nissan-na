@@ -1,0 +1,11 @@
+[run]
+branch = True
+source = custom_components/nissan_na
+omit =
+    */__init__.py
+    */__main__.py
+    */tests/*
+
+[report]
+show_missing = True
+skip_covered = True

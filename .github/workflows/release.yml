@@ -1,0 +1,98 @@
+
+name: Release and Changelog
+
+permissions:
+  contents: write
+  issues: read
+  pull-requests: read
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # Decode the GitHub App Private Key
+      - name: Decode the GitHub App Private Key
+        id: decode
+        run: |
+          private_key=$(echo "${{ secrets.ACTIONS_RUNNER_APPLICATION_PRIVATE_KEY }}" | base64 -d | awk 'BEGIN {ORS="\\n"} {print}' | head -c -2) &> /dev/null
+          echo "::add-mask::$private_key"
+          echo "private-key=$private_key" >> "$GITHUB_OUTPUT"
+      # Get workflow token
+      - name: Get Token
+        id: get_workflow_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.ACTIONS_RUNNER_APPLICATION_ID }}
+          private-key: ${{ steps.decode.outputs.private-key }}
+
+      # Get GitHub App User ID
+      - name: Get GitHub App User ID
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.get_workflow_token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
+      - run: |
+          git config --global user.name '${{ steps.get_workflow_token.outputs.app-slug }}[bot]'
+          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.get_workflow_token.outputs.app-slug }}[bot]@users.noreply.github.com'
+
+      # Checkout code
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.get_workflow_token.outputs.token }}
+          ref: ${{ github.head_ref }}
+
+      # Fix permissions
+      - name: Fix permissions (no sudo)
+        run: |
+          git config --global --add safe.directory $GITHUB_WORKSPACE
+          chmod -R u+rw .
+
+      # Bump version and create tag
+      - name: Bump version and push tag
+        id: bump
+        uses: anothrNick/github-tag-action@v1
+        env:
+          GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
+          WITH_V: true
+          DEFAULT_BUMP: patch
+          RELEASE_BRANCHES: main
+          DRY_RUN: false
+
+      # Update manifest.json version
+      - name: Update manifest.json version
+        run: |
+          VERSION=$(echo "${{ steps.bump.outputs.new_tag }}" | sed 's/^v//')
+          jq '.version = "'${VERSION}'"' custom_components/nissan_na/manifest.json > tmp.$$.json && mv tmp.$$.json custom_components/nissan_na/manifest.json
+
+      # Generate and update CHANGELOG.md
+      - name: Update CHANGELOG.md
+        uses: mikepenz/release-changelog-builder-action@v4
+        with:
+          configuration: .github/changelog-configuration.json
+        env:
+          GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
+
+      # Commit manifest.json version bump
+      - name: Commit CHANGELOG.md and manifest.json version bump
+        run: |
+          git add CHANGELOG.md
+          git add custom_components/nissan_na/manifest.json
+          git commit -m "docs: update CHANGELOG.md and manifest.json version for ${{ steps.bump.outputs.new_tag }}" || echo "No changes to commit"
+          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref }}
+        env:
+          GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
+
+      # Create GitHub Release
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.bump.outputs.new_tag }}
+          name: Release ${{ steps.bump.outputs.new_tag }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}

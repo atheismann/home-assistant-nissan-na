@@ -1,0 +1,14 @@
+{
+  "domain": "nissan_na",
+  "name": "Nissan North America",
+  "version": "0.1.0",
+  "documentation": "https://github.com/atheismann/nissan-na-homeassistant",
+  "issue_tracker": "https://github.com/atheismann/nissan-na-homeassistant/issues",
+  "requirements": [
+    "pydantic>=1.10.0",
+    "requests>=2.28.0"
+  ],
+  "codeowners": ["@atheismann"],
+  "iot_class": "cloud_polling",
+  "config_flow": true
+}
