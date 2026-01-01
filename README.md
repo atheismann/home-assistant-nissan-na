@@ -1,4 +1,12 @@
 
+# Badges
+![GitHub release](https://img.shields.io/github/v/release/atheismann/home-assistant-nissan-na?style=flat-square)
+![GitHub issues](https://img.shields.io/github/issues/atheismann/home-assistant-nissan-na?style=flat-square)
+![GitHub last commit](https://img.shields.io/github/last-commit/atheismann/home-assistant-nissan-na?style=flat-square)
+![License](https://img.shields.io/github/license/atheismann/home-assistant-nissan-na?style=flat-square)
+![HACS badge](https://img.shields.io/badge/HACS-Custom-blue?style=flat-square)
+![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square)
+
 # Nissan North America for Home Assistant
 
 Easily control and monitor your Nissan vehicle from Home Assistant! This integration lets you lock/unlock your doors, start or stop your engine, check your car’s status, and see its location—all from your smart home dashboard.
@@ -24,8 +32,6 @@ All features depend on your vehicle model and your NissanConnect subscription.
 2. Add the URL of this repository as a custom repository (choose "Integration").
 3. Search for "Nissan North America" in HACS and install.
 4. Restart Home Assistant.
-
-![HACS badge](https://img.shields.io/badge/HACS-Custom-blue)
 
 ### Manual Installation
 1. Download or copy the `nissan_na` folder into your Home Assistant `custom_components` directory.
