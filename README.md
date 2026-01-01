@@ -3,7 +3,7 @@
 ![GitHub release](https://img.shields.io/github/v/release/atheismann/home-assistant-nissan-na?style=flat-square)
 ![GitHub issues](https://img.shields.io/github/issues/atheismann/home-assistant-nissan-na?style=flat-square)
 ![GitHub last commit](https://img.shields.io/github/last-commit/atheismann/home-assistant-nissan-na?style=flat-square)
-![License](https://img.shields.io/github/license/atheismann/home-assistant-nissan-na?style=flat-square)
+![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)
 ![HACS badge](https://img.shields.io/badge/HACS-Custom-blue?style=flat-square)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square)
 
