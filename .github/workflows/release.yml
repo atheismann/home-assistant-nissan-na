@@ -6,8 +6,9 @@ permissions:
   issues: read
   pull-requests: read
 
+
 on:
-  push:
+  pull_request:
     branches:
       - main
 
@@ -45,6 +46,8 @@ jobs:
         with:
           token: ${{ steps.get_workflow_token.outputs.token }}
           ref: ${{ github.head_ref }}
+          # Make sure the value of GITHUB_TOKEN will not be persisted in repo's config
+          persist-credentials: false
 
       # Fix permissions
       - name: Fix permissions (no sudo)
