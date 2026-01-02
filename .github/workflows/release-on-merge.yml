@@ -73,7 +73,7 @@ jobs:
 
       # Generate and update CHANGELOG.md
       - name: Generate and update CHANGELOG.md
-        uses: mikepenz/release-changelog-builder-action@v4
+        uses: mikepenz/release-changelog-builder-action@v6
         with:
           configuration: .github/changelog-configuration.json
         env:
