@@ -6,6 +6,7 @@ on:
       - main
     paths-ignore:
       - '**.md'
+      - "custom_components/nissan_na/manifest.json"
 
 permissions:
   contents: write
@@ -14,8 +15,6 @@ permissions:
 
 jobs:
   release:
-    if: |
-      !contains(github.event.head_commit.message, '[skip ci]') && !contains(github.event.head_commit.message, '[skip-ci]')
     runs-on: ubuntu-latest
     steps:
 
@@ -86,7 +85,7 @@ jobs:
         run: |
           git add CHANGELOG.md
           git add custom_components/nissan_na/manifest.json
-          git commit -m "[skip-ci] chore: update CHANGELOG.md and manifest.json for ${{ steps.bump.outputs.new_tag }}" || echo "No changes to commit"
+          git commit -m "chore: update CHANGELOG.md and manifest.json for ${{ steps.bump.outputs.new_tag }}" || echo "No changes to commit"
           git push
         env:
           GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
