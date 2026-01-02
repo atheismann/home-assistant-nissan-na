@@ -1,6 +1,6 @@
-
 from homeassistant.components.lock import LockEntity
 from .const import DOMAIN
+
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """
@@ -11,6 +11,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     entities = [NissanDoorLockEntity(vehicle, client) for vehicle in vehicles]
     async_add_entities(entities)
 
+
 class NissanDoorLockEntity(LockEntity):
     """
     Lock entity representing the vehicle's door lock state.
@@ -19,6 +20,7 @@ class NissanDoorLockEntity(LockEntity):
         vehicle: Vehicle object.
         client: NissanNAApiClient instance.
     """
+
     def __init__(self, vehicle, client):
         self._vehicle = vehicle
         self._client = client

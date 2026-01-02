@@ -1,7 +1,7 @@
-
 from homeassistant.components.climate import ClimateEntity
 from homeassistant.components.climate.const import HVACMode
 from .const import DOMAIN
+
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """
@@ -12,6 +12,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     entities = [NissanClimateEntity(vehicle, client) for vehicle in vehicles]
     async_add_entities(entities)
 
+
 class NissanClimateEntity(ClimateEntity):
     """
     Climate entity representing the vehicle's climate control.
@@ -20,6 +21,7 @@ class NissanClimateEntity(ClimateEntity):
         vehicle: Vehicle object.
         client: NissanNAApiClient instance.
     """
+
     _attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO]
 
     def __init__(self, vehicle, client):

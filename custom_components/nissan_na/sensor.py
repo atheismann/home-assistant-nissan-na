@@ -1,6 +1,6 @@
-
 from homeassistant.helpers.entity import Entity
 from .const import DOMAIN
+
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """
@@ -29,6 +29,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         ])
     async_add_entities(entities)
 
+
 class NissanGenericSensor(Entity):
     """
     Generic sensor for a Nissan vehicle status data point.
@@ -40,6 +41,7 @@ class NissanGenericSensor(Entity):
         name: Human-readable name for the sensor.
         unit: Unit of measurement (if any).
     """
+
     def __init__(self, vehicle, status, key, name, unit):
         self._vehicle = vehicle
         self._status = status

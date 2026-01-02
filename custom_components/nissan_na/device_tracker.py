@@ -1,6 +1,6 @@
-
 from homeassistant.components.device_tracker import SourceType, TrackerEntity
 from .const import DOMAIN
+
 
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """
@@ -14,6 +14,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         entities.append(NissanVehicleTracker(vehicle, status))
     async_add_entities(entities)
 
+
 class NissanVehicleTracker(TrackerEntity):
     """
     Device tracker entity for the vehicle's GPS location.
@@ -22,6 +23,7 @@ class NissanVehicleTracker(TrackerEntity):
         vehicle: Vehicle object.
         status: Status dictionary for the vehicle.
     """
+
     def __init__(self, vehicle, status):
         self._vehicle = vehicle
         self._status = status

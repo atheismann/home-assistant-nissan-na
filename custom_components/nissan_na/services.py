@@ -53,6 +53,4 @@ SERVICE_REFRESH_STATUS = "refresh_vehicle_status"
 
 import voluptuous as vol
 
-SERVICE_SCHEMA = vol.Schema({
-	vol.Required("vin"): str
-})
+SERVICE_SCHEMA = vol.Schema({vol.Required("vin"): str})
