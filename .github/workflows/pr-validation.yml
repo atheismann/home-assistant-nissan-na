@@ -1,25 +1,25 @@
-name: CI
+# This workflow validates PRs before merge
+# Runs: linting, formatting checks, tests, and configuration validation
+# Does NOT create releases - that happens only on merge via release-on-merge.yml
+# This approach reduces compute by avoiding redundant pre-releases on every PR
 
-on:
-  pull_request:
-    branches:
-      - main
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - '**.md'
-      - '.github/**'
-      - '!.github/workflows/ci.yml'
+name: PR Validation
 
 permissions:
   contents: read
   pull-requests: read
 
+on:
+  pull_request:
+    branches:
+      - main
+
 jobs:
+  # Combined linting and formatting checks
   lint-and-format:
     name: Lint and Format Check
     runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.pull_request.title, '[skip ci]') && !contains(github.event.pull_request.title, '[ci skip]') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -45,9 +45,11 @@ jobs:
       - name: Run flake8 linting
         run: pipenv run flake8 .
 
+  # Run tests with coverage
   test:
     name: Run Tests
     runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.pull_request.title, '[skip ci]') && !contains(github.event.pull_request.title, '[ci skip]') }}
     strategy:
       matrix:
         python-version: ['3.11', '3.12']
@@ -84,9 +86,11 @@ jobs:
           fail_ci_if_error: false
         continue-on-error: true
 
-  validate-manifest:
-    name: Validate Home Assistant Manifest
+  # Validate manifest and HACS configuration
+  validate:
+    name: Validate Configuration
     runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.pull_request.title, '[skip ci]') && !contains(github.event.pull_request.title, '[ci skip]') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -116,9 +120,6 @@ jobs:
     name: Validate HACS Configuration
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
       - name: HACS validation
         uses: hacs/action@main
         with:

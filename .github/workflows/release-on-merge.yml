@@ -1,3 +1,7 @@
+# This workflow runs ONLY when a PR is merged to main
+# It creates the official release with proper version tagging
+# Pre-validation happens in pr-validation.yml to reduce redundant compute
+
 name: Release on Merge
 
 on:
@@ -6,7 +10,8 @@ on:
       - main
     paths-ignore:
       - '**.md'
-      - "custom_components/nissan_na/manifest.json"
+      - '.github/**'
+      - '!.github/workflows/release-on-merge.yml'
 
 permissions:
   contents: write
