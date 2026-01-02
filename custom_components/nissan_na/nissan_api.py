@@ -1,4 +1,3 @@
-
 """
 Nissan North America API client implementation using requests and pydantic.
 
@@ -13,12 +12,15 @@ from typing import List, Optional
 
 NISSAN_BASE_URL = "https://nissan-na-smartphone-b2c-us.azurewebsites.net/"
 
+
 class Vehicle(BaseModel):
     """Model representing a Nissan vehicle."""
+
     vin: str
     model: Optional[str]
     year: Optional[int]
     nickname: Optional[str]
+
 
 class NissanNAApiClient:
     """
@@ -35,6 +37,7 @@ class NissanNAApiClient:
         find_vehicle: Activate horn/lights to locate the vehicle.
         refresh_vehicle_status: Request a fresh status update from the vehicle.
     """
+
     def __init__(self, username: str, password: str):
         """
         Initialize the NissanNAApiClient.
@@ -56,16 +59,18 @@ class NissanNAApiClient:
         Returns:
             str: The access token.
         """
-        url = NISSAN_BASE_URL + "auth/oauth2/token"
+        url = (
+            NISSAN_BASE_URL + "auth/oauth2/token"
+        )
         data = {
             "grant_type": "password",
             "username": self.username,
             "password": self.password,
-            "scope": "openid profile vehicles offline_access"
+            "scope": "openid profile vehicles offline_access",
         }
         headers = {
             "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent": "NissanConnect/4.5.0 (Android)"
+            "User-Agent": "NissanConnect/4.5.0 (Android)",
         }
         # NOTE: client_id and client_secret may be required, see reverse-engineered docs
         # headers["Authorization"] = "Basic <base64(client_id:client_secret)>"
@@ -83,11 +88,13 @@ class NissanNAApiClient:
         Returns:
             List[Vehicle]: List of Vehicle objects.
         """
-        url = NISSAN_BASE_URL + "api/v1/vehicles"
+        url = (
+            NISSAN_BASE_URL + "api/v1/vehicles"
+        )
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "User-Agent": "NissanConnect/4.5.0 (Android)",
-            "Accept": "application/json"
+            "Accept": "application/json",
         }
         response = self.session.get(url, headers=headers)
         response.raise_for_status()
@@ -108,7 +115,7 @@ class NissanNAApiClient:
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "User-Agent": "NissanConnect/4.5.0 (Android)",
-            "Accept": "application/json"
+            "Accept": "application/json",
         }
         response = self.session.get(url, headers=headers)
         response.raise_for_status()
@@ -128,7 +135,7 @@ class NissanNAApiClient:
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "User-Agent": "NissanConnect/4.5.0 (Android)",
-            "Accept": "application/json"
+            "Accept": "application/json",
         }
         response = self.session.post(url, headers=headers)
         response.raise_for_status()
@@ -148,12 +155,11 @@ class NissanNAApiClient:
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "User-Agent": "NissanConnect/4.5.0 (Android)",
-            "Accept": "application/json"
+            "Accept": "application/json",
         }
         response = self.session.post(url, headers=headers)
         response.raise_for_status()
         return response.json()
-
 
     def start_engine(self, vin):
         """
@@ -169,7 +175,7 @@ class NissanNAApiClient:
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "User-Agent": "NissanConnect/4.5.0 (Android)",
-            "Accept": "application/json"
+            "Accept": "application/json",
         }
         response = self.session.post(url, headers=headers)
         response.raise_for_status()
@@ -189,7 +195,7 @@ class NissanNAApiClient:
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "User-Agent": "NissanConnect/4.5.0 (Android)",
-            "Accept": "application/json"
+            "Accept": "application/json",
         }
         response = self.session.post(url, headers=headers)
         response.raise_for_status()
@@ -209,7 +215,7 @@ class NissanNAApiClient:
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "User-Agent": "NissanConnect/4.5.0 (Android)",
-            "Accept": "application/json"
+            "Accept": "application/json",
         }
         response = self.session.post(url, headers=headers)
         response.raise_for_status()
@@ -229,7 +235,7 @@ class NissanNAApiClient:
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "User-Agent": "NissanConnect/4.5.0 (Android)",
-            "Accept": "application/json"
+            "Accept": "application/json",
         }
         response = self.session.post(url, headers=headers)
         response.raise_for_status()

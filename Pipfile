@@ -17,3 +17,8 @@ pre-commit = "*"
 [requires]
 python_version = "3.11"
 python_full_version = "3.11.10"
+
+[scripts]
+format = "black ."
+lint = "flake8 ."
+isort = "isort ."
