@@ -1,0 +1,23 @@
+[tool.black]
+line-length = 88
+target-version = ['py311']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \..*|  # hidden directories
+    build|
+    dist|
+    .venv|
+    venv|
+    __pycache__|
+    .git|
+    .mypy_cache|
+    .pytest_cache|
+    .tox|
+    .eggs|
+    .github
+)/
+'''
+
+[tool.isort]
+profile = "black"
