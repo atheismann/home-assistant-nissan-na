@@ -76,7 +76,7 @@ jobs:
           configuration: .github/changelog-configuration.json
         env:
           GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
-
+          version: ${{ steps.next_version.outputs.next_version }}
 
       # Commit and push changes to PR branch
       - name: Commit and push changes

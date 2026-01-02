@@ -1,3 +1,3 @@
 {
-  "template": "# Changelog\n\n## {{releaseTag}}\n\n{{#commits}}\n- {{messageTitle}} ({{author}})\n{{/commits}}\n"
+  "template": "# Changelog\n\n## Version {{version}}\n\n{{#commits}}\n- {{messageTitle}} ({{author}})\n{{/commits}}\n"
 }
