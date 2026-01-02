@@ -57,9 +57,12 @@ jobs:
       - name: Get next pre-release version
         id: next_version
         run: |
-          VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.0.0")
+          VERSION=$(git tag --list 'v*' | sed 's/^v//' | sort -V | tail -n 1)
+          if [ -z "$VERSION" ]; then
+            VERSION="0.0.0"
+          fi
           NEXT_VERSION=$(echo $VERSION | awk -F. '{$NF = $NF + 1; print $0}' OFS=.)
-          echo "next_version=${NEXT_VERSION}-pr" >> $GITHUB_OUTPUT
+          echo "next_version=${NEXT_VERSION}" >> $GITHUB_OUTPUT
 
       # Update manifest.json version to pre-release
       - name: Update manifest.json version
