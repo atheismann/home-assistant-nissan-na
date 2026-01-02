@@ -14,9 +14,11 @@ on:
       - '**.md'
 
 jobs:
-  update-files:
-    runs-on: ubuntu-latest
-    steps:
+    update-files:
+      if: |
+        !contains(github.event.pull_request.title, '[skip ci]') && !contains(github.event.pull_request.title, '[skip-ci]') && !contains(github.event.pull_request.body, '[skip ci]') && !contains(github.event.pull_request.body, '[skip-ci]')
+      runs-on: ubuntu-latest
+      steps:
       # Decode the GitHub App Private Key
       - name: Decode the GitHub App Private Key
         id: decode
