@@ -12,11 +12,12 @@ on:
       - main
     paths-ignore:
       - '**.md'
-      - "custom_components/nissan_na/manifest.json"
+      - custom_components/nissan_na/manifest.json
 
 jobs:
     update-files:
       runs-on: ubuntu-latest
+      if: ${{ !contains(github.event.pull_request.title, '[skip ci]') && !contains(github.event.pull_request.title, '[ci skip]') }}
       steps:
       # Decode the GitHub App Private Key
       - name: Decode the GitHub App Private Key
@@ -86,7 +87,7 @@ jobs:
       - name: Commit and push changes
         run: |
           git add CHANGELOG.md custom_components/nissan_na/manifest.json
-          git commit -m "docs: update CHANGELOG.md and manifest.json version for ${{ steps.next_version.outputs.next_version }}" || echo "No changes to commit"
+          git commit -m "docs: update CHANGELOG.md and manifest.json version for ${{ steps.next_version.outputs.next_version }} [skip ci]" || echo "No changes to commit"
           git push
         env:
           GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
@@ -106,4 +107,4 @@ jobs:
           prerelease: true
           generate_release_notes: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
