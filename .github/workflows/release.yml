@@ -10,7 +10,10 @@ on:
   pull_request:
     branches:
       - main
-      - main
+    paths-ignore:
+      - 'CHANGELOG.md'
+      - 'manifest.json'
+
 jobs:
   update-files:
     runs-on: ubuntu-latest
