@@ -46,7 +46,7 @@ jobs:
           git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.get_workflow_token.outputs.app-slug }}[bot]@users.noreply.github.com'
 
       # Checkout code
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           token: ${{ steps.get_workflow_token.outputs.token }}
           fetch-depth: 0
