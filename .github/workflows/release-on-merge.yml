@@ -5,8 +5,7 @@ on:
     branches:
       - main
     paths-ignore:
-      - 'CHANGELOG.md'
-      - 'manifest.json'
+      - '**.md'
 
 permissions:
   contents: write
@@ -17,18 +16,51 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
+
+      # Decode the GitHub App Private Key
+      - name: Decode the GitHub App Private Key
+        id: decode
+        run: |
+          private_key=$(echo "${{ secrets.ACTIONS_RUNNER_APPLICATION_PRIVATE_KEY }}" | base64 -d | awk 'BEGIN {ORS="\n"} {print}' | head -c -2) &> /dev/null
+          echo "::add-mask::$private_key"
+          echo "private-key=$private_key" >> "$GITHUB_OUTPUT"
+
+      # Get workflow token
+      - name: Get Token
+        id: get_workflow_token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.ACTIONS_RUNNER_APPLICATION_ID }}
+          private-key: ${{ steps.decode.outputs.private-key }}
+
+      # Get GitHub App User ID
+      - name: Get GitHub App User ID
+        id: get-user-id
+        run: echo "user-id=$(gh api "/users/${{ steps.get_workflow_token.outputs.app-slug }}[bot]" --jq .id)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
+      - run: |
+          git config --global user.name '${{ steps.get_workflow_token.outputs.app-slug }}[bot]'
+          git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.get_workflow_token.outputs.app-slug }}[bot]@users.noreply.github.com'
+
+      # Checkout code
       - uses: actions/checkout@v4
+        with:
+          token: ${{ steps.get_workflow_token.outputs.token }}
+          fetch-depth: 0
+
 
       # Bump version and create tag
       - name: Bump version and push tag
         id: bump
         uses: anothrNick/github-tag-action@v1.75.0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
           WITH_V: true
           DEFAULT_BUMP: patch
           RELEASE_BRANCHES: main
           DRY_RUN: false
+
 
       # Update manifest.json version
       - name: Update manifest.json version
@@ -36,14 +68,6 @@ jobs:
           VERSION=$(echo "${{ steps.bump.outputs.new_tag }}" | sed 's/^v//')
           jq '.version = "'${VERSION}'"' custom_components/nissan_na/manifest.json > tmp.$$.json && mv tmp.$$.json custom_components/nissan_na/manifest.json
 
-      # Commit manifest.json version bump
-      - name: Commit manifest.json version bump
-        run: |
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git config --global user.name "github-actions[bot]"
-          git add custom_components/nissan_na/manifest.json
-          git commit -m "chore: bump manifest.json version to ${{ steps.bump.outputs.new_tag }}" || echo "No changes to commit"
-          git push
 
       # Generate and update CHANGELOG.md
       - name: Generate and update CHANGELOG.md
@@ -51,14 +75,20 @@ jobs:
         with:
           configuration: .github/changelog-configuration.json
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
+          version: ${{ steps.bump.outputs.new_tag }}
 
-      # Commit and push CHANGELOG.md
-      - name: Commit and push CHANGELOG.md
+
+      # Commit and push CHANGELOG.md and manifest.json
+      - name: Commit and push CHANGELOG.md and manifest.json
         run: |
           git add CHANGELOG.md
-          git commit -m "docs: update CHANGELOG.md for ${{ steps.bump.outputs.new_tag }}" || echo "No changes to commit"
+          git add custom_components/nissan_na/manifest.json
+          git commit -m "[skip-ci] chore: update CHANGELOG.md and manifest.json for ${{ steps.bump.outputs.new_tag }}" || echo "No changes to commit"
           git push
+        env:
+          GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
+
 
       # Create GitHub Release
       - name: Create Release
@@ -68,4 +98,4 @@ jobs:
           name: Release ${{ steps.bump.outputs.new_tag }}
           generate_release_notes: true
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
