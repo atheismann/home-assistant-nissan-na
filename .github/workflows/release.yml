@@ -1,19 +1,18 @@
 
-name: Release and Changelog
+name: Update Manifest and Changelog on PR
 
 permissions:
   contents: write
   issues: read
-  pull-requests: read
-
+  pull-requests: write
 
 on:
   pull_request:
     branches:
       - main
-
+      - main
 jobs:
-  release:
+  update-files:
     runs-on: ubuntu-latest
     steps:
       # Decode the GitHub App Private Key
@@ -23,6 +22,7 @@ jobs:
           private_key=$(echo "${{ secrets.ACTIONS_RUNNER_APPLICATION_PRIVATE_KEY }}" | base64 -d | awk 'BEGIN {ORS="\\n"} {print}' | head -c -2) &> /dev/null
           echo "::add-mask::$private_key"
           echo "private-key=$private_key" >> "$GITHUB_OUTPUT"
+
       # Get workflow token
       - name: Get Token
         id: get_workflow_token
@@ -46,8 +46,6 @@ jobs:
         with:
           token: ${{ steps.get_workflow_token.outputs.token }}
           ref: ${{ github.head_ref }}
-          # Make sure the value of GITHUB_TOKEN will not be persisted in repo's config
-          persist-credentials: false
 
       # Fix permissions
       - name: Fix permissions (no sudo)
@@ -55,22 +53,18 @@ jobs:
           git config --global --add safe.directory $GITHUB_WORKSPACE
           chmod -R u+rw .
 
-      # Bump version and create tag
-      - name: Bump version and push tag
-        id: bump
-        uses: anothrNick/github-tag-action@v1
-        env:
-          GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
-          WITH_V: true
-          DEFAULT_BUMP: patch
-          RELEASE_BRANCHES: main
-          DRY_RUN: false
+      # Determine next pre-release version
+      - name: Get next pre-release version
+        id: next_version
+        run: |
+          VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || echo "0.0.0")
+          NEXT_VERSION=$(echo $VERSION | awk -F. '{$NF = $NF + 1; print $0}' OFS=.)
+          echo "next_version=${NEXT_VERSION}-pr" >> $GITHUB_OUTPUT
 
-      # Update manifest.json version
+      # Update manifest.json version to pre-release
       - name: Update manifest.json version
         run: |
-          VERSION=$(echo "${{ steps.bump.outputs.new_tag }}" | sed 's/^v//')
-          jq '.version = "'${VERSION}'"' custom_components/nissan_na/manifest.json > tmp.$$.json && mv tmp.$$.json custom_components/nissan_na/manifest.json
+          jq '.version = "${{ steps.next_version.outputs.next_version }}"' custom_components/nissan_na/manifest.json > tmp.$$.json && mv tmp.$$.json custom_components/nissan_na/manifest.json
 
       # Generate and update CHANGELOG.md
       - name: Update CHANGELOG.md
@@ -80,22 +74,29 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
 
-      # Commit manifest.json version bump
-      - name: Commit CHANGELOG.md and manifest.json version bump
+
+      # Commit and push changes to PR branch
+      - name: Commit and push changes
         run: |
-          git add CHANGELOG.md
-          git add custom_components/nissan_na/manifest.json
-          git commit -m "docs: update CHANGELOG.md and manifest.json version for ${{ steps.bump.outputs.new_tag }}" || echo "No changes to commit"
-          git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git HEAD:${{ github.ref }}
+          git add CHANGELOG.md custom_components/nissan_na/manifest.json
+          git commit -m "docs: update CHANGELOG.md and manifest.json version for ${{ steps.next_version.outputs.next_version }}" || echo "No changes to commit"
+          git push
         env:
           GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
 
-      # Create GitHub Release
-      - name: Create Release
+      # Create pre-release tag
+      - name: Create pre-release tag
+        run: |
+          git tag v${{ steps.next_version.outputs.next_version }}
+          git push origin v${{ steps.next_version.outputs.next_version }}
+
+      # Create GitHub Pre-release
+      - name: Create GitHub Pre-release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.bump.outputs.new_tag }}
-          name: Release ${{ steps.bump.outputs.new_tag }}
+          tag_name: v${{ steps.next_version.outputs.next_version }}
+          name: Pre-release v${{ steps.next_version.outputs.next_version }}
+          prerelease: true
           generate_release_notes: true
         env:
-          GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

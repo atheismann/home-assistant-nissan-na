@@ -1,0 +1,68 @@
+name: Release on Merge
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  issues: read
+  pull-requests: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Bump version and create tag
+      - name: Bump version and push tag
+        id: bump
+        uses: anothrNick/github-tag-action@v1.75.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WITH_V: true
+          DEFAULT_BUMP: patch
+          RELEASE_BRANCHES: main
+          DRY_RUN: false
+
+      # Update manifest.json version
+      - name: Update manifest.json version
+        run: |
+          VERSION=$(echo "${{ steps.bump.outputs.new_tag }}" | sed 's/^v//')
+          jq '.version = "'${VERSION}'"' custom_components/nissan_na/manifest.json > tmp.$$.json && mv tmp.$$.json custom_components/nissan_na/manifest.json
+
+      # Commit manifest.json version bump
+      - name: Commit manifest.json version bump
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git add custom_components/nissan_na/manifest.json
+          git commit -m "chore: bump manifest.json version to ${{ steps.bump.outputs.new_tag }}" || echo "No changes to commit"
+          git push
+
+      # Generate and update CHANGELOG.md
+      - name: Generate and update CHANGELOG.md
+        uses: mikepenz/release-changelog-builder-action@v4
+        with:
+          configuration: .github/changelog-configuration.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Commit and push CHANGELOG.md
+      - name: Commit and push CHANGELOG.md
+        run: |
+          git add CHANGELOG.md
+          git commit -m "docs: update CHANGELOG.md for ${{ steps.bump.outputs.new_tag }}" || echo "No changes to commit"
+          git push
+
+      # Create GitHub Release
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.bump.outputs.new_tag }}
+          name: Release ${{ steps.bump.outputs.new_tag }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
