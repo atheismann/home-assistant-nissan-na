@@ -46,6 +46,7 @@ jobs:
         with:
           token: ${{ steps.get_workflow_token.outputs.token }}
           ref: ${{ github.head_ref }}
+          fetch-depth: 0 # This ensures all tags and history are fetched
 
       # Fix permissions
       - name: Fix permissions (no sudo)
