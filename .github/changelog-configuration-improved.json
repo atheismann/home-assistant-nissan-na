@@ -1,0 +1,87 @@
+{
+  "categories": [
+    {
+      "title": "## 🚀 Features",
+      "labels": ["feature", "enhancement", "feat"]
+    },
+    {
+      "title": "## 🐛 Bug Fixes",
+      "labels": ["bug", "fix", "bugfix"]
+    },
+    {
+      "title": "## 📚 Documentation",
+      "labels": ["documentation", "docs"]
+    },
+    {
+      "title": "## 🔧 Maintenance",
+      "labels": ["chore", "maintenance", "refactor"]
+    },
+    {
+      "title": "## ⬆️ Dependencies",
+      "labels": ["dependencies", "deps"]
+    }
+  ],
+  "ignore_labels": [
+    "skip-changelog",
+    "release"
+  ],
+  "sort": {
+    "order": "ASC",
+    "on_property": "mergedAt"
+  },
+  "template": "#{{CHANGELOG}}\n\n<details>\n<summary>Full Changelog</summary>\n\n#{{UNCATEGORIZED}}\n\n</details>",
+  "pr_template": "- #{{TITLE}} by @#{{AUTHOR}} in ##{{NUMBER}}",
+  "empty_template": "- No changes",
+  "label_extractor": [
+    {
+      "pattern": "^(feat|feature)(\\(.+\\))?:",
+      "target": "feature",
+      "on_property": "title"
+    },
+    {
+      "pattern": "^(fix|bugfix)(\\(.+\\))?:",
+      "target": "bug",
+      "on_property": "title"
+    },
+    {
+      "pattern": "^docs?(\\(.+\\))?:",
+      "target": "documentation",
+      "on_property": "title"
+    },
+    {
+      "pattern": "^(chore|refactor|style|test)(\\(.+\\))?:",
+      "target": "chore",
+      "on_property": "title"
+    },
+    {
+      "pattern": "^(deps?|build)(\\(.+\\))?:",
+      "target": "dependencies",
+      "on_property": "title"
+    }
+  ],
+  "duplicate_filter": {
+    "pattern": "\\[skip\\s+changelog\\]",
+    "on_property": "body",
+    "method": "match"
+  },
+  "transformers": [
+    {
+      "pattern": "\\[skip ci\\]",
+      "target": ""
+    }
+  ],
+  "max_tags_to_fetch": 200,
+  "max_pull_requests": 200,
+  "max_back_track_time_days": 365,
+  "exclude_merge_branches": [],
+  "tag_resolver": {
+    "method": "sort",
+    "filter": {
+      "pattern": "^v?[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "flags": "gu"
+    }
+  },
+  "base_branches": [
+    "main"
+  ]
+}

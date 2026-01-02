@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '**.md'
+      - '.github/**'
+      - '!.github/workflows/ci.yml'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  lint-and-format:
+    name: Lint and Format Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install pipenv
+        run: pip install pipenv
+
+      - name: Install dependencies
+        run: pipenv install --dev
+
+      - name: Run Black format check
+        run: pipenv run black --check .
+
+      - name: Run isort import check
+        run: pipenv run isort --check .
+
+      - name: Run flake8 linting
+        run: pipenv run flake8 .
+
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.11', '3.12']
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - name: Install pipenv
+        run: pip install pipenv
+
+      - name: Install dependencies
+        run: pipenv install --dev
+
+      - name: Run tests with coverage
+        run: pipenv run coverage run -m pytest
+
+      - name: Generate coverage report
+        run: pipenv run coverage report
+
+      - name: Generate coverage XML
+        run: pipenv run coverage xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        if: matrix.python-version == '3.11'
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+        continue-on-error: true
+
+  validate-manifest:
+    name: Validate Home Assistant Manifest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate manifest.json
+        run: |
+          if ! jq empty custom_components/nissan_na/manifest.json; then
+            echo "Invalid JSON in manifest.json"
+            exit 1
+          fi
+          echo "manifest.json is valid JSON"
+
+      - name: Check required manifest fields
+        run: |
+          MANIFEST="custom_components/nissan_na/manifest.json"
+          REQUIRED_FIELDS=("domain" "name" "version" "documentation" "requirements" "codeowners" "iot_class" "config_flow")
+          
+          for field in "${REQUIRED_FIELDS[@]}"; do
+            if ! jq -e ".$field" "$MANIFEST" > /dev/null; then
+              echo "Missing required field: $field"
+              exit 1
+            fi
+          done
+          echo "All required fields present in manifest.json"
+
+  validate-hacs:
+    name: Validate HACS Configuration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: HACS validation
+        uses: hacs/action@main
+        with:
+          category: integration
