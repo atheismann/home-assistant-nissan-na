@@ -1,7 +1,7 @@
 {
   "domain": "nissan_na",
   "name": "Nissan North America",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "documentation": "https://github.com/atheismann/nissan-na-homeassistant",
   "issue_tracker": "https://github.com/atheismann/nissan-na-homeassistant/issues",
   "requirements": [
