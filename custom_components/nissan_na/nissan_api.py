@@ -1,13 +1,13 @@
 
 """
-Nissan North America API client implementation using httpx and pydantic.
+Nissan North America API client implementation using requests and pydantic.
 
 This module provides the NissanNAApiClient class for interacting with the Nissan North America (NNA) API.
 It supports authentication, vehicle data retrieval, and remote actions such as locking/unlocking doors,
 starting/stopping climate control, and more.
 """
 
-import httpx
+import requests
 from pydantic import BaseModel
 from typing import List, Optional
 
@@ -47,9 +47,9 @@ class NissanNAApiClient:
         self.password = password
         self.access_token = None
         self.refresh_token = None
-        self.client = httpx.AsyncClient()
+        self.session = requests.Session()
 
-    async def authenticate(self):
+    def authenticate(self):
         """
         Authenticate with the Nissan NA API and store the access token.
 
@@ -69,14 +69,14 @@ class NissanNAApiClient:
         }
         # NOTE: client_id and client_secret may be required, see reverse-engineered docs
         # headers["Authorization"] = "Basic <base64(client_id:client_secret)>"
-        response = await self.client.post(url, data=data, headers=headers)
+        response = self.session.post(url, data=data, headers=headers)
         response.raise_for_status()
         tokens = response.json()
         self.access_token = tokens.get("access_token")
         self.refresh_token = tokens.get("refresh_token")
         return self.access_token
 
-    async def get_vehicle_list(self) -> List[Vehicle]:
+    def get_vehicle_list(self) -> List[Vehicle]:
         """
         Retrieve a list of vehicles linked to the account.
 
@@ -89,12 +89,12 @@ class NissanNAApiClient:
             "User-Agent": "NissanConnect/4.5.0 (Android)",
             "Accept": "application/json"
         }
-        response = await self.client.get(url, headers=headers)
+        response = self.session.get(url, headers=headers)
         response.raise_for_status()
         vehicles = response.json().get("vehicles", [])
         return [Vehicle(**v) for v in vehicles]
 
-    async def get_vehicle_status(self, vin):
+    def get_vehicle_status(self, vin):
         """
         Get the status for a specific vehicle.
 
@@ -110,11 +110,11 @@ class NissanNAApiClient:
             "User-Agent": "NissanConnect/4.5.0 (Android)",
             "Accept": "application/json"
         }
-        response = await self.client.get(url, headers=headers)
+        response = self.session.get(url, headers=headers)
         response.raise_for_status()
         return response.json()
 
-    async def lock_doors(self, vin):
+    def lock_doors(self, vin):
         """
         Lock the vehicle doors.
 
@@ -130,11 +130,11 @@ class NissanNAApiClient:
             "User-Agent": "NissanConnect/4.5.0 (Android)",
             "Accept": "application/json"
         }
-        response = await self.client.post(url, headers=headers)
+        response = self.session.post(url, headers=headers)
         response.raise_for_status()
         return response.json()
 
-    async def unlock_doors(self, vin):
+    def unlock_doors(self, vin):
         """
         Unlock the vehicle doors.
 
@@ -150,12 +150,12 @@ class NissanNAApiClient:
             "User-Agent": "NissanConnect/4.5.0 (Android)",
             "Accept": "application/json"
         }
-        response = await self.client.post(url, headers=headers)
+        response = self.session.post(url, headers=headers)
         response.raise_for_status()
         return response.json()
 
 
-    async def start_engine(self, vin):
+    def start_engine(self, vin):
         """
         Remotely start the vehicle's engine (uses climate start endpoint).
 
@@ -171,11 +171,11 @@ class NissanNAApiClient:
             "User-Agent": "NissanConnect/4.5.0 (Android)",
             "Accept": "application/json"
         }
-        response = await self.client.post(url, headers=headers)
+        response = self.session.post(url, headers=headers)
         response.raise_for_status()
         return response.json()
 
-    async def stop_engine(self, vin):
+    def stop_engine(self, vin):
         """
         Remotely stop the vehicle's engine (uses climate stop endpoint).
 
@@ -191,11 +191,11 @@ class NissanNAApiClient:
             "User-Agent": "NissanConnect/4.5.0 (Android)",
             "Accept": "application/json"
         }
-        response = await self.client.post(url, headers=headers)
+        response = self.session.post(url, headers=headers)
         response.raise_for_status()
         return response.json()
 
-    async def find_vehicle(self, vin):
+    def find_vehicle(self, vin):
         """
         Activate horn/lights to help locate the vehicle.
 
@@ -211,11 +211,11 @@ class NissanNAApiClient:
             "User-Agent": "NissanConnect/4.5.0 (Android)",
             "Accept": "application/json"
         }
-        response = await self.client.post(url, headers=headers)
+        response = self.session.post(url, headers=headers)
         response.raise_for_status()
         return response.json()
 
-    async def refresh_vehicle_status(self, vin):
+    def refresh_vehicle_status(self, vin):
         """
         Request a fresh status update from the vehicle.
 
@@ -231,6 +231,6 @@ class NissanNAApiClient:
             "User-Agent": "NissanConnect/4.5.0 (Android)",
             "Accept": "application/json"
         }
-        response = await self.client.post(url, headers=headers)
+        response = self.session.post(url, headers=headers)
         response.raise_for_status()
         return response.json()

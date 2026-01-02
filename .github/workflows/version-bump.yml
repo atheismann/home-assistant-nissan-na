@@ -1,0 +1,40 @@
+name: Version Bump
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'custom_components/nissan_na/**'
+      - 'README.md'
+      - 'hacs.json'
+      - 'manifest.json'
+      - 'pyproject.toml'
+      - 'setup.cfg'
+      - 'setup.py'
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bump version and push tag
+        id: bump
+        uses: anothrNick/github-tag-action@v1.67.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WITH_V: true
+          DEFAULT_BUMP: patch
+          RELEASE_BRANCHES: main
+          DRY_RUN: false
+      - name: Update manifest.json version
+        run: |
+          VERSION=$(echo "${{ steps.bump.outputs.new_tag }}" | sed 's/^v//')
+          jq '.version = "'${VERSION}'"' custom_components/nissan_na/manifest.json > tmp.$$.json && mv tmp.$$.json custom_components/nissan_na/manifest.json
+      - name: Commit manifest.json version bump
+        run: |
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git add custom_components/nissan_na/manifest.json
+          git commit -m "chore: bump manifest.json version to ${{ steps.bump.outputs.new_tag }}" || echo "No changes to commit"
+          git push

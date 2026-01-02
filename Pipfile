@@ -4,10 +4,11 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-httpx = "*"
 pydantic = "*"
 
 [dev-packages]
+pytest = "*"
+coverage = "*"
 
 [requires]
 python_version = "3.11"
