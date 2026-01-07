@@ -27,7 +27,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: 'pip'
 
       - name: Install pipenv
@@ -52,7 +52,7 @@ jobs:
     if: ${{ !contains(github.event.pull_request.title, '[skip ci]') && !contains(github.event.pull_request.title, '[ci skip]') }}
     strategy:
       matrix:
-        python-version: ['3.11', '3.12']
+        python-version: ['3.12']
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -80,7 +80,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
-        if: matrix.python-version == '3.11'
+        if: matrix.python-version == '3.12'
         with:
           file: ./coverage.xml
           fail_ci_if_error: false

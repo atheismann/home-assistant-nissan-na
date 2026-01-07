@@ -12,5 +12,6 @@
     "@atheismann"
   ],
   "iot_class": "cloud_polling",
-  "config_flow": true
+  "config_flow": true,
+  "requirements_python": ">=3.12.0"
 }
