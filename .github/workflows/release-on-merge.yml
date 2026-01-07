@@ -23,19 +23,20 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{ !contains(github.event.head_commit.message, '[skip ci]') && !contains(github.event.head_commit.message, '[ci skip]') }}
     steps:
-      # Checkout code first
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      # Get workflow token
+      # Get workflow token first
       - name: Get Token
         id: get_workflow_token
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.ACTIONS_RUNNER_APPLICATION_ID }}
           private-key: ${{ secrets.ACTIONS_RUNNER_APPLICATION_PRIVATE_KEY }}
+
+      # Checkout code with the app token
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          token: ${{ steps.get_workflow_token.outputs.token }}
+          fetch-depth: 0
 
       # Get GitHub App User ID
       - name: Get GitHub App User ID
@@ -86,7 +87,7 @@ jobs:
           git add CHANGELOG.md
           git add custom_components/nissan_na/manifest.json
           git commit -m "chore: update CHANGELOG.md and manifest.json for ${{ steps.bump.outputs.new_tag }} [skip ci]" || echo "No changes to commit"
-          git push
+          git push origin HEAD:main
         env:
           GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
 
