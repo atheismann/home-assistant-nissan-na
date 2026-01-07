@@ -1,14 +1,16 @@
 """
 Nissan North America API client implementation using requests and pydantic.
 
-This module provides the NissanNAApiClient class for interacting with the Nissan North America (NNA) API.
-It supports authentication, vehicle data retrieval, and remote actions such as locking/unlocking doors,
+This module provides the NissanNAApiClient class for interacting with
+the Nissan North America (NNA) API. It supports authentication, vehicle
+data retrieval, and remote actions such as locking/unlocking doors,
 starting/stopping climate control, and more.
 """
 
+from typing import List, Optional
+
 import requests
 from pydantic import BaseModel
-from typing import List, Optional
 
 NISSAN_BASE_URL = "https://nissan-na-smartphone-b2c-us.azurewebsites.net/"
 
@@ -59,9 +61,7 @@ class NissanNAApiClient:
         Returns:
             str: The access token.
         """
-        url = (
-            NISSAN_BASE_URL + "auth/oauth2/token"
-        )
+        url = NISSAN_BASE_URL + "auth/oauth2/token"
         data = {
             "grant_type": "password",
             "username": self.username,
@@ -88,9 +88,7 @@ class NissanNAApiClient:
         Returns:
             List[Vehicle]: List of Vehicle objects.
         """
-        url = (
-            NISSAN_BASE_URL + "api/v1/vehicles"
-        )
+        url = NISSAN_BASE_URL + "api/v1/vehicles"
         headers = {
             "Authorization": f"Bearer {self.access_token}",
             "User-Agent": "NissanConnect/4.5.0 (Android)",

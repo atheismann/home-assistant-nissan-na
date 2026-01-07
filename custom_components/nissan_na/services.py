@@ -44,13 +44,14 @@
 #
 # Describes the services for the Nissan NA integration
 
+import voluptuous as vol
+
 SERVICE_LOCK = "lock_doors"
+
 SERVICE_UNLOCK = "unlock_doors"
 SERVICE_START_ENGINE = "start_engine"
 SERVICE_STOP_ENGINE = "stop_engine"
 SERVICE_FIND_VEHICLE = "find_vehicle"
 SERVICE_REFRESH_STATUS = "refresh_vehicle_status"
-
-import voluptuous as vol
 
 SERVICE_SCHEMA = vol.Schema({vol.Required("vin"): str})

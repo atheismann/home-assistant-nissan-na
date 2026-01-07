@@ -1,5 +1,5 @@
-from homeassistant.config_entries import ConfigFlow
 import voluptuous as vol
+from homeassistant.config_entries import ConfigFlow
 
 from . import DOMAIN
 

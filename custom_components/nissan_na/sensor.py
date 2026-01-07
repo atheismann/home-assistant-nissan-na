@@ -1,4 +1,5 @@
 from homeassistant.helpers.entity import Entity
+
 from .const import DOMAIN
 
 
@@ -6,7 +7,8 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     """
     Set up Nissan NA sensors for each vehicle and status data point.
 
-    Creates a sensor entity for each relevant vehicle status field (battery, charging, odometer, etc.).
+    Creates a sensor entity for each relevant vehicle status field
+    (battery, charging, odometer, etc.).
     """
     client = hass.data[DOMAIN][config_entry.entry_id]
     vehicles = await client.get_vehicle_list()
@@ -14,19 +16,31 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     for vehicle in vehicles:
         status = await client.get_vehicle_status(vehicle.vin)
         # Add sensors for all relevant data points
-        entities.extend([
-            NissanGenericSensor(vehicle, status, "batteryLevel", "Battery Level", "%"),
-            NissanGenericSensor(vehicle, status, "chargingStatus", "Charging Status", None),
-            NissanGenericSensor(vehicle, status, "plugStatus", "Plug Status", None),
-            NissanGenericSensor(vehicle, status, "odometer", "Odometer", "km"),
-            NissanGenericSensor(vehicle, status, "range", "Range", "km"),
-            NissanGenericSensor(vehicle, status, "tirePressure", "Tire Pressure", "kPa"),
-            NissanGenericSensor(vehicle, status, "doorStatus", "Door Status", None),
-            NissanGenericSensor(vehicle, status, "windowStatus", "Window Status", None),
-            NissanGenericSensor(vehicle, status, "lastUpdate", "Last Update", None),
-            NissanGenericSensor(vehicle, status, "climateStatus", "Climate Status", None),
-            NissanGenericSensor(vehicle, status, "location", "Location", None),
-        ])
+        entities.extend(
+            [
+                NissanGenericSensor(
+                    vehicle, status, "batteryLevel", "Battery Level", "%"
+                ),
+                NissanGenericSensor(
+                    vehicle, status, "chargingStatus", "Charging Status", None
+                ),
+                NissanGenericSensor(vehicle, status, "plugStatus", "Plug Status", None),
+                NissanGenericSensor(vehicle, status, "odometer", "Odometer", "km"),
+                NissanGenericSensor(vehicle, status, "range", "Range", "km"),
+                NissanGenericSensor(
+                    vehicle, status, "tirePressure", "Tire Pressure", "kPa"
+                ),
+                NissanGenericSensor(vehicle, status, "doorStatus", "Door Status", None),
+                NissanGenericSensor(
+                    vehicle, status, "windowStatus", "Window Status", None
+                ),
+                NissanGenericSensor(vehicle, status, "lastUpdate", "Last Update", None),
+                NissanGenericSensor(
+                    vehicle, status, "climateStatus", "Climate Status", None
+                ),
+                NissanGenericSensor(vehicle, status, "location", "Location", None),
+            ]
+        )
     async_add_entities(entities)
 
 

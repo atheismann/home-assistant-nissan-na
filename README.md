@@ -5,7 +5,7 @@
 ![GitHub last commit](https://img.shields.io/github/last-commit/atheismann/home-assistant-nissan-na?style=flat-square)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)
 ![HACS badge](https://img.shields.io/badge/HACS-Custom-blue?style=flat-square)
-![Python](https://img.shields.io/badge/python-3.11%2B-blue?style=flat-square)
+![Python](https://img.shields.io/badge/python-3.12%2B-blue?style=flat-square)
 
 Easily control and monitor your Nissan vehicle from Home Assistant! This integration lets you lock/unlock your doors, start or stop your engine, check your car’s status, and see its location—all from your smart home dashboard.
 

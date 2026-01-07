@@ -1,11 +1,12 @@
 from datetime import timedelta
+
 from homeassistant.helpers.event import async_track_time_interval
 
 """
 Home Assistant custom integration for Nissan North America vehicles.
 """
 
-from .const import DOMAIN, CONF_USERNAME, CONF_PASSWORD, PLATFORMS
+from .const import CONF_PASSWORD, CONF_USERNAME, DOMAIN, PLATFORMS
 from .nissan_api import NissanNAApiClient
 
 

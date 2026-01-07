@@ -1,10 +1,5 @@
 
 {
-	"name": "Nissan North America",
-	"content_in_root": false,
-	"render_readme": true,
-	"category": "integration",
-	"description": "Integrate your Nissan vehicle with Home Assistant using the official NissanConnect APIs (reverse-engineered).",
-	"requirements": [],
-	"domain": "nissan_na"
+  "name": "Nissan North America",
+  "render_readme": true
 }
