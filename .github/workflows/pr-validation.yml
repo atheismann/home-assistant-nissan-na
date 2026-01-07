@@ -40,7 +40,7 @@ jobs:
         run: pipenv run black --check .
 
       - name: Run isort import check
-        run: pipenv run isort --check-only custom_components tests
+        run: pipenv run isort . --check --profile black
 
       - name: Run flake8 linting
         run: pipenv run flake8 .

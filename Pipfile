@@ -22,7 +22,7 @@ python_version = "3.12"
 [scripts]
 format = "black ."
 lint = "flake8 ."
-isort = "isort ."
+isort = "isort . --check --profile black"
 test = "bash -c 'PYTHONPATH=. pytest'"
 test-cov = "bash -c 'PYTHONPATH=. coverage run -m pytest'"
 test-report = "coverage report"
