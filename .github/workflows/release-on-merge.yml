@@ -87,7 +87,7 @@ jobs:
           git add CHANGELOG.md
           git add custom_components/nissan_na/manifest.json
           git commit -m "chore: update CHANGELOG.md and manifest.json for ${{ steps.bump.outputs.new_tag }} [skip ci]" || echo "No changes to commit"
-          git push
+          git push origin HEAD:main
         env:
           GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
 
