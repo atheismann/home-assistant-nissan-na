@@ -40,7 +40,7 @@ jobs:
         run: pipenv run black --check .
 
       - name: Run isort import check
-        run: pipenv run isort . --check --profile black
+        run: pipenv run isort . --check-only --profile black
 
       - name: Run flake8 linting
         run: pipenv run flake8 .
