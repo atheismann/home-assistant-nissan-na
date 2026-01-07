@@ -1,4 +1,5 @@
 from homeassistant.components.lock import LockEntity
+
 from .const import DOMAIN
 
 

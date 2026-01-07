@@ -5,6 +5,7 @@ name = "pypi"
 
 [packages]
 pydantic = "*"
+requests = "*"
 
 [dev-packages]
 pytest = "*"
@@ -22,3 +23,8 @@ python_version = "3.11"
 format = "black ."
 lint = "flake8 ."
 isort = "isort ."
+test = "bash -c 'PYTHONPATH=. pytest'"
+test-cov = "bash -c 'PYTHONPATH=. coverage run -m pytest'"
+test-report = "coverage report"
+test-html = "coverage html"
+test-all = "bash -c 'PYTHONPATH=. coverage run -m pytest && coverage report'"

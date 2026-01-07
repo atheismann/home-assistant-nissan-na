@@ -1,6 +1,11 @@
+import sys
 import unittest
-from unittest.mock import patch, MagicMock
-from custom_components.nissan_na.nissan_api import NissanNAApiClient, Vehicle
+from unittest.mock import MagicMock, patch
+
+sys.path.insert(0, "custom_components/nissan_na")
+import nissan_api
+
+NissanNAApiClient = nissan_api.NissanNAApiClient
 
 MOCK_TOKEN_RESPONSE = {
     "access_token": "mock_access_token",
