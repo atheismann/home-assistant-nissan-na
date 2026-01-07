@@ -40,7 +40,7 @@ jobs:
         run: pipenv run black --check .
 
       - name: Run isort import check
-        run: pipenv run isort --check .
+        run: pipenv run isort --check-only custom_components tests
 
       - name: Run flake8 linting
         run: pipenv run flake8 .
@@ -120,6 +120,9 @@ jobs:
     name: Validate HACS Configuration
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
       - name: HACS validation
         uses: hacs/action@main
         with:
