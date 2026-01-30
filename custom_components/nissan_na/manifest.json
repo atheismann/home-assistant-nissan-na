@@ -1,7 +1,7 @@
 {
   "domain": "nissan_na",
   "name": "Nissan North America (Smartcar)",
-  "version": "1.0.0",
+  "version": "0.0.19",
   "documentation": "https://github.com/atheismann/home-assistant-nissan-na",
   "issue_tracker": "https://github.com/atheismann/home-assistant-nissan-na/issues",
   "requirements": [
