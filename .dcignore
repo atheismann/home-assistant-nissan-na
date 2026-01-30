@@ -152,6 +152,7 @@ env.bak/
 venv.bak/
 /site
 cython_debug/
+tests/
 
 # Magento
 /media/*

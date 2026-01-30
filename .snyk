@@ -3,4 +3,4 @@
 ---
 exclude:
     global:
-        - test?/
+        - test?/**
