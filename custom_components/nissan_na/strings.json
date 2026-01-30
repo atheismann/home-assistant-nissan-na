@@ -2,22 +2,51 @@
   "config": {
     "step": {
       "user": {
-        "title": "Nissan North America",
-        "description": "Enter your NissanConnect credentials",
+        "title": "Nissan North America (Smartcar)",
+        "description": "Enter your Smartcar application credentials. You can create a free Smartcar account and application at {setup_url}",
         "data": {
-          "username": "Username",
-          "password": "Password",
-          "update_interval": "Update Interval (minutes)"
+          "client_id": "Client ID",
+          "client_secret": "Client Secret",
+          "redirect_uri": "Redirect URI"
+        },
+        "data_description": {
+          "client_id": "Your Smartcar application Client ID from the dashboard",
+          "client_secret": "Your Smartcar application Client Secret (keep this private)",
+          "redirect_uri": "OAuth redirect URI (must match your Smartcar app settings)"
         }
+      },
+      "authorize": {
+        "title": "Authorize Vehicle Access",
+        "description": "Please authorize access to your Nissan vehicle through Smartcar. You'll be redirected to log in with your Nissan account and grant permissions."
       }
     },
     "error": {
-      "invalid_auth": "Invalid username or password",
-      "cannot_connect": "Cannot connect to NissanConnect",
+      "auth_url_failed": "Failed to generate authorization URL. Check your credentials.",
+      "auth_failed": "Authentication failed. Please try again.",
+      "no_code": "No authorization code received. Please complete the OAuth flow.",
+      "no_vehicles": "No vehicles found. Check that your vehicle is compatible and connected to your Nissan account.",
+      "invalid_auth": "Invalid credentials",
+      "cannot_connect": "Cannot connect to Smartcar API",
       "unknown": "An unknown error occurred"
     },
     "abort": {
-      "already_configured": "This account is already configured"
+      "already_configured": "This Smartcar application is already configured",
+      "auth_failed": "OAuth authorization failed or was cancelled"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Nissan North America Options",
+        "description": "Configure update interval for vehicle data",
+        "data": {
+          "update_interval": "Update Interval (minutes)"
+        },
+        "data_description": {
+          "update_interval": "How often to poll for vehicle updates (5-60 minutes)"
+        }
+      }
     }
   }
 }
+

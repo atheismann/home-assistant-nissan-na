@@ -1,240 +1,397 @@
 """
-Nissan North America API client implementation using requests and pydantic.
+Smartcar API client implementation for Nissan vehicles.
 
-This module provides the NissanNAApiClient class for interacting with
-the Nissan North America (NNA) API. It supports authentication, vehicle
-data retrieval, and remote actions such as locking/unlocking doors,
-starting/stopping climate control, and more.
+This module provides the SmartcarApiClient class for interacting with
+Nissan vehicles through the Smartcar API. It supports OAuth authentication,
+vehicle data retrieval, and remote actions such as locking/unlocking doors,
+starting/stopping climate control, location tracking, and more.
+
+Smartcar API documentation: https://smartcar.com/docs/
 """
 
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
+from datetime import datetime
 
-import requests
+import smartcar
 from pydantic import BaseModel
-
-NISSAN_BASE_URL = "https://nissan-na-smartphone-b2c-us.azurewebsites.net/"
 
 
 class Vehicle(BaseModel):
     """Model representing a Nissan vehicle."""
 
     vin: str
-    model: Optional[str]
-    year: Optional[int]
-    nickname: Optional[str]
+    id: str  # Smartcar vehicle ID
+    model: Optional[str] = None
+    year: Optional[int] = None
+    make: Optional[str] = None
 
 
-class NissanNAApiClient:
+class SmartcarApiClient:
     """
-    Client for interacting with the Nissan North America API.
+    Client for interacting with Nissan vehicles via Smartcar API.
+
+    The Smartcar API provides a standardized interface for vehicle connectivity
+    across multiple brands including Nissan. This client handles OAuth
+    authentication and provides methods for vehicle control and monitoring.
 
     Methods:
-        authenticate: Authenticate and obtain an access token.
+        authenticate: Exchange authorization code for access token.
         get_vehicle_list: Retrieve all vehicles linked to the account.
-        get_vehicle_status: Get status for a specific vehicle.
+        get_vehicle_info: Get vehicle make, model, year information.
+        get_vehicle_location: Get current vehicle location.
+        get_battery_level: Get battery charge level (for EVs).
+        get_battery_capacity: Get battery capacity information.
+        get_charge_status: Get charging status.
+        get_odometer: Get odometer reading.
+        get_fuel_level: Get fuel level (for non-EVs).
         lock_doors: Lock the vehicle doors.
         unlock_doors: Unlock the vehicle doors.
-        start_climate: Start the vehicle's climate control.
-        stop_climate: Stop the vehicle's climate control.
-        find_vehicle: Activate horn/lights to locate the vehicle.
-        refresh_vehicle_status: Request a fresh status update from the vehicle.
+        start_charge: Start charging the vehicle.
+        stop_charge: Stop charging the vehicle.
+        disconnect: Disconnect a vehicle from Smartcar.
     """
 
-    def __init__(self, username: str, password: str):
+    def __init__(
+        self,
+        client_id: str,
+        client_secret: str,
+        redirect_uri: str,
+        access_token: Optional[str] = None,
+        refresh_token: Optional[str] = None,
+    ):
         """
-        Initialize the NissanNAApiClient.
+        Initialize the SmartcarApiClient.
 
         Args:
-            username (str): NissanConnect account username.
-            password (str): NissanConnect account password.
+            client_id: Smartcar application client ID.
+            client_secret: Smartcar application client secret.
+            redirect_uri: OAuth redirect URI configured in Smartcar dashboard.
+            access_token: Existing access token (if available).
+            refresh_token: Existing refresh token for token renewal.
         """
-        self.username = username
-        self.password = password
-        self.access_token = None
-        self.refresh_token = None
-        self.session = requests.Session()
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.redirect_uri = redirect_uri
+        self.access_token = access_token
+        self.refresh_token = refresh_token
+        self._vehicles_cache: Dict[str, smartcar.Vehicle] = {}
 
-    def authenticate(self):
+    def get_auth_url(self, state: Optional[str] = None) -> str:
         """
-        Authenticate with the Nissan NA API and store the access token.
+        Generate Smartcar OAuth authorization URL.
+
+        Args:
+            state: Optional state parameter for CSRF protection.
 
         Returns:
-            str: The access token.
+            str: Authorization URL for user to grant access.
         """
-        url = NISSAN_BASE_URL + "auth/oauth2/token"
-        data = {
-            "grant_type": "password",
-            "username": self.username,
-            "password": self.password,
-            "scope": "openid profile vehicles offline_access",
-        }
-        headers = {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "User-Agent": "NissanConnect/4.5.0 (Android)",
-        }
-        # NOTE: client_id and client_secret may be required, see reverse-engineered docs
-        # headers["Authorization"] = "Basic <base64(client_id:client_secret)>"
-        response = self.session.post(url, data=data, headers=headers)
-        response.raise_for_status()
-        tokens = response.json()
-        self.access_token = tokens.get("access_token")
-        self.refresh_token = tokens.get("refresh_token")
-        return self.access_token
+        client = smartcar.AuthClient(
+            client_id=self.client_id,
+            client_secret=self.client_secret,
+            redirect_uri=self.redirect_uri,
+            scope=[
+                "required:read_vehicle_info",
+                "required:read_location",
+                "required:read_odometer",
+                "required:control_security",
+                "read_battery",
+                "read_charge",
+                "control_charge",
+                "read_fuel",
+            ],
+            test_mode=False,
+        )
+        return client.get_auth_url(state=state)
 
-    def get_vehicle_list(self) -> List[Vehicle]:
+    async def authenticate(self, code: str) -> Dict[str, Any]:
         """
-        Retrieve a list of vehicles linked to the account.
+        Exchange authorization code for access token.
+
+        Args:
+            code: Authorization code from OAuth callback.
+
+        Returns:
+            dict: Token information including access_token and refresh_token.
+        """
+        client = smartcar.AuthClient(
+            client_id=self.client_id,
+            client_secret=self.client_secret,
+            redirect_uri=self.redirect_uri,
+        )
+
+        # Exchange code for tokens
+        response = client.exchange_code(code)
+        self.access_token = response["access_token"]
+        self.refresh_token = response["refresh_token"]
+
+        return response
+
+    async def refresh_access_token(self) -> Dict[str, Any]:
+        """
+        Refresh the access token using the refresh token.
+
+        Returns:
+            dict: New token information.
+        """
+        if not self.refresh_token:
+            raise ValueError("No refresh token available")
+
+        client = smartcar.AuthClient(
+            client_id=self.client_id,
+            client_secret=self.client_secret,
+            redirect_uri=self.redirect_uri,
+        )
+
+        response = client.exchange_refresh_token(self.refresh_token)
+        self.access_token = response["access_token"]
+        self.refresh_token = response.get("refresh_token", self.refresh_token)
+
+        return response
+
+    async def get_vehicle_list(self) -> List[Vehicle]:
+        """
+        Retrieve a list of vehicles linked to the Smartcar account.
 
         Returns:
             List[Vehicle]: List of Vehicle objects.
         """
-        url = NISSAN_BASE_URL + "api/v1/vehicles"
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "User-Agent": "NissanConnect/4.5.0 (Android)",
-            "Accept": "application/json",
-        }
-        response = self.session.get(url, headers=headers)
-        response.raise_for_status()
-        vehicles = response.json().get("vehicles", [])
-        return [Vehicle(**v) for v in vehicles]
+        if not self.access_token:
+            raise ValueError("Not authenticated. Call authenticate() first.")
 
-    def get_vehicle_status(self, vin):
+        # Get vehicle IDs
+        response = smartcar.get_vehicles(self.access_token)
+        vehicle_ids = response.vehicles
+
+        vehicles = []
+        for vehicle_id in vehicle_ids:
+            vehicle = smartcar.Vehicle(vehicle_id, self.access_token)
+            self._vehicles_cache[vehicle_id] = vehicle
+
+            # Get vehicle info
+            info = vehicle.info()
+            vehicles.append(
+                Vehicle(
+                    id=vehicle_id,
+                    vin=info.get("vin", ""),
+                    make=info.get("make"),
+                    model=info.get("model"),
+                    year=info.get("year"),
+                )
+            )
+
+        return vehicles
+
+    def _get_vehicle(self, vehicle_id: str) -> smartcar.Vehicle:
         """
-        Get the status for a specific vehicle.
+        Get or create a Smartcar Vehicle instance.
 
         Args:
-            vin (str): Vehicle Identification Number.
+            vehicle_id: Smartcar vehicle ID.
 
         Returns:
-            dict: Vehicle status data.
+            smartcar.Vehicle: Vehicle instance.
         """
-        url = NISSAN_BASE_URL + f"api/v1/vehicles/{vin}/status"
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "User-Agent": "NissanConnect/4.5.0 (Android)",
-            "Accept": "application/json",
-        }
-        response = self.session.get(url, headers=headers)
-        response.raise_for_status()
-        return response.json()
+        if vehicle_id not in self._vehicles_cache:
+            self._vehicles_cache[vehicle_id] = smartcar.Vehicle(
+                vehicle_id, self.access_token
+            )
+        return self._vehicles_cache[vehicle_id]
 
-    def lock_doors(self, vin):
+    async def get_vehicle_info(self, vehicle_id: str) -> Dict[str, Any]:
+        """
+        Get vehicle information (make, model, year).
+
+        Args:
+            vehicle_id: Smartcar vehicle ID.
+
+        Returns:
+            dict: Vehicle information.
+        """
+        vehicle = self._get_vehicle(vehicle_id)
+        return vehicle.info()
+
+    async def get_vehicle_location(self, vehicle_id: str) -> Dict[str, Any]:
+        """
+        Get vehicle location coordinates.
+
+        Args:
+            vehicle_id: Smartcar vehicle ID.
+
+        Returns:
+            dict: Location data with latitude and longitude.
+        """
+        vehicle = self._get_vehicle(vehicle_id)
+        return vehicle.location()
+
+    async def get_battery_level(self, vehicle_id: str) -> Dict[str, Any]:
+        """
+        Get battery charge level (for electric vehicles).
+
+        Args:
+            vehicle_id: Smartcar vehicle ID.
+
+        Returns:
+            dict: Battery level percentage.
+        """
+        vehicle = self._get_vehicle(vehicle_id)
+        return vehicle.battery()
+
+    async def get_battery_capacity(self, vehicle_id: str) -> Dict[str, Any]:
+        """
+        Get battery capacity information.
+
+        Args:
+            vehicle_id: Smartcar vehicle ID.
+
+        Returns:
+            dict: Battery capacity in kWh.
+        """
+        vehicle = self._get_vehicle(vehicle_id)
+        return vehicle.battery_capacity()
+
+    async def get_charge_status(self, vehicle_id: str) -> Dict[str, Any]:
+        """
+        Get charging status (plugged in, charging, etc).
+
+        Args:
+            vehicle_id: Smartcar vehicle ID.
+
+        Returns:
+            dict: Charging status information.
+        """
+        vehicle = self._get_vehicle(vehicle_id)
+        return vehicle.charge()
+
+    async def get_odometer(self, vehicle_id: str) -> Dict[str, Any]:
+        """
+        Get odometer reading.
+
+        Args:
+            vehicle_id: Smartcar vehicle ID.
+
+        Returns:
+            dict: Odometer distance.
+        """
+        vehicle = self._get_vehicle(vehicle_id)
+        return vehicle.odometer()
+
+    async def get_fuel_level(self, vehicle_id: str) -> Dict[str, Any]:
+        """
+        Get fuel level (for non-electric vehicles).
+
+        Args:
+            vehicle_id: Smartcar vehicle ID.
+
+        Returns:
+            dict: Fuel level information.
+        """
+        vehicle = self._get_vehicle(vehicle_id)
+        return vehicle.fuel()
+
+    async def lock_doors(self, vehicle_id: str) -> Dict[str, Any]:
         """
         Lock the vehicle doors.
 
         Args:
-            vin (str): Vehicle Identification Number.
+            vehicle_id: Smartcar vehicle ID.
 
         Returns:
-            dict: API response.
+            dict: API response with action status.
         """
-        url = NISSAN_BASE_URL + f"api/v1/vehicles/{vin}/remote/lock"
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "User-Agent": "NissanConnect/4.5.0 (Android)",
-            "Accept": "application/json",
-        }
-        response = self.session.post(url, headers=headers)
-        response.raise_for_status()
-        return response.json()
+        vehicle = self._get_vehicle(vehicle_id)
+        return vehicle.lock()
 
-    def unlock_doors(self, vin):
+    async def unlock_doors(self, vehicle_id: str) -> Dict[str, Any]:
         """
         Unlock the vehicle doors.
 
         Args:
-            vin (str): Vehicle Identification Number.
+            vehicle_id: Smartcar vehicle ID.
 
         Returns:
-            dict: API response.
+            dict: API response with action status.
         """
-        url = NISSAN_BASE_URL + f"api/v1/vehicles/{vin}/remote/unlock"
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "User-Agent": "NissanConnect/4.5.0 (Android)",
-            "Accept": "application/json",
-        }
-        response = self.session.post(url, headers=headers)
-        response.raise_for_status()
-        return response.json()
+        vehicle = self._get_vehicle(vehicle_id)
+        return vehicle.unlock()
 
-    def start_engine(self, vin):
+    async def start_charge(self, vehicle_id: str) -> Dict[str, Any]:
         """
-        Remotely start the vehicle's engine (uses climate start endpoint).
+        Start charging the vehicle.
 
         Args:
-            vin (str): Vehicle Identification Number.
+            vehicle_id: Smartcar vehicle ID.
 
         Returns:
-            dict: API response.
+            dict: API response with action status.
         """
-        url = NISSAN_BASE_URL + f"api/v1/vehicles/{vin}/remote/climate/start"
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "User-Agent": "NissanConnect/4.5.0 (Android)",
-            "Accept": "application/json",
-        }
-        response = self.session.post(url, headers=headers)
-        response.raise_for_status()
-        return response.json()
+        vehicle = self._get_vehicle(vehicle_id)
+        return vehicle.start_charge()
 
-    def stop_engine(self, vin):
+    async def stop_charge(self, vehicle_id: str) -> Dict[str, Any]:
         """
-        Remotely stop the vehicle's engine (uses climate stop endpoint).
+        Stop charging the vehicle.
 
         Args:
-            vin (str): Vehicle Identification Number.
+            vehicle_id: Smartcar vehicle ID.
 
         Returns:
-            dict: API response.
+            dict: API response with action status.
         """
-        url = NISSAN_BASE_URL + f"api/v1/vehicles/{vin}/remote/climate/stop"
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "User-Agent": "NissanConnect/4.5.0 (Android)",
-            "Accept": "application/json",
-        }
-        response = self.session.post(url, headers=headers)
-        response.raise_for_status()
-        return response.json()
+        vehicle = self._get_vehicle(vehicle_id)
+        return vehicle.stop_charge()
 
-    def find_vehicle(self, vin):
+    async def disconnect(self, vehicle_id: str) -> bool:
         """
-        Activate horn/lights to help locate the vehicle.
+        Disconnect a vehicle from Smartcar.
 
         Args:
-            vin (str): Vehicle Identification Number.
+            vehicle_id: Smartcar vehicle ID.
 
         Returns:
-            dict: API response.
+            bool: True if successful.
         """
-        url = NISSAN_BASE_URL + f"api/v1/vehicles/{vin}/remote/horn"
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "User-Agent": "NissanConnect/4.5.0 (Android)",
-            "Accept": "application/json",
-        }
-        response = self.session.post(url, headers=headers)
-        response.raise_for_status()
-        return response.json()
+        vehicle = self._get_vehicle(vehicle_id)
+        vehicle.disconnect()
+        if vehicle_id in self._vehicles_cache:
+            del self._vehicles_cache[vehicle_id]
+        return True
 
-    def refresh_vehicle_status(self, vin):
+    async def get_vehicle_status(self, vehicle_id: str) -> Dict[str, Any]:
         """
-        Request a fresh status update from the vehicle.
+        Get comprehensive vehicle status.
 
         Args:
-            vin (str): Vehicle Identification Number.
+            vehicle_id: Smartcar vehicle ID.
 
         Returns:
-            dict: API response.
+            dict: Combined vehicle status data.
         """
-        url = NISSAN_BASE_URL + f"api/v1/vehicles/{vin}/status/refresh"
-        headers = {
-            "Authorization": f"Bearer {self.access_token}",
-            "User-Agent": "NissanConnect/4.5.0 (Android)",
-            "Accept": "application/json",
-        }
-        response = self.session.post(url, headers=headers)
-        response.raise_for_status()
-        return response.json()
+        status = {}
+        
+        try:
+            status["info"] = await self.get_vehicle_info(vehicle_id)
+        except Exception:
+            pass
+
+        try:
+            status["location"] = await self.get_vehicle_location(vehicle_id)
+        except Exception:
+            pass
+
+        try:
+            status["battery"] = await self.get_battery_level(vehicle_id)
+        except Exception:
+            pass
+
+        try:
+            status["charge"] = await self.get_charge_status(vehicle_id)
+        except Exception:
+            pass
+
+        try:
+            status["odometer"] = await self.get_odometer(vehicle_id)
+        except Exception:
+            pass
+
+        return status

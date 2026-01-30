@@ -5,113 +5,156 @@ from unittest.mock import MagicMock, patch
 sys.path.insert(0, "custom_components/nissan_na")
 import nissan_api
 
-NissanNAApiClient = nissan_api.NissanNAApiClient
-
-MOCK_TOKEN_RESPONSE = {
-    "access_token": "mock_access_token",
-    "refresh_token": "mock_refresh_token",
-}
-MOCK_VEHICLE_LIST = {
-    "vehicles": [
-        {"vin": "VIN123", "model": "Pathfinder", "year": 2022, "nickname": "My Nissan"}
-    ]
-}
-MOCK_VEHICLE_STATUS = {
-    "batteryLevel": 80,
-    "chargingStatus": "Not Charging",
-    "plugStatus": "Unplugged",
-    "odometer": 12345,
-    "range": 250,
-    "tirePressure": 35,
-    "doorStatus": "Closed",
-    "windowStatus": "Closed",
-    "lastUpdate": "2026-01-02T12:00:00Z",
-    "climateStatus": "Off",
-    "location": {"lat": 40.0, "lon": -75.0},
-}
+SmartcarApiClient = nissan_api.SmartcarApiClient
 
 
-class TestNissanNAApiClientBranches(unittest.TestCase):
+class TestSmartcarApiClientErrorHandling(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.client = NissanNAApiClient("user", "pass")
-        self.client.access_token = "mock_access_token"
-
-    @patch("requests.Session.post")
-    def test_authenticate_failure(self, mock_post):
-        mock_post.return_value = MagicMock(
-            status_code=401,
-            raise_for_status=MagicMock(side_effect=Exception("401 Unauthorized")),
+        self.client = SmartcarApiClient(
+            client_id="test_client_id",
+            client_secret="test_client_secret",
+            redirect_uri="https://example.com/callback",
+            access_token="mock_access_token",
+            refresh_token="mock_refresh_token",
         )
-        with self.assertRaises(Exception):
-            self.client.authenticate()
 
-    @patch("requests.Session.get")
-    def test_get_vehicle_list_empty(self, mock_get):
-        mock_get.return_value = MagicMock(
-            status_code=200, json=lambda: {"vehicles": []}
-        )
-        vehicles = self.client.get_vehicle_list()
-        self.assertEqual(vehicles, [])
+    async def test_refresh_access_token_no_refresh_token(self):
+        """Test refresh fails when no refresh token is available."""
+        self.client.refresh_token = None
+        
+        with self.assertRaises(ValueError) as context:
+            await self.client.refresh_access_token()
+        
+        self.assertIn("No refresh token", str(context.exception))
 
-    @patch("requests.Session.get")
-    def test_get_vehicle_status_missing_fields(self, mock_get):
-        mock_get.return_value = MagicMock(status_code=200, json=lambda: {})
-        status = self.client.get_vehicle_status("VIN123")
-        self.assertEqual(status, {})
+    async def test_get_vehicle_list_not_authenticated(self):
+        """Test vehicle list fails when not authenticated."""
+        self.client.access_token = None
+        
+        with self.assertRaises(ValueError) as context:
+            await self.client.get_vehicle_list()
+        
+        self.assertIn("Not authenticated", str(context.exception))
 
-    @patch("requests.Session.post")
-    def test_lock_doors_error(self, mock_post):
-        mock_post.return_value = MagicMock(
-            status_code=500,
-            raise_for_status=MagicMock(side_effect=Exception("500 Error")),
-        )
-        with self.assertRaises(Exception):
-            self.client.lock_doors("VIN123")
+    @patch("smartcar.Vehicle")
+    async def test_get_vehicle_status_with_errors(self, mock_vehicle_class):
+        """Test get_vehicle_status handles partial failures gracefully."""
+        mock_vehicle = MagicMock()
+        mock_vehicle.info.side_effect = Exception("API Error")
+        mock_vehicle.location.return_value = {"latitude": 37.4292, "longitude": -122.1381}
+        mock_vehicle.battery.side_effect = Exception("Battery API Error")
+        mock_vehicle.charge.return_value = {"state": "CHARGING"}
+        mock_vehicle.odometer.side_effect = Exception("Odometer Error")
+        mock_vehicle_class.return_value = mock_vehicle
+        
+        status = await self.client.get_vehicle_status("vehicle-id-123")
+        
+        # Should have location and charge but not info, battery, or odometer
+        self.assertIn("location", status)
+        self.assertIn("charge", status)
+        self.assertNotIn("info", status)
+        self.assertNotIn("battery", status)
+        self.assertNotIn("odometer", status)
 
-    @patch("requests.Session.post")
-    def test_unlock_doors_error(self, mock_post):
-        mock_post.return_value = MagicMock(
-            status_code=500,
-            raise_for_status=MagicMock(side_effect=Exception("500 Error")),
-        )
-        with self.assertRaises(Exception):
-            self.client.unlock_doors("VIN123")
+    @patch("smartcar.Vehicle")
+    async def test_lock_doors_failure(self, mock_vehicle_class):
+        """Test lock doors handles API errors."""
+        mock_vehicle = MagicMock()
+        mock_vehicle.lock.side_effect = Exception("Lock failed")
+        mock_vehicle_class.return_value = mock_vehicle
+        
+        with self.assertRaises(Exception) as context:
+            await self.client.lock_doors("vehicle-id-123")
+        
+        self.assertIn("Lock failed", str(context.exception))
 
-    @patch("requests.Session.post")
-    def test_start_engine_error(self, mock_post):
-        mock_post.return_value = MagicMock(
-            status_code=500,
-            raise_for_status=MagicMock(side_effect=Exception("500 Error")),
-        )
-        with self.assertRaises(Exception):
-            self.client.start_engine("VIN123")
+    @patch("smartcar.Vehicle")
+    async def test_unlock_doors_failure(self, mock_vehicle_class):
+        """Test unlock doors handles API errors."""
+        mock_vehicle = MagicMock()
+        mock_vehicle.unlock.side_effect = Exception("Unlock failed")
+        mock_vehicle_class.return_value = mock_vehicle
+        
+        with self.assertRaises(Exception) as context:
+            await self.client.unlock_doors("vehicle-id-123")
+        
+        self.assertIn("Unlock failed", str(context.exception))
 
-    @patch("requests.Session.post")
-    def test_stop_engine_error(self, mock_post):
-        mock_post.return_value = MagicMock(
-            status_code=500,
-            raise_for_status=MagicMock(side_effect=Exception("500 Error")),
-        )
-        with self.assertRaises(Exception):
-            self.client.stop_engine("VIN123")
+    @patch("smartcar.Vehicle")
+    async def test_start_charge_failure(self, mock_vehicle_class):
+        """Test start charge handles API errors."""
+        mock_vehicle = MagicMock()
+        mock_vehicle.start_charge.side_effect = Exception("Charge start failed")
+        mock_vehicle_class.return_value = mock_vehicle
+        
+        with self.assertRaises(Exception) as context:
+            await self.client.start_charge("vehicle-id-123")
+        
+        self.assertIn("Charge start failed", str(context.exception))
 
-    @patch("requests.Session.post")
-    def test_find_vehicle_error(self, mock_post):
-        mock_post.return_value = MagicMock(
-            status_code=500,
-            raise_for_status=MagicMock(side_effect=Exception("500 Error")),
-        )
-        with self.assertRaises(Exception):
-            self.client.find_vehicle("VIN123")
+    @patch("smartcar.Vehicle")
+    async def test_stop_charge_failure(self, mock_vehicle_class):
+        """Test stop charge handles API errors."""
+        mock_vehicle = MagicMock()
+        mock_vehicle.stop_charge.side_effect = Exception("Charge stop failed")
+        mock_vehicle_class.return_value = mock_vehicle
+        
+        with self.assertRaises(Exception) as context:
+            await self.client.stop_charge("vehicle-id-123")
+        
+        self.assertIn("Charge stop failed", str(context.exception))
 
-    @patch("requests.Session.post")
-    def test_refresh_vehicle_status_error(self, mock_post):
-        mock_post.return_value = MagicMock(
-            status_code=500,
-            raise_for_status=MagicMock(side_effect=Exception("500 Error")),
-        )
-        with self.assertRaises(Exception):
-            self.client.refresh_vehicle_status("VIN123")
+    @patch("smartcar.Vehicle")
+    async def test_disconnect_vehicle(self, mock_vehicle_class):
+        """Test disconnecting a vehicle."""
+        mock_vehicle = MagicMock()
+        mock_vehicle.disconnect.return_value = None
+        mock_vehicle_class.return_value = mock_vehicle
+        
+        # Add vehicle to cache first
+        self.client._vehicles_cache["vehicle-id-123"] = mock_vehicle
+        
+        result = await self.client.disconnect("vehicle-id-123")
+        
+        self.assertTrue(result)
+        self.assertNotIn("vehicle-id-123", self.client._vehicles_cache)
+        mock_vehicle.disconnect.assert_called_once()
+
+    @patch("smartcar.AuthClient")
+    async def test_authenticate_failure(self, mock_auth_client):
+        """Test authentication failure."""
+        mock_client_instance = MagicMock()
+        mock_client_instance.exchange_code.side_effect = Exception("Invalid code")
+        mock_auth_client.return_value = mock_client_instance
+        
+        with self.assertRaises(Exception) as context:
+            await self.client.authenticate("invalid_code")
+        
+        self.assertIn("Invalid code", str(context.exception))
+
+    @patch("smartcar.get_vehicles")
+    async def test_get_vehicle_list_empty(self, mock_get_vehicles):
+        """Test handling empty vehicle list."""
+        mock_get_vehicles.return_value = {"vehicles": []}
+        
+        vehicles = await self.client.get_vehicle_list()
+        
+        self.assertEqual(len(vehicles), 0)
+
+    @patch("smartcar.Vehicle")
+    async def test_vehicle_caching(self, mock_vehicle_class):
+        """Test that vehicle instances are cached."""
+        mock_vehicle = MagicMock()
+        mock_vehicle_class.return_value = mock_vehicle
+        
+        # First call should create vehicle
+        vehicle1 = self.client._get_vehicle("vehicle-id-123")
+        # Second call should return cached vehicle
+        vehicle2 = self.client._get_vehicle("vehicle-id-123")
+        
+        self.assertIs(vehicle1, vehicle2)
+        # Should only be called once due to caching
+        mock_vehicle_class.assert_called_once()
 
 
 if __name__ == "__main__":
