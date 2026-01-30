@@ -6,7 +6,7 @@
   "issue_tracker": "https://github.com/atheismann/home-assistant-nissan-na/issues",
   "requirements": [
     "pydantic>=1.10.0",
-    "smartcar>=7.0.0"
+    "smartcar>=6.0.0"
   ],
   "codeowners": [
     "@atheismann"
