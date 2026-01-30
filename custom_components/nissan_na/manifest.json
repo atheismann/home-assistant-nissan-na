@@ -1,12 +1,12 @@
 {
   "domain": "nissan_na",
-  "name": "Nissan North America",
-  "version": "0.0.18",
+  "name": "Nissan North America (Smartcar)",
+  "version": "1.0.0",
   "documentation": "https://github.com/atheismann/home-assistant-nissan-na",
   "issue_tracker": "https://github.com/atheismann/home-assistant-nissan-na/issues",
   "requirements": [
     "pydantic>=1.10.0",
-    "requests>=2.28.0"
+    "smartcar>=7.0.0"
   ],
   "codeowners": [
     "@atheismann"

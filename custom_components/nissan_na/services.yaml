@@ -1,0 +1,59 @@
+lock_doors:
+  name: Lock Doors
+  description: Lock the vehicle doors remotely
+  fields:
+    vehicle_id:
+      name: Vehicle ID
+      description: The Smartcar vehicle ID (found in entity attributes)
+      required: true
+      example: "abc123-def456-ghi789"
+      selector:
+        text:
+
+unlock_doors:
+  name: Unlock Doors
+  description: Unlock the vehicle doors remotely
+  fields:
+    vehicle_id:
+      name: Vehicle ID
+      description: The Smartcar vehicle ID (found in entity attributes)
+      required: true
+      example: "abc123-def456-ghi789"
+      selector:
+        text:
+
+start_charge:
+  name: Start Charging
+  description: Start charging the vehicle (electric vehicles only)
+  fields:
+    vehicle_id:
+      name: Vehicle ID
+      description: The Smartcar vehicle ID (found in entity attributes)
+      required: true
+      example: "abc123-def456-ghi789"
+      selector:
+        text:
+
+stop_charge:
+  name: Stop Charging
+  description: Stop charging the vehicle (electric vehicles only)
+  fields:
+    vehicle_id:
+      name: Vehicle ID
+      description: The Smartcar vehicle ID (found in entity attributes)
+      required: true
+      example: "abc123-def456-ghi789"
+      selector:
+        text:
+
+refresh_status:
+  name: Refresh Status
+  description: Force a refresh of the vehicle status data
+  fields:
+    vehicle_id:
+      name: Vehicle ID
+      description: The Smartcar vehicle ID (found in entity attributes)
+      required: true
+      example: "abc123-def456-ghi789"
+      selector:
+        text:
