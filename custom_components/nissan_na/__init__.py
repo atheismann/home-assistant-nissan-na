@@ -1,8 +1,9 @@
 """
 Home Assistant custom integration for Nissan North America vehicles using Smartcar API.
 """
-from datetime import timedelta
+
 import logging
+from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -25,14 +26,14 @@ _LOGGER = logging.getLogger(__name__)
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Set up Nissan NA from a config entry."""
     hass.data.setdefault(DOMAIN, {})
-    
+
     # Extract configuration
     client_id = config_entry.data[CONF_CLIENT_ID]
     client_secret = config_entry.data[CONF_CLIENT_SECRET]
     redirect_uri = config_entry.data[CONF_REDIRECT_URI]
     access_token = config_entry.data.get(CONF_ACCESS_TOKEN)
     refresh_token = config_entry.data.get(CONF_REFRESH_TOKEN)
-    
+
     # Initialize Smartcar client
     client = SmartcarApiClient(
         client_id=client_id,
@@ -41,13 +42,13 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         access_token=access_token,
         refresh_token=refresh_token,
     )
-    
+
     # Store client in hass data
     hass.data[DOMAIN][config_entry.entry_id] = {
         "client": client,
         "vehicles": [],
     }
-    
+
     # Get initial vehicle list
     try:
         vehicles = await client.get_vehicle_list()
@@ -56,7 +57,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     except Exception as err:
         _LOGGER.error("Failed to get vehicle list: %s", err)
         return False
-    
+
     # Periodic update interval (default 15 minutes, can be changed in options)
     update_minutes = config_entry.options.get("update_interval", 15)
 
@@ -65,7 +66,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         try:
             # Refresh access token if needed
             await client.refresh_access_token()
-            
+
             # Update vehicle data
             vehicles = hass.data[DOMAIN][config_entry.entry_id]["vehicles"]
             for vehicle in vehicles:
@@ -137,7 +138,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
     # Set up platforms (sensor, lock, climate, device_tracker)
     await hass.config_entries.async_forward_entry_setups(config_entry, PLATFORMS)
-    
+
     return True
 
 
@@ -147,10 +148,9 @@ async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> 
     unload_ok = await hass.config_entries.async_unload_platforms(
         config_entry, PLATFORMS
     )
-    
+
     if unload_ok:
         # Remove data
         hass.data[DOMAIN].pop(config_entry.entry_id)
-    
-    return unload_ok
 
+    return unload_ok

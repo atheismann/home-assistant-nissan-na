@@ -1,4 +1,5 @@
 """Tests for the Nissan NA services module."""
+
 import pytest
 import voluptuous as vol
 
@@ -20,11 +21,11 @@ def test_service_schema():
     # Valid data
     valid_data = {"vin": "TEST123VIN"}
     assert services.SERVICE_SCHEMA(valid_data) == valid_data
-    
+
     # Invalid data - missing vin
     with pytest.raises(vol.MultipleInvalid):
         services.SERVICE_SCHEMA({})
-    
+
     # Invalid data - wrong type
     with pytest.raises(vol.MultipleInvalid):
         services.SERVICE_SCHEMA({"vin": 123})
@@ -34,7 +35,7 @@ def test_service_schema_validates_vin_required():
     """Test that VIN is required in service schema."""
     with pytest.raises(vol.MultipleInvalid) as exc_info:
         services.SERVICE_SCHEMA({})
-    
+
     assert "required key not provided" in str(exc_info.value)
 
 

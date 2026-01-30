@@ -9,8 +9,7 @@ starting/stopping climate control, location tracking, and more.
 Smartcar API documentation: https://smartcar.com/docs/
 """
 
-from typing import List, Optional, Dict, Any
-from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 import smartcar
 from pydantic import BaseModel
@@ -161,7 +160,11 @@ class SmartcarApiClient:
 
         # Get vehicle IDs
         response = smartcar.get_vehicles(self.access_token)
-        vehicle_ids = response.get("vehicles", []) if isinstance(response, dict) else response.vehicles
+        vehicle_ids = (
+            response.get("vehicles", [])
+            if isinstance(response, dict)
+            else response.vehicles
+        )
 
         vehicles = []
         for vehicle_id in vehicle_ids:
@@ -368,7 +371,7 @@ class SmartcarApiClient:
             dict: Combined vehicle status data.
         """
         status = {}
-        
+
         try:
             status["info"] = await self.get_vehicle_info(vehicle_id)
         except Exception:
