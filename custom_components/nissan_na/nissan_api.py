@@ -161,7 +161,7 @@ class SmartcarApiClient:
 
         # Get vehicle IDs
         response = smartcar.get_vehicles(self.access_token)
-        vehicle_ids = response.vehicles
+        vehicle_ids = response.get("vehicles", []) if isinstance(response, dict) else response.vehicles
 
         vehicles = []
         for vehicle_id in vehicle_ids:

@@ -57,6 +57,22 @@ class TestSmartcarApiClientErrorHandling(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("odometer", status)
 
     @patch("smartcar.Vehicle")
+    async def test_get_vehicle_status_all_fail(self, mock_vehicle_class):
+        """Test get_vehicle_status when all calls fail."""
+        mock_vehicle = MagicMock()
+        mock_vehicle.info.side_effect = Exception("Info Error")
+        mock_vehicle.location.side_effect = Exception("Location Error")
+        mock_vehicle.battery.side_effect = Exception("Battery Error")
+        mock_vehicle.charge.side_effect = Exception("Charge Error")
+        mock_vehicle.odometer.side_effect = Exception("Odometer Error")
+        mock_vehicle_class.return_value = mock_vehicle
+        
+        status = await self.client.get_vehicle_status("vehicle-id-123")
+        
+        # Should return empty dict when everything fails
+        self.assertEqual(status, {})
+
+    @patch("smartcar.Vehicle")
     async def test_lock_doors_failure(self, mock_vehicle_class):
         """Test lock doors handles API errors."""
         mock_vehicle = MagicMock()
@@ -119,6 +135,19 @@ class TestSmartcarApiClientErrorHandling(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result)
         self.assertNotIn("vehicle-id-123", self.client._vehicles_cache)
         mock_vehicle.disconnect.assert_called_once()
+
+    @patch("smartcar.Vehicle")
+    async def test_disconnect_vehicle_not_in_cache(self, mock_vehicle_class):
+        """Test disconnecting a vehicle that is not in cache."""
+        mock_vehicle = MagicMock()
+        mock_vehicle.disconnect.return_value = None
+        mock_vehicle_class.return_value = mock_vehicle
+        
+        # Don't add to cache, should still work
+        result = await self.client.disconnect("vehicle-id-456")
+        
+        self.assertTrue(result)
+        mock_vehicle_class.assert_called_once()
 
     @patch("smartcar.AuthClient")
     async def test_authenticate_failure(self, mock_auth_client):

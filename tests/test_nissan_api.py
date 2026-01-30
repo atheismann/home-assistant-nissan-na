@@ -46,6 +46,15 @@ MOCK_ODOMETER_RESPONSE = {
     "distance": 123456.78,
 }
 
+MOCK_BATTERY_CAPACITY_RESPONSE = {
+    "capacity": 62.0,
+}
+
+MOCK_FUEL_RESPONSE = {
+    "percentRemaining": 0.5,
+    "range": 320.5,
+}
+
 
 class TestSmartcarApiClient(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
@@ -195,6 +204,64 @@ class TestSmartcarApiClient(unittest.IsolatedAsyncioTestCase):
         odometer = await self.client.get_odometer("vehicle-id-123")
         
         self.assertEqual(odometer, MOCK_ODOMETER_RESPONSE)
+
+    @patch("smartcar.Vehicle")
+    async def test_get_battery_capacity(self, mock_vehicle_class):
+        """Test getting battery capacity."""
+        self.client.access_token = "mock_access_token"
+        mock_vehicle = MagicMock()
+        mock_vehicle.battery_capacity.return_value = MOCK_BATTERY_CAPACITY_RESPONSE
+        mock_vehicle_class.return_value = mock_vehicle
+        
+        capacity = await self.client.get_battery_capacity("vehicle-id-123")
+        
+        self.assertEqual(capacity, MOCK_BATTERY_CAPACITY_RESPONSE)
+
+    @patch("smartcar.Vehicle")
+    async def test_get_fuel_level(self, mock_vehicle_class):
+        """Test getting fuel level."""
+        self.client.access_token = "mock_access_token"
+        mock_vehicle = MagicMock()
+        mock_vehicle.fuel.return_value = MOCK_FUEL_RESPONSE
+        mock_vehicle_class.return_value = mock_vehicle
+        
+        fuel = await self.client.get_fuel_level("vehicle-id-123")
+        
+        self.assertEqual(fuel, MOCK_FUEL_RESPONSE)
+
+    @patch("smartcar.Vehicle")
+    async def test_get_vehicle_info(self, mock_vehicle_class):
+        """Test getting vehicle info."""
+        self.client.access_token = "mock_access_token"
+        mock_vehicle = MagicMock()
+        mock_vehicle.info.return_value = MOCK_VEHICLE_INFO
+        mock_vehicle_class.return_value = mock_vehicle
+        
+        info = await self.client.get_vehicle_info("vehicle-id-123")
+        
+        self.assertEqual(info, MOCK_VEHICLE_INFO)
+
+    @patch("smartcar.Vehicle")
+    async def test_get_vehicle_status(self, mock_vehicle_class):
+        """Test getting comprehensive vehicle status."""
+        self.client.access_token = "mock_access_token"
+        mock_vehicle = MagicMock()
+        mock_vehicle.info.return_value = MOCK_VEHICLE_INFO
+        mock_vehicle.location.return_value = MOCK_LOCATION_RESPONSE
+        mock_vehicle.battery.return_value = MOCK_BATTERY_RESPONSE
+        mock_vehicle.charge.return_value = MOCK_CHARGE_RESPONSE
+        mock_vehicle.odometer.return_value = MOCK_ODOMETER_RESPONSE
+        mock_vehicle_class.return_value = mock_vehicle
+        
+        status = await self.client.get_vehicle_status("vehicle-id-123")
+        
+        self.assertIn("info", status)
+        self.assertIn("location", status)
+        self.assertIn("battery", status)
+        self.assertIn("charge", status)
+        self.assertIn("odometer", status)
+        self.assertEqual(status["info"], MOCK_VEHICLE_INFO)
+        self.assertEqual(status["location"], MOCK_LOCATION_RESPONSE)
 
 
 if __name__ == "__main__":

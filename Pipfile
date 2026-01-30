@@ -5,16 +5,16 @@ name = "pypi"
 
 [packages]
 pydantic = "*"
-requests = "*"
+smartcar = "*"
 
 [dev-packages]
 pytest = "*"
+pytest-homeassistant-custom-component = "*"
 coverage = "*"
 black = "*"
 flake8 = "*"
 isort = "*"
 pre-commit = "*"
-
 
 [requires]
 python_version = "3.12"
