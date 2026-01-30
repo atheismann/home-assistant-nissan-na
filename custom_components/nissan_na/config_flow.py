@@ -49,6 +49,10 @@ class NissanNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
+            # Initialize init_data if not already done (flow restoration case)
+            if self.init_data is None:
+                self.init_data = {}
+            
             # Validate and store credentials
             self.init_data.update(user_input)
 
@@ -99,6 +103,10 @@ class NissanNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """
         if user_input is None:
             return self.async_external_step_done(next_step_id="authorize")
+
+        # Initialize init_data if not already done (flow restoration case)
+        if self.init_data is None:
+            self.init_data = {}
 
         errors = {}
 
