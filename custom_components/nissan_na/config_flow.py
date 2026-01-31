@@ -52,7 +52,7 @@ class NissanNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Initialize init_data if not already done (flow restoration case)
             if self.init_data is None:
                 self.init_data = {}
-            
+
             # Validate and store credentials
             self.init_data.update(user_input)
 

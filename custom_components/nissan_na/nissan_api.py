@@ -15,6 +15,33 @@ import smartcar
 from pydantic import BaseModel
 
 
+def _namedtuple_to_dict(obj: Any) -> Dict[str, Any]:
+    """
+    Convert a namedtuple (or any object with __dict__) to a dictionary.
+
+    This helper handles smartcar v6 API responses which return namedtuples.
+
+    Args:
+        obj: Object to convert (namedtuple, dict, or other).
+
+    Returns:
+        dict: Dictionary representation of the object.
+    """
+    if isinstance(obj, dict):
+        return obj
+    elif hasattr(obj, "_asdict"):
+        # It's a namedtuple
+        result = obj._asdict()
+        # Recursively convert nested namedtuples
+        return {
+            k: _namedtuple_to_dict(v) if hasattr(v, "_asdict") else v
+            for k, v in result.items()
+        }
+    else:
+        # Try to access as attributes
+        return {k: getattr(obj, k) for k in dir(obj) if not k.startswith("_")}
+
+
 class Vehicle(BaseModel):
     """Model representing a Nissan vehicle."""
 
@@ -89,19 +116,20 @@ class SmartcarApiClient:
             client_id=self.client_id,
             client_secret=self.client_secret,
             redirect_uri=self.redirect_uri,
-            scope=[
-                "required:read_vehicle_info",
-                "required:read_location",
-                "required:read_odometer",
-                "required:control_security",
-                "read_battery",
-                "read_charge",
-                "control_charge",
-                "read_fuel",
-            ],
             test_mode=False,
         )
-        return client.get_auth_url(state=state)
+        # Build scope list for get_auth_url
+        scope = [
+            "required:read_vehicle_info",
+            "required:read_location",
+            "required:read_odometer",
+            "required:control_security",
+            "read_battery",
+            "read_charge",
+            "control_charge",
+            "read_fuel",
+        ]
+        return client.get_auth_url(scope=scope, state=state)
 
     async def authenticate(self, code: str) -> Dict[str, Any]:
         """
@@ -171,15 +199,21 @@ class SmartcarApiClient:
             vehicle = smartcar.Vehicle(vehicle_id, self.access_token)
             self._vehicles_cache[vehicle_id] = vehicle
 
-            # Get vehicle info
-            info = vehicle.info()
+            # Get vehicle attributes and VIN (v6 API)
+            attrs = vehicle.attributes()
+            vin_response = vehicle.vin()
+
+            # Convert namedtuple responses to dict
+            attrs_dict = _namedtuple_to_dict(attrs)
+            vin_dict = _namedtuple_to_dict(vin_response)
+
             vehicles.append(
                 Vehicle(
                     id=vehicle_id,
-                    vin=info.get("vin", ""),
-                    make=info.get("make"),
-                    model=info.get("model"),
-                    year=info.get("year"),
+                    vin=vin_dict.get("vin", ""),
+                    make=attrs_dict.get("make"),
+                    model=attrs_dict.get("model"),
+                    year=int(attrs_dict["year"]) if attrs_dict.get("year") else None,
                 )
             )
 
@@ -212,7 +246,25 @@ class SmartcarApiClient:
             dict: Vehicle information.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        return vehicle.info()
+        attrs = vehicle.attributes()
+        vin_response = vehicle.vin()
+
+        # Convert namedtuple responses to dict for v6
+        attrs_dict = _namedtuple_to_dict(attrs)
+        vin_dict = _namedtuple_to_dict(vin_response)
+
+        # Convert year to int if it's a string
+        year = attrs_dict.get("year")
+        if year and isinstance(year, str):
+            year = int(year)
+
+        return {
+            "id": attrs_dict.get("id"),
+            "make": attrs_dict.get("make"),
+            "model": attrs_dict.get("model"),
+            "year": year,
+            "vin": vin_dict.get("vin"),
+        }
 
     async def get_vehicle_location(self, vehicle_id: str) -> Dict[str, Any]:
         """
@@ -225,7 +277,8 @@ class SmartcarApiClient:
             dict: Location data with latitude and longitude.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        return vehicle.location()
+        location = vehicle.location()
+        return _namedtuple_to_dict(location)
 
     async def get_battery_level(self, vehicle_id: str) -> Dict[str, Any]:
         """
@@ -238,7 +291,8 @@ class SmartcarApiClient:
             dict: Battery level percentage.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        return vehicle.battery()
+        battery = vehicle.battery()
+        return _namedtuple_to_dict(battery)
 
     async def get_battery_capacity(self, vehicle_id: str) -> Dict[str, Any]:
         """
@@ -251,7 +305,8 @@ class SmartcarApiClient:
             dict: Battery capacity in kWh.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        return vehicle.battery_capacity()
+        capacity = vehicle.battery_capacity()
+        return _namedtuple_to_dict(capacity)
 
     async def get_charge_status(self, vehicle_id: str) -> Dict[str, Any]:
         """
@@ -264,7 +319,8 @@ class SmartcarApiClient:
             dict: Charging status information.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        return vehicle.charge()
+        charge = vehicle.charge()
+        return _namedtuple_to_dict(charge)
 
     async def get_odometer(self, vehicle_id: str) -> Dict[str, Any]:
         """
@@ -277,7 +333,8 @@ class SmartcarApiClient:
             dict: Odometer distance.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        return vehicle.odometer()
+        odometer = vehicle.odometer()
+        return _namedtuple_to_dict(odometer)
 
     async def get_fuel_level(self, vehicle_id: str) -> Dict[str, Any]:
         """
@@ -290,7 +347,8 @@ class SmartcarApiClient:
             dict: Fuel level information.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        return vehicle.fuel()
+        fuel = vehicle.fuel()
+        return _namedtuple_to_dict(fuel)
 
     async def lock_doors(self, vehicle_id: str) -> Dict[str, Any]:
         """
@@ -303,7 +361,8 @@ class SmartcarApiClient:
             dict: API response with action status.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        return vehicle.lock()
+        result = vehicle.lock()
+        return _namedtuple_to_dict(result)
 
     async def unlock_doors(self, vehicle_id: str) -> Dict[str, Any]:
         """
@@ -316,7 +375,8 @@ class SmartcarApiClient:
             dict: API response with action status.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        return vehicle.unlock()
+        result = vehicle.unlock()
+        return _namedtuple_to_dict(result)
 
     async def start_charge(self, vehicle_id: str) -> Dict[str, Any]:
         """
@@ -329,7 +389,8 @@ class SmartcarApiClient:
             dict: API response with action status.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        return vehicle.start_charge()
+        result = vehicle.start_charge()
+        return _namedtuple_to_dict(result)
 
     async def stop_charge(self, vehicle_id: str) -> Dict[str, Any]:
         """
@@ -342,7 +403,8 @@ class SmartcarApiClient:
             dict: API response with action status.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        return vehicle.stop_charge()
+        result = vehicle.stop_charge()
+        return _namedtuple_to_dict(result)
 
     async def disconnect(self, vehicle_id: str) -> bool:
         """
