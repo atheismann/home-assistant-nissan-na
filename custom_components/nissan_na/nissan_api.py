@@ -116,7 +116,7 @@ class SmartcarApiClient:
             client_id=self.client_id,
             client_secret=self.client_secret,
             redirect_uri=self.redirect_uri,
-            test_mode=False,
+            mode="live",
         )
         # Build scope list for get_auth_url
         scope = [
@@ -129,7 +129,11 @@ class SmartcarApiClient:
             "control_charge",
             "read_fuel",
         ]
-        return client.get_auth_url(scope=scope, state=state)
+        # In v6, state goes in options dict
+        options = {}
+        if state:
+            options["state"] = state
+        return client.get_auth_url(scope=scope, options=options if options else None)
 
     async def authenticate(self, code: str) -> Dict[str, Any]:
         """
@@ -148,11 +152,20 @@ class SmartcarApiClient:
         )
 
         # Exchange code for tokens
+        # v6 returns an Access NamedTuple
         response = client.exchange_code(code)
-        self.access_token = response["access_token"]
-        self.refresh_token = response["refresh_token"]
+        self.access_token = response.access_token
+        self.refresh_token = response.refresh_token
 
-        return response
+        # Return as dict for compatibility
+        return {
+            "access_token": response.access_token,
+            "refresh_token": response.refresh_token,
+            "expires_in": response.expires_in,
+            "token_type": response.token_type,
+            "expiration": response.expiration,
+            "refresh_expiration": response.refresh_expiration,
+        }
 
     async def refresh_access_token(self) -> Dict[str, Any]:
         """
@@ -170,11 +183,20 @@ class SmartcarApiClient:
             redirect_uri=self.redirect_uri,
         )
 
+        # v6 returns an Access NamedTuple
         response = client.exchange_refresh_token(self.refresh_token)
-        self.access_token = response["access_token"]
-        self.refresh_token = response.get("refresh_token", self.refresh_token)
+        self.access_token = response.access_token
+        self.refresh_token = response.refresh_token
 
-        return response
+        # Return as dict for compatibility
+        return {
+            "access_token": response.access_token,
+            "refresh_token": response.refresh_token,
+            "expires_in": response.expires_in,
+            "token_type": response.token_type,
+            "expiration": response.expiration,
+            "refresh_expiration": response.refresh_expiration,
+        }
 
     async def get_vehicle_list(self) -> List[Vehicle]:
         """
@@ -186,13 +208,9 @@ class SmartcarApiClient:
         if not self.access_token:
             raise ValueError("Not authenticated. Call authenticate() first.")
 
-        # Get vehicle IDs
+        # Get vehicle IDs - v6 returns a Vehicles NamedTuple
         response = smartcar.get_vehicles(self.access_token)
-        vehicle_ids = (
-            response.get("vehicles", [])
-            if isinstance(response, dict)
-            else response.vehicles
-        )
+        vehicle_ids = response.vehicles
 
         vehicles = []
         for vehicle_id in vehicle_ids:

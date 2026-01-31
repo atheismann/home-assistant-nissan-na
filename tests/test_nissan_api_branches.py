@@ -171,7 +171,10 @@ class TestSmartcarApiClientErrorHandling(unittest.IsolatedAsyncioTestCase):
     @patch("smartcar.get_vehicles")
     async def test_get_vehicle_list_empty(self, mock_get_vehicles):
         """Test handling empty vehicle list."""
-        mock_get_vehicles.return_value = {"vehicles": []}
+        # Mock v6 Vehicles NamedTuple
+        mock_vehicles_response = MagicMock()
+        mock_vehicles_response.vehicles = []
+        mock_get_vehicles.return_value = mock_vehicles_response
 
         vehicles = await self.client.get_vehicle_list()
 
