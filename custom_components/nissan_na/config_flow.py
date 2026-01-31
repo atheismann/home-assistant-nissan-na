@@ -36,7 +36,7 @@ class NissanNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self):
         """Initialize the config flow."""
-        self.init_data = {}
+        self._oauth_data: Dict[str, Any] = {}
         self.client: Optional[SmartcarApiClient] = None
 
     async def async_step_user(self, user_input: Optional[Dict[str, Any]] = None):
@@ -49,12 +49,8 @@ class NissanNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         if user_input is not None:
-            # Initialize init_data if not already done (flow restoration case)
-            if self.init_data is None:
-                self.init_data = {}
-
-            # Validate and store credentials
-            self.init_data.update(user_input)
+            # Store credentials in instance variable
+            self._oauth_data.update(user_input)
 
             # Initialize Smartcar client
             self.client = SmartcarApiClient(
@@ -104,10 +100,6 @@ class NissanNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is None:
             return self.async_external_step_done(next_step_id="authorize")
 
-        # Initialize init_data if not already done (flow restoration case)
-        if self.init_data is None:
-            self.init_data = {}
-
         errors = {}
 
         # Extract authorization code from callback
@@ -119,8 +111,8 @@ class NissanNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 token_response = await self.client.authenticate(code)
 
                 # Store tokens in config data
-                self.init_data[CONF_ACCESS_TOKEN] = token_response["access_token"]
-                self.init_data[CONF_REFRESH_TOKEN] = token_response["refresh_token"]
+                self._oauth_data[CONF_ACCESS_TOKEN] = token_response["access_token"]
+                self._oauth_data[CONF_REFRESH_TOKEN] = token_response["refresh_token"]
 
                 # Test the connection by getting vehicle list
                 vehicles = await self.client.get_vehicle_list()
@@ -131,7 +123,7 @@ class NissanNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     # Success! Create the config entry
                     return self.async_create_entry(
                         title="Nissan (Smartcar)",
-                        data=self.init_data,
+                        data=self._oauth_data,
                         options={"update_interval": 15},
                     )
 

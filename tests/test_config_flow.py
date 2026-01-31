@@ -36,7 +36,7 @@ def test_config_flow_init():
 
     assert flow.VERSION == 2
     assert flow.CONNECTION_CLASS == config_entries.CONN_CLASS_CLOUD_POLL
-    assert flow.init_data == {}
+    assert flow._oauth_data == {}
     assert flow.client is None
 
 
