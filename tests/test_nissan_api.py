@@ -82,21 +82,31 @@ class TestSmartcarApiClient(unittest.IsolatedAsyncioTestCase):
         auth_url = self.client.get_auth_url(state="test_state")
 
         self.assertEqual(auth_url, MOCK_AUTH_URL)
-        # Check that scope is passed to get_auth_url
+        # Check that scope and options are passed to get_auth_url (v6 API)
         call_args = mock_client_instance.get_auth_url.call_args
         self.assertIn("scope", call_args.kwargs)
-        self.assertEqual(call_args.kwargs["state"], "test_state")
+        self.assertIn("options", call_args.kwargs)
+        self.assertEqual(call_args.kwargs["options"]["state"], "test_state")
 
     @patch("smartcar.AuthClient")
     async def test_authenticate(self, mock_auth_client):
         """Test OAuth code exchange for tokens."""
         mock_client_instance = MagicMock()
-        mock_client_instance.exchange_code.return_value = MOCK_TOKEN_RESPONSE
+        # Mock v6 Access NamedTuple
+        mock_access = MagicMock()
+        mock_access.access_token = "mock_access_token"
+        mock_access.refresh_token = "mock_refresh_token"
+        mock_access.expires_in = 7200
+        mock_access.token_type = "Bearer"
+        mock_access.expiration = None
+        mock_access.refresh_expiration = None
+        mock_client_instance.exchange_code.return_value = mock_access
         mock_auth_client.return_value = mock_client_instance
 
         response = await self.client.authenticate("test_auth_code")
 
-        self.assertEqual(response, MOCK_TOKEN_RESPONSE)
+        self.assertEqual(response["access_token"], "mock_access_token")
+        self.assertEqual(response["refresh_token"], "mock_refresh_token")
         self.assertEqual(self.client.access_token, "mock_access_token")
         self.assertEqual(self.client.refresh_token, "mock_refresh_token")
 
@@ -105,12 +115,20 @@ class TestSmartcarApiClient(unittest.IsolatedAsyncioTestCase):
         """Test token refresh."""
         self.client.refresh_token = "old_refresh_token"
         mock_client_instance = MagicMock()
-        mock_client_instance.exchange_refresh_token.return_value = MOCK_TOKEN_RESPONSE
+        # Mock v6 Access NamedTuple
+        mock_access = MagicMock()
+        mock_access.access_token = "mock_access_token"
+        mock_access.refresh_token = "mock_refresh_token"
+        mock_access.expires_in = 7200
+        mock_access.token_type = "Bearer"
+        mock_access.expiration = None
+        mock_access.refresh_expiration = None
+        mock_client_instance.exchange_refresh_token.return_value = mock_access
         mock_auth_client.return_value = mock_client_instance
 
         response = await self.client.refresh_access_token()
 
-        self.assertEqual(response, MOCK_TOKEN_RESPONSE)
+        self.assertEqual(response["access_token"], "mock_access_token")
         self.assertEqual(self.client.access_token, "mock_access_token")
 
     @patch("smartcar.get_vehicles")
@@ -118,7 +136,10 @@ class TestSmartcarApiClient(unittest.IsolatedAsyncioTestCase):
     async def test_get_vehicle_list(self, mock_vehicle_class, mock_get_vehicles):
         """Test retrieving vehicle list."""
         self.client.access_token = "mock_access_token"
-        mock_get_vehicles.return_value = MOCK_VEHICLE_IDS
+        # Mock v6 Vehicles NamedTuple
+        mock_vehicles_response = MagicMock()
+        mock_vehicles_response.vehicles = ["vehicle-id-123", "vehicle-id-456"]
+        mock_get_vehicles.return_value = mock_vehicles_response
 
         mock_vehicle_instance = MagicMock()
         # Mock v6 API: attributes() and vin() instead of info()
