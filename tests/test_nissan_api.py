@@ -82,7 +82,10 @@ class TestSmartcarApiClient(unittest.IsolatedAsyncioTestCase):
         auth_url = self.client.get_auth_url(state="test_state")
 
         self.assertEqual(auth_url, MOCK_AUTH_URL)
-        mock_client_instance.get_auth_url.assert_called_once_with(state="test_state")
+        # Check that scope is passed to get_auth_url
+        call_args = mock_client_instance.get_auth_url.call_args
+        self.assertIn("scope", call_args.kwargs)
+        self.assertEqual(call_args.kwargs["state"], "test_state")
 
     @patch("smartcar.AuthClient")
     async def test_authenticate(self, mock_auth_client):
@@ -118,7 +121,19 @@ class TestSmartcarApiClient(unittest.IsolatedAsyncioTestCase):
         mock_get_vehicles.return_value = MOCK_VEHICLE_IDS
 
         mock_vehicle_instance = MagicMock()
-        mock_vehicle_instance.info.return_value = MOCK_VEHICLE_INFO
+        # Mock v6 API: attributes() and vin() instead of info()
+        mock_attrs = MagicMock()
+        mock_attrs._asdict.return_value = {
+            "id": "vehicle-id-123",
+            "make": "NISSAN",
+            "model": "LEAF",
+            "year": "2023",
+            "meta": {},
+        }
+        mock_vin = MagicMock()
+        mock_vin._asdict.return_value = {"vin": "1N4AZ1CP8JC123456", "meta": {}}
+        mock_vehicle_instance.attributes.return_value = mock_attrs
+        mock_vehicle_instance.vin.return_value = mock_vin
         mock_vehicle_class.return_value = mock_vehicle_instance
 
         vehicles = await self.client.get_vehicle_list()
@@ -234,7 +249,19 @@ class TestSmartcarApiClient(unittest.IsolatedAsyncioTestCase):
         """Test getting vehicle info."""
         self.client.access_token = "mock_access_token"
         mock_vehicle = MagicMock()
-        mock_vehicle.info.return_value = MOCK_VEHICLE_INFO
+        # Mock v6 API: attributes() and vin() instead of info()
+        mock_attrs = MagicMock()
+        mock_attrs._asdict.return_value = {
+            "id": "vehicle-id-123",
+            "make": "NISSAN",
+            "model": "LEAF",
+            "year": "2023",
+            "meta": {},
+        }
+        mock_vin = MagicMock()
+        mock_vin._asdict.return_value = {"vin": "1N4AZ1CP8JC123456", "meta": {}}
+        mock_vehicle.attributes.return_value = mock_attrs
+        mock_vehicle.vin.return_value = mock_vin
         mock_vehicle_class.return_value = mock_vehicle
 
         info = await self.client.get_vehicle_info("vehicle-id-123")
@@ -246,7 +273,19 @@ class TestSmartcarApiClient(unittest.IsolatedAsyncioTestCase):
         """Test getting comprehensive vehicle status."""
         self.client.access_token = "mock_access_token"
         mock_vehicle = MagicMock()
-        mock_vehicle.info.return_value = MOCK_VEHICLE_INFO
+        # Mock v6 API: attributes() and vin() instead of info()
+        mock_attrs = MagicMock()
+        mock_attrs._asdict.return_value = {
+            "id": "vehicle-id-123",
+            "make": "NISSAN",
+            "model": "LEAF",
+            "year": "2023",
+            "meta": {},
+        }
+        mock_vin = MagicMock()
+        mock_vin._asdict.return_value = {"vin": "1N4AZ1CP8JC123456", "meta": {}}
+        mock_vehicle.attributes.return_value = mock_attrs
+        mock_vehicle.vin.return_value = mock_vin
         mock_vehicle.location.return_value = MOCK_LOCATION_RESPONSE
         mock_vehicle.battery.return_value = MOCK_BATTERY_RESPONSE
         mock_vehicle.charge.return_value = MOCK_CHARGE_RESPONSE

@@ -40,7 +40,9 @@ class TestSmartcarApiClientErrorHandling(unittest.IsolatedAsyncioTestCase):
     async def test_get_vehicle_status_with_errors(self, mock_vehicle_class):
         """Test get_vehicle_status handles partial failures gracefully."""
         mock_vehicle = MagicMock()
-        mock_vehicle.info.side_effect = Exception("API Error")
+        # Mock v6 API failures - both attributes() and vin() must fail
+        mock_vehicle.attributes.side_effect = Exception("API Error")
+        mock_vehicle.vin.side_effect = Exception("API Error")
         mock_vehicle.location.return_value = {
             "latitude": 37.4292,
             "longitude": -122.1381,
@@ -63,7 +65,9 @@ class TestSmartcarApiClientErrorHandling(unittest.IsolatedAsyncioTestCase):
     async def test_get_vehicle_status_all_fail(self, mock_vehicle_class):
         """Test get_vehicle_status when all calls fail."""
         mock_vehicle = MagicMock()
-        mock_vehicle.info.side_effect = Exception("Info Error")
+        # Mock v6 API failures
+        mock_vehicle.attributes.side_effect = Exception("Info Error")
+        mock_vehicle.vin.side_effect = Exception("Info Error")
         mock_vehicle.location.side_effect = Exception("Location Error")
         mock_vehicle.battery.side_effect = Exception("Battery Error")
         mock_vehicle.charge.side_effect = Exception("Charge Error")
