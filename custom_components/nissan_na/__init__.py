@@ -79,6 +79,14 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
             "Configure this URL in your Smartcar Dashboard to receive real-time updates"
         )
 
+    # Check if config entry has auth_implementation (OAuth2 flow)
+    if "auth_implementation" not in config_entry.data:
+        _LOGGER.error(
+            "Config entry is missing auth_implementation. "
+            "Please remove and re-add the integration."
+        )
+        return False
+
     # OAuth2 implementation stores tokens differently
     # Extract from token dict if present, otherwise fall back to direct keys
     token_data = config_entry.data.get("token", {})
@@ -90,11 +98,19 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     )
 
     # Get client credentials from implementation
-    implementation = (
-        await config_entry_oauth2_flow.async_get_config_entry_implementation(
-            hass, config_entry
+    try:
+        implementation = (
+            await config_entry_oauth2_flow.async_get_config_entry_implementation(
+                hass, config_entry
+            )
         )
-    )
+    except KeyError:
+        _LOGGER.error(
+            "OAuth implementation not found. "
+            "Please remove and re-add the integration."
+        )
+        return False
+
     client_id = implementation.client_id
     client_secret = implementation.client_secret
     redirect_uri = implementation.redirect_uri
