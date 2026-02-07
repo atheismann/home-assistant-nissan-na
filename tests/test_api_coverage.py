@@ -19,9 +19,9 @@ async def test_oauth2_implementation_extra_data(hass):
         "https://connect.smartcar.com/oauth/authorize",
         "https://connect.smartcar.com/oauth/token",
     )
-    
+
     extra_data = impl.extra_authorize_data
-    
+
     assert "scope" in extra_data
     assert "make" in extra_data
     assert extra_data["make"] == "NISSAN"
@@ -32,7 +32,7 @@ async def test_oauth2_implementation_extra_data(hass):
 async def test_get_authorization_server(hass):
     """Test getting authorization server details."""
     server = await async_get_authorization_server(hass)
-    
+
     assert server.authorize_url == "https://connect.smartcar.com/oauth/authorize"
     assert server.token_url == "https://connect.smartcar.com/oauth/token"
 
@@ -40,6 +40,6 @@ async def test_get_authorization_server(hass):
 async def test_get_description_placeholders(hass):
     """Test getting description placeholders."""
     placeholders = await async_get_description_placeholders(hass)
-    
+
     assert "setup_url" in placeholders
     assert placeholders["setup_url"] == "https://dashboard.smartcar.com"

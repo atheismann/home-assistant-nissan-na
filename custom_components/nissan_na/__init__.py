@@ -151,7 +151,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
                 _LOGGER.warning("Client not found for entry %s", config_entry.entry_id)
                 return
             client = data["client"]
-            
+
             # Refresh access token if needed
             await client.refresh_access_token()
 
