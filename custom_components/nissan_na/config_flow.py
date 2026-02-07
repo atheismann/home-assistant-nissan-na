@@ -72,6 +72,14 @@ class OAuth2FlowHandler(
         # Test connection by getting vehicle list
         from .nissan_api import SmartcarApiClient
 
+        # Validate OAuth implementation has credentials
+        if not self.flow_impl.client_id or not self.flow_impl.client_secret:
+            _LOGGER.error(
+                "OAuth credentials not configured. "
+                "Please set up Application Credentials first."
+            )
+            return self.async_abort(reason="missing_credentials")
+
         # Extract token data
         token = data["token"]
         client = SmartcarApiClient(

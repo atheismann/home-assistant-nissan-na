@@ -16,6 +16,7 @@
       "already_configured": "This Smartcar application is already configured",
       "no_vehicles": "No vehicles found on your Smartcar account. Please ensure your Nissan vehicle is connected.",
       "connection_error": "Failed to connect to Smartcar API. Please check your credentials and try again.",
+      "missing_credentials": "OAuth credentials not configured. Please set up Application Credentials in Home Assistant settings first.",
       "reauth_successful": "Reauthorization successful"
     }
   },

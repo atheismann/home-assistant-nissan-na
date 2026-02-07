@@ -6,7 +6,6 @@ import json
 from http import HTTPStatus
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from aiohttp import web
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 

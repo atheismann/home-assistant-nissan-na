@@ -115,6 +115,16 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     client_secret = implementation.client_secret
     redirect_uri = implementation.redirect_uri
 
+    # Validate OAuth credentials are present
+    if not client_id or not client_secret:
+        _LOGGER.error(
+            "OAuth credentials are not configured. "
+            "Please configure Application Credentials for Nissan NA "
+            "in Home Assistant settings, then remove and re-add this "
+            "integration."
+        )
+        return False
+
     # Initialize Smartcar client
     client = SmartcarApiClient(
         client_id=client_id,

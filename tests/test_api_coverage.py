@@ -1,7 +1,5 @@
 """Tests for API and application credentials."""
 
-from unittest.mock import MagicMock
-
 from custom_components.nissan_na.api import SmartcarOAuth2Implementation
 from custom_components.nissan_na.application_credentials import (
     async_get_authorization_server,
