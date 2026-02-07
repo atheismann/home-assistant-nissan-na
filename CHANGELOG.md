@@ -28,11 +28,6 @@ All notable changes to this project will be documented in this file.
   - Added control_navigation for sending destinations to vehicle
   - Added control_trunk for remote trunk/frunk control
   - Total of 32 permissions requested to maximize feature availability
-- **Testing documentation** (TESTING.md)
-  - Comprehensive testing strategy document
-  - Documentation of test coverage and gaps
-  - Manual validation checklist
-  - Future testing recommendations
 
 ### Fixed
 
