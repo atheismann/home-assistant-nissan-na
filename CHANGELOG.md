@@ -28,6 +28,16 @@ All notable changes to this project will be documented in this file.
   - Added control_navigation for sending destinations to vehicle
   - Added control_trunk for remote trunk/frunk control
   - Total of 32 permissions requested to maximize feature availability
+
+### Fixed
+
+- **Webhook import naming conflict** - Renamed `webhook` import to `ha_webhook` to avoid collision
+- **OptionsFlow config_entry property issue** - Removed custom `__init__` that was conflicting with base class
+- **Missing auth_implementation handling** - Added defensive checks for missing OAuth implementation
+- **Data structure access in platforms** - Fixed all platforms (sensor, lock, climate, device_tracker) to properly access client from dict structure
+- **Service handler data access** - Fixed service handlers to get client from `hass.data` on each call instead of using closure
+- **Periodic update timer cleanup** - Added proper cancellation of periodic update listener in `async_unload_entry` to prevent lingering timers
+- **Periodic update data access** - Fixed periodic update function to get client from `hass.data` instead of closure
 - Non-blocking async operations using asyncio.to_thread() for all Smartcar SDK calls
 - **Enhanced documentation**
   - Comprehensive single README with all documentation consolidated
