@@ -6,7 +6,7 @@ Uses Smartcar API for vehicle integration.
 import logging
 from datetime import timedelta
 
-from homeassistant.components import webhook
+from homeassistant.components import webhook as ha_webhook
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_WEBHOOK_ID
 from homeassistant.core import HomeAssistant
@@ -65,7 +65,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         )
     else:
         # Generate webhook ID for new setups
-        webhook_id = webhook.async_generate_id()
+        webhook_id = ha_webhook.async_generate_id()
         webhook_url = async_generate_webhook_url(hass, webhook_id)
 
         # Update config entry with webhook ID
