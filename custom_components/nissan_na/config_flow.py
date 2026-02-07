@@ -61,11 +61,8 @@ class NissanNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             # Generate authorization URL
             try:
-                # Generate a random state for CSRF protection
-                import secrets
-                state = secrets.token_urlsafe(32)
-                
-                auth_url = self.client.get_auth_url(state=state)
+                # Don't pass state - async_external_step handles state automatically
+                auth_url = self.client.get_auth_url(state=None)
 
                 # Show external step for OAuth authorization
                 return self.async_external_step(
