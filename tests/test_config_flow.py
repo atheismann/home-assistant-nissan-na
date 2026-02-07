@@ -51,9 +51,7 @@ async def test_oauth_create_entry_success():
         "custom_components.nissan_na.nissan_api.SmartcarApiClient"
     ) as mock_client:
         mock_instance = MagicMock()
-        mock_instance.get_vehicle_list = AsyncMock(
-            return_value=[{"id": "vehicle_1"}]
-        )
+        mock_instance.get_vehicle_list = AsyncMock(return_value=[{"id": "vehicle_1"}])
         mock_client.return_value = mock_instance
 
         # Mock async_create_entry

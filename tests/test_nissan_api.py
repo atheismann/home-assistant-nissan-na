@@ -1,14 +1,18 @@
 import sys
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, "custom_components/nissan_na")
-import nissan_api
+
+import nissan_api  # noqa: E402
 
 SmartcarApiClient = nissan_api.SmartcarApiClient
 Vehicle = nissan_api.Vehicle
 
-MOCK_AUTH_URL = "https://connect.smartcar.com/oauth/authorize?response_type=code&client_id=test_client"
+MOCK_AUTH_URL = (
+    "https://connect.smartcar.com/oauth/authorize"
+    "?response_type=code&client_id=test_client"
+)
 
 MOCK_TOKEN_RESPONSE = {
     "access_token": "mock_access_token",

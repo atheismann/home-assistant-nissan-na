@@ -2,7 +2,8 @@ import sys
 import unittest
 
 sys.path.insert(0, "custom_components/nissan_na")
-import const
+
+import const  # noqa: E402
 
 
 class TestConstants(unittest.TestCase):

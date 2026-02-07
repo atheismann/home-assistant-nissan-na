@@ -1,4 +1,6 @@
-"""Home Assistant custom integration for Nissan North America vehicles using Smartcar API.
+"""Home Assistant custom integration for Nissan North America vehicles.
+
+Uses Smartcar API for vehicle integration.
 """
 
 import logging
@@ -14,7 +16,6 @@ from .const import (
     CONF_ACCESS_TOKEN,
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
-    CONF_REDIRECT_URI,
     CONF_REFRESH_TOKEN,
     DOMAIN,
     PLATFORMS,
@@ -49,12 +50,18 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     # OAuth2 implementation stores tokens differently
     # Extract from token dict if present, otherwise fall back to direct keys
     token_data = config_entry.data.get("token", {})
-    access_token = token_data.get("access_token") or config_entry.data.get(CONF_ACCESS_TOKEN)
-    refresh_token = token_data.get("refresh_token") or config_entry.data.get(CONF_REFRESH_TOKEN)
-    
+    access_token = token_data.get("access_token") or config_entry.data.get(
+        CONF_ACCESS_TOKEN
+    )
+    refresh_token = token_data.get("refresh_token") or config_entry.data.get(
+        CONF_REFRESH_TOKEN
+    )
+
     # Get client credentials from implementation
-    implementation = await config_entry_oauth2_flow.async_get_config_entry_implementation(
-        hass, config_entry
+    implementation = (
+        await config_entry_oauth2_flow.async_get_config_entry_implementation(
+            hass, config_entry
+        )
     )
     client_id = implementation.client_id
     client_secret = implementation.client_secret

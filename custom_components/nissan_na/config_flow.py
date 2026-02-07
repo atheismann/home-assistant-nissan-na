@@ -70,4 +70,3 @@ class OAuth2FlowHandler(
         if user_input is None:
             return self.async_show_form(step_id="reauth_confirm")
         return await self.async_step_user()
-
