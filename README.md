@@ -44,13 +44,13 @@ Before installing, you need to:
 2. **Create a Smartcar Application**
    - In the dashboard, create a new application
    - Set the **Redirect URI** to: `https://my.home-assistant.io/redirect/oauth`
-   - Or use your Home Assistant instance URL + `/auth/external/callback`
-   - Note your **Client ID** and **Client Secret**
+   - **Important**: Must use the My Home Assistant redirect service
+   - Note your **Client ID** and **Client Secret** (you'll enter these in Home Assistant)
 
 3. **Connect Your Nissan Vehicle**
    - Your vehicle must be compatible with Smartcar
    - Check compatibility at [Smartcar's website](https://smartcar.com/docs/api-reference/compatibility/)
-   - You'll need your Nissan account credentials
+   - You'll need your Nissan account credentials during OAuth authorization
 
 📖 **See [SETUP.md](SETUP.md) for detailed setup instructions and migration guide.**
 
@@ -74,12 +74,21 @@ Before installing, you need to:
 
 ## How to Set Up
 
-1. In Home Assistant, go to **Settings > Devices & Services > Add Integration**.
-2. Search for "Nissan North America" and select it.
-3. Enter your **Smartcar Client ID**, **Client Secret**, and **Redirect URI**.
-4. Click the link to authorize your vehicle access via Smartcar's OAuth flow.
-5. Log in with your Nissan account and authorize the integration.
-6. Your Nissan vehicle will be automatically discovered and added!
+1. **Add Application Credentials** (one-time setup)
+   - Go to **Settings > Devices & Services > Application Credentials**
+   - Click **Add Application Credential**
+   - Select **Nissan North America (Smartcar)**
+   - Enter your **Smartcar Client ID** and **Client Secret**
+   - Save the credentials
+
+2. **Add the Integration**
+   - Go to **Settings > Devices & Services > Add Integration**
+   - Search for "Nissan North America" and select it
+   - Click the authorization link to connect via Smartcar OAuth
+   - Log in with your Nissan account and authorize access
+   - Your Nissan vehicle will be automatically discovered and added!
+
+**Note**: Application credentials are stored securely and can be reused for multiple integration instances.
 
 ---
 
@@ -157,9 +166,10 @@ data:
 ## Troubleshooting
 
 ### OAuth Authentication Issues
-- Make sure your **Redirect URI** in Smartcar matches exactly
-- Check that your Home Assistant is accessible via HTTPS
-- Try using `https://my.home-assistant.io/redirect/oauth` as your redirect URI
+- Ensure **Redirect URI** in Smartcar is set to: `https://my.home-assistant.io/redirect/oauth`
+- Verify your **Client ID** and **Client Secret** are correct in Application Credentials
+- Check that your Home Assistant instance is accessible externally
+- Try removing and re-adding the application credentials if authentication fails
 
 ### No Vehicles Found
 - Verify your Nissan account has vehicles registered
