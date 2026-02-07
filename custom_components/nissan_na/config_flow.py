@@ -1,7 +1,6 @@
 """Config flow for Nissan North America integration using Smartcar OAuth."""
 
 import logging
-import secrets
 from typing import Any, Dict, Optional
 
 import voluptuous as vol
@@ -62,12 +61,10 @@ class NissanNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             # Generate authorization URL
             try:
-                # Generate state for CSRF protection
-                state = secrets.token_urlsafe(32)
-                self._oauth_data["state"] = state
-
-                # Pass state to Smartcar so it echoes it back in callback
-                auth_url = self.client.get_auth_url(state=state)
+                # Home Assistant handles CSRF protection via
+                # async_external_step flow tracking. Don't pass state -
+                # it causes conflicts with HA's internal flow management
+                auth_url = self.client.get_auth_url(state=None)
 
                 # Show external step for OAuth authorization
                 return self.async_external_step(
@@ -108,20 +105,9 @@ class NissanNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         errors = {}
 
-        # Validate state parameter for CSRF protection
-        returned_state = user_input.get("state")
-        expected_state = self._oauth_data.get("state")
-
-        if not returned_state or returned_state != expected_state:
-            _LOGGER.error(
-                "State mismatch: expected=%s, received=%s",
-                expected_state,
-                returned_state,
-            )
-            errors["base"] = "invalid_state"
-            return self.async_abort(reason="invalid_state")
-
         # Extract authorization code from callback
+        # Home Assistant validates flow via async_external_step,
+        # no need for state validation
         code = user_input.get(CONF_CODE)
 
         if code:
