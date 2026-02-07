@@ -61,7 +61,8 @@ class NissanNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             # Generate authorization URL
             try:
-                auth_url = self.client.get_auth_url(state="ha_nissan_setup")
+                # Don't pass state parameter - let Home Assistant handle it
+                auth_url = self.client.get_auth_url(state=None)
 
                 # Show external step for OAuth authorization
                 return self.async_external_step(
@@ -128,7 +129,12 @@ class NissanNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     )
 
             except Exception as err:
-                _LOGGER.error("Error during OAuth authentication: %s", err)
+                _LOGGER.error(
+                    "Error during OAuth authentication: %s (type: %s)", 
+                    err, 
+                    type(err).__name__,
+                    exc_info=True
+                )
                 errors["base"] = "auth_failed"
         else:
             errors["base"] = "no_code"
