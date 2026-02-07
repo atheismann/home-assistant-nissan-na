@@ -61,8 +61,11 @@ class NissanNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             # Generate authorization URL
             try:
-                # Don't pass state parameter - let Home Assistant handle it
-                auth_url = self.client.get_auth_url(state=None)
+                # Generate a random state for CSRF protection
+                import secrets
+                state = secrets.token_urlsafe(32)
+                
+                auth_url = self.client.get_auth_url(state=state)
 
                 # Show external step for OAuth authorization
                 return self.async_external_step(
