@@ -84,6 +84,7 @@ class SmartcarApiClient:
         redirect_uri: str,
         access_token: Optional[str] = None,
         refresh_token: Optional[str] = None,
+        test_mode: bool = False,
     ):
         """
         Initialize the SmartcarApiClient.
@@ -94,10 +95,12 @@ class SmartcarApiClient:
             redirect_uri: OAuth redirect URI configured in Smartcar dashboard.
             access_token: Existing access token (if available).
             refresh_token: Existing refresh token for token renewal.
+            test_mode: Use Smartcar test mode (for development/testing).
         """
         self.client_id = client_id
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
+        self.test_mode = test_mode
         self.access_token = access_token
         self.refresh_token = refresh_token
         self._vehicles_cache: Dict[str, smartcar.Vehicle] = {}
@@ -116,7 +119,7 @@ class SmartcarApiClient:
             client_id=self.client_id,
             client_secret=self.client_secret,
             redirect_uri=self.redirect_uri,
-            mode="live",
+            mode="test" if self.test_mode else "live",
         )
         # Build scope list for get_auth_url
         scope = [
@@ -130,7 +133,9 @@ class SmartcarApiClient:
             "read_fuel",
         ]
         # In v6, state goes in options dict
-        options = {}
+        options = {
+            "make_bypass": "NISSAN",  # Skip make selection, go directly to Nissan
+        }
         if state:
             options["state"] = state
         return client.get_auth_url(scope=scope, options=options if options else None)
