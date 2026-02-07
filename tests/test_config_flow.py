@@ -131,9 +131,7 @@ async def test_async_step_authorize_success():
     mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
     flow.client = mock_client
 
-    result = await flow.async_step_authorize(
-        user_input={CONF_CODE: "test_auth_code"}
-    )
+    result = await flow.async_step_authorize(user_input={CONF_CODE: "test_auth_code"})
 
     assert result["type"] == "create_entry"
     assert result["title"] == "Nissan (Smartcar)"
@@ -156,9 +154,7 @@ async def test_async_step_authorize_no_vehicles():
     mock_client.get_vehicle_list = AsyncMock(return_value=[])
     flow.client = mock_client
 
-    result = await flow.async_step_authorize(
-        user_input={CONF_CODE: "test_auth_code"}
-    )
+    result = await flow.async_step_authorize(user_input={CONF_CODE: "test_auth_code"})
 
     assert result["type"] == "abort"
     assert result["reason"] == "auth_failed"
@@ -173,9 +169,7 @@ async def test_async_step_authorize_auth_error():
     mock_client.authenticate = AsyncMock(side_effect=Exception("Auth failed"))
     flow.client = mock_client
 
-    result = await flow.async_step_authorize(
-        user_input={CONF_CODE: "test_auth_code"}
-    )
+    result = await flow.async_step_authorize(user_input={CONF_CODE: "test_auth_code"})
 
     assert result["type"] == "abort"
     assert result["reason"] == "auth_failed"
