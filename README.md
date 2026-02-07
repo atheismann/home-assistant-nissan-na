@@ -23,10 +23,12 @@ This integration uses the **Smartcar API** for reliable vehicle connectivity:
 ## What Can You Do?
 
 - **Lock or unlock your doors** from anywhere
+- **Start or stop the engine remotely** (where supported)
 - **Check your battery level** (for EVs)
 - **Monitor charging status** and control charging remotely
 - **See your car's location** on the Home Assistant map
-- **Check odometer, fuel level, and more**
+- **Check odometer, fuel level, tire pressure**
+- **Monitor engine oil life and temperatures**
 - **Track vehicle information** like make, model, and year
 
 All features depend on your vehicle model and Smartcar's support for your specific vehicle.
@@ -107,12 +109,17 @@ You can adjust settings after setup:
 Depending on your vehicle's capabilities:
 
 - **Lock control**: Lock or unlock your doors
+- **Engine control**: Start or stop the engine remotely
 - **Location tracker**: See your car's current GPS location
 - **Battery level**: Battery charge percentage (EVs)
+- **Battery capacity**: Total battery capacity in kWh (EVs)
 - **Charging status**: Whether the vehicle is charging or plugged in
 - **Charge control**: Start or stop charging remotely
 - **Odometer**: Total mileage
 - **Fuel level**: Fuel tank level (non-EVs)
+- **Tire pressure**: Individual tire pressure readings
+- **Engine oil life**: Oil life percentage
+- **Temperature**: Interior and exterior temperature
 - **Vehicle information**: Make, model, year, VIN
 
 ---
@@ -149,6 +156,22 @@ data:
 Stop charging the vehicle (EVs only).
 ```yaml
 service: nissan_na.stop_charge
+data:
+  vehicle_id: "your-vehicle-id"
+```
+
+### `nissan_na.start_engine`
+Start the vehicle engine remotely.
+```yaml
+service: nissan_na.start_engine
+data:
+  vehicle_id: "your-vehicle-id"
+```
+
+### `nissan_na.stop_engine`
+Stop the vehicle engine remotely.
+```yaml
+service: nissan_na.stop_engine
 data:
   vehicle_id: "your-vehicle-id"
 ```

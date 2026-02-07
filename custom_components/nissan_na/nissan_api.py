@@ -75,6 +75,8 @@ class SmartcarApiClient:
         unlock_doors: Unlock the vehicle doors.
         start_charge: Start charging the vehicle.
         stop_charge: Stop charging the vehicle.
+        start_engine: Start the vehicle engine remotely.
+        stop_engine: Stop the vehicle engine remotely.
         disconnect: Disconnect a vehicle from Smartcar.
     """
 
@@ -430,6 +432,32 @@ class SmartcarApiClient:
         """
         vehicle = self._get_vehicle(vehicle_id)
         result = await asyncio.to_thread(vehicle.stop_charge)
+        return _namedtuple_to_dict(result)
+
+    async def start_engine(self, vehicle_id: str) -> Dict[str, Any]:
+        """Start the vehicle engine remotely.
+
+        Args:
+            vehicle_id: Smartcar vehicle ID.
+
+        Returns:
+            dict: API response with action status.
+        """
+        vehicle = self._get_vehicle(vehicle_id)
+        result = await asyncio.to_thread(vehicle.start_engine)
+        return _namedtuple_to_dict(result)
+
+    async def stop_engine(self, vehicle_id: str) -> Dict[str, Any]:
+        """Stop the vehicle engine remotely.
+
+        Args:
+            vehicle_id: Smartcar vehicle ID.
+
+        Returns:
+            dict: API response with action status.
+        """
+        vehicle = self._get_vehicle(vehicle_id)
+        result = await asyncio.to_thread(vehicle.stop_engine)
         return _namedtuple_to_dict(result)
 
     async def disconnect(self, vehicle_id: str) -> bool:

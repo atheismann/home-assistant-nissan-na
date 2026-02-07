@@ -162,11 +162,31 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         except Exception as err:
             _LOGGER.error("Failed to refresh status: %s", err)
 
+    async def handle_start_engine(call):
+        """Handle start engine service call."""
+        vehicle_id = call.data.get("vehicle_id")
+        try:
+            await client.start_engine(vehicle_id)
+            _LOGGER.info("Started engine for vehicle %s", vehicle_id)
+        except Exception as err:
+            _LOGGER.error("Failed to start engine: %s", err)
+
+    async def handle_stop_engine(call):
+        """Handle stop engine service call."""
+        vehicle_id = call.data.get("vehicle_id")
+        try:
+            await client.stop_engine(vehicle_id)
+            _LOGGER.info("Stopped engine for vehicle %s", vehicle_id)
+        except Exception as err:
+            _LOGGER.error("Failed to stop engine: %s", err)
+
     # Register all services
     hass.services.async_register(DOMAIN, "lock_doors", handle_lock_doors)
     hass.services.async_register(DOMAIN, "unlock_doors", handle_unlock_doors)
     hass.services.async_register(DOMAIN, "start_charge", handle_start_charge)
     hass.services.async_register(DOMAIN, "stop_charge", handle_stop_charge)
+    hass.services.async_register(DOMAIN, "start_engine", handle_start_engine)
+    hass.services.async_register(DOMAIN, "stop_engine", handle_stop_engine)
     hass.services.async_register(DOMAIN, "refresh_status", handle_refresh_status)
 
     # Set up platforms (sensor, lock, climate, device_tracker)
