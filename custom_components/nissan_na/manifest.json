@@ -10,12 +10,13 @@
   ],
   "dependencies": [
     "application_credentials",
-    "http"
+    "http",
+    "webhook"
   ],
   "codeowners": [
     "@atheismann"
   ],
-  "iot_class": "cloud_polling",
+  "iot_class": "cloud_push",
   "config_flow": true,
   "requirements_python": ">=3.12.0"
 }

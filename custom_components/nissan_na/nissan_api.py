@@ -71,12 +71,13 @@ class SmartcarApiClient:
         get_charge_status: Get charging status.
         get_odometer: Get odometer reading.
         get_fuel_level: Get fuel level (for non-EVs).
+        get_lock_status: Get lock status of doors and windows.
+        get_tire_pressure: Get tire pressure for all tires.
+        get_engine_oil: Get engine oil life information.
         lock_doors: Lock the vehicle doors.
         unlock_doors: Unlock the vehicle doors.
         start_charge: Start charging the vehicle.
         stop_charge: Stop charging the vehicle.
-        start_engine: Start the vehicle engine remotely.
-        stop_engine: Stop the vehicle engine remotely.
         disconnect: Disconnect a vehicle from Smartcar.
     """
 
@@ -378,6 +379,45 @@ class SmartcarApiClient:
         fuel = await asyncio.to_thread(vehicle.fuel)
         return _namedtuple_to_dict(fuel)
 
+    async def get_lock_status(self, vehicle_id: str) -> Dict[str, Any]:
+        """Get lock status of doors and windows.
+
+        Args:
+            vehicle_id: Smartcar vehicle ID.
+
+        Returns:
+            dict: Lock status information for doors, windows, etc.
+        """
+        vehicle = self._get_vehicle(vehicle_id)
+        security = await asyncio.to_thread(vehicle.lock_status)
+        return _namedtuple_to_dict(security)
+
+    async def get_tire_pressure(self, vehicle_id: str) -> Dict[str, Any]:
+        """Get tire pressure for all tires.
+
+        Args:
+            vehicle_id: Smartcar vehicle ID.
+
+        Returns:
+            dict: Tire pressure information for all tires.
+        """
+        vehicle = self._get_vehicle(vehicle_id)
+        tires = await asyncio.to_thread(vehicle.tires)
+        return _namedtuple_to_dict(tires)
+
+    async def get_engine_oil(self, vehicle_id: str) -> Dict[str, Any]:
+        """Get engine oil life information.
+
+        Args:
+            vehicle_id: Smartcar vehicle ID.
+
+        Returns:
+            dict: Engine oil life percentage and status.
+        """
+        vehicle = self._get_vehicle(vehicle_id)
+        oil = await asyncio.to_thread(vehicle.engine_oil)
+        return _namedtuple_to_dict(oil)
+
     async def lock_doors(self, vehicle_id: str) -> Dict[str, Any]:
         """
         Lock the vehicle doors.
@@ -432,32 +472,6 @@ class SmartcarApiClient:
         """
         vehicle = self._get_vehicle(vehicle_id)
         result = await asyncio.to_thread(vehicle.stop_charge)
-        return _namedtuple_to_dict(result)
-
-    async def start_engine(self, vehicle_id: str) -> Dict[str, Any]:
-        """Start the vehicle engine remotely.
-
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-
-        Returns:
-            dict: API response with action status.
-        """
-        vehicle = self._get_vehicle(vehicle_id)
-        result = await asyncio.to_thread(vehicle.start_engine)
-        return _namedtuple_to_dict(result)
-
-    async def stop_engine(self, vehicle_id: str) -> Dict[str, Any]:
-        """Stop the vehicle engine remotely.
-
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-
-        Returns:
-            dict: API response with action status.
-        """
-        vehicle = self._get_vehicle(vehicle_id)
-        result = await asyncio.to_thread(vehicle.stop_engine)
         return _namedtuple_to_dict(result)
 
     async def disconnect(self, vehicle_id: str) -> bool:
