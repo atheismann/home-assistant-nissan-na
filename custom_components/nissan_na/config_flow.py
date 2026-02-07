@@ -113,7 +113,7 @@ class OAuth2FlowHandler(
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
         """Get the options flow for this handler."""
-        return NissanNAOptionsFlowHandler(config_entry)
+        return NissanNAOptionsFlowHandler()
 
 
 class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):

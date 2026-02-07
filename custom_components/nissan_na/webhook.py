@@ -187,15 +187,19 @@ def async_register_webhook(
     """
     from .const import DOMAIN
 
-    webhook.async_register(
-        hass,
-        DOMAIN,
-        "Nissan NA Smartcar",
-        webhook_id,
-        async_handle_webhook,
-    )
-
-    _LOGGER.debug("Registered Smartcar webhook: %s", webhook_id)
+    # Try to register webhook, skip if already registered
+    try:
+        webhook.async_register(
+            hass,
+            DOMAIN,
+            "Nissan NA Smartcar",
+            webhook_id,
+            async_handle_webhook,
+        )
+        _LOGGER.debug("Registered Smartcar webhook: %s", webhook_id)
+    except ValueError:
+        # Webhook already registered
+        _LOGGER.debug("Webhook %s already registered, skipping", webhook_id)
 
 
 def async_unregister_webhook(

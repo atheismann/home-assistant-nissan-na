@@ -1,8 +1,8 @@
-# This workflow runs ONLY when a PR is merged to main
+# This workflow runs when code is pushed to main (PR merge or direct commit)
 # It creates the official release with proper version tagging
 # Pre-validation happens in pr-validation.yml to reduce redundant compute
 
-name: Release on Merge
+name: Release on Push to Main
 
 on:
   push:
