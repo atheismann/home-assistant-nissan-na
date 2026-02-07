@@ -61,8 +61,9 @@ class NissanNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             # Generate authorization URL
             try:
-                # Home Assistant handles CSRF protection via async_external_step flow tracking
-                # Don't pass state - it causes conflicts with HA's internal flow management
+                # Home Assistant handles CSRF protection via
+                # async_external_step flow tracking. Don't pass state -
+                # it causes conflicts with HA's internal flow management
                 auth_url = self.client.get_auth_url(state=None)
 
                 # Show external step for OAuth authorization
@@ -105,7 +106,8 @@ class NissanNAConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors = {}
 
         # Extract authorization code from callback
-        # Home Assistant validates flow via async_external_step, no need for state validation
+        # Home Assistant validates flow via async_external_step,
+        # no need for state validation
         code = user_input.get(CONF_CODE)
 
         if code:
