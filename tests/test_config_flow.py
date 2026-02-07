@@ -1,23 +1,10 @@
-"""Tests for the Nissan NA config flow."""
+"""Tests for the Nissan NA OAuth2 config flow."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from homeassistant import config_entries
 
-from custom_components.nissan_na.config_flow import (
-    NissanNAConfigFlow,
-    NissanNAOptionsFlow,
-)
-from custom_components.nissan_na.const import (
-    CONF_ACCESS_TOKEN,
-    CONF_CLIENT_ID,
-    CONF_CLIENT_SECRET,
-    CONF_CODE,
-    CONF_REDIRECT_URI,
-    CONF_REFRESH_TOKEN,
-    DOMAIN,
-)
+from custom_components.nissan_na.const import DOMAIN
 
 
 @pytest.fixture
@@ -30,211 +17,129 @@ def mock_setup_entry():
         yield mock_setup
 
 
-def test_config_flow_init():
-    """Test config flow initialization."""
-    flow = NissanNAConfigFlow()
+async def test_oauth2_flow():
+    """Test the OAuth2 flow is properly configured."""
+    from custom_components.nissan_na.config_flow import OAuth2FlowHandler
 
-    assert flow.VERSION == 2
-    assert flow.CONNECTION_CLASS == config_entries.CONN_CLASS_CLOUD_POLL
-    assert flow._oauth_data == {}
-    assert flow.client is None
+    assert OAuth2FlowHandler.DOMAIN == DOMAIN
 
 
-async def test_async_step_user_no_input():
-    """Test user step with no input shows form."""
-    flow = NissanNAConfigFlow()
+async def test_extra_authorize_data():
+    """Test extra authorize data includes Nissan-specific parameters."""
+    from custom_components.nissan_na.config_flow import OAuth2FlowHandler
 
-    result = await flow.async_step_user(user_input=None)
+    flow = OAuth2FlowHandler()
 
-    assert result["type"] == "form"
-    assert result["step_id"] == "user"
-    assert CONF_CLIENT_ID in result["data_schema"].schema
-    assert CONF_CLIENT_SECRET in result["data_schema"].schema
-    assert CONF_REDIRECT_URI in result["data_schema"].schema
+    extra_data = flow.extra_authorize_data
+    assert extra_data["make"] == "NISSAN"
+    assert extra_data["single_select"] == "true"
 
 
-async def test_async_step_user_with_valid_input():
-    """Test user step with valid input generates auth URL."""
-    flow = NissanNAConfigFlow()
-    flow.async_external_step = MagicMock(return_value={"type": "external"})
+async def test_oauth_create_entry_success():
+    """Test creating entry after successful OAuth."""
+    from custom_components.nissan_na.config_flow import OAuth2FlowHandler
 
+    flow = OAuth2FlowHandler()
+    flow.hass = MagicMock()
+    flow.flow_impl = MagicMock()
+    flow.flow_impl.client_id = "test_client"
+    flow.flow_impl.client_secret = "test_secret"
+    flow.flow_impl.redirect_uri = "https://my.home-assistant.io/redirect/oauth"
+
+    # Mock the API client
     with patch(
-        "custom_components.nissan_na.config_flow.SmartcarApiClient"
+        "custom_components.nissan_na.nissan_api.SmartcarApiClient"
     ) as mock_client:
         mock_instance = MagicMock()
-        mock_instance.get_auth_url.return_value = "https://smartcar.com/auth"
+        mock_instance.get_vehicle_list = AsyncMock(return_value=[{"id": "vehicle_1"}])
         mock_client.return_value = mock_instance
 
-        result = await flow.async_step_user(
-            user_input={
-                CONF_CLIENT_ID: "test_client_id",
-                CONF_CLIENT_SECRET: "test_secret",
-                CONF_REDIRECT_URI: "https://example.com/callback",
-            }
-        )
+        # Mock async_create_entry
+        flow.async_create_entry = MagicMock(return_value={"type": "create_entry"})
+        flow.async_abort = MagicMock(return_value={"type": "abort"})
 
+        data = {
+            "token": {
+                "access_token": "test_access",
+                "refresh_token": "test_refresh",
+            }
+        }
+
+        result = await flow.async_oauth_create_entry(data)
+
+        assert result["type"] == "create_entry"
         assert mock_client.called
-        assert mock_instance.get_auth_url.called
-        assert flow.async_external_step.called
 
 
-async def test_async_step_user_auth_url_error():
-    """Test user step when auth URL generation fails."""
-    flow = NissanNAConfigFlow()
+async def test_oauth_create_entry_no_vehicles():
+    """Test OAuth flow when no vehicles found."""
+    from custom_components.nissan_na.config_flow import OAuth2FlowHandler
 
+    flow = OAuth2FlowHandler()
+    flow.hass = MagicMock()
+    flow.flow_impl = MagicMock()
+    flow.flow_impl.client_id = "test_client"
+    flow.flow_impl.client_secret = "test_secret"
+    flow.flow_impl.redirect_uri = "https://my.home-assistant.io/redirect/oauth"
+
+    # Mock the API client with no vehicles
     with patch(
-        "custom_components.nissan_na.config_flow.SmartcarApiClient"
+        "custom_components.nissan_na.nissan_api.SmartcarApiClient"
     ) as mock_client:
         mock_instance = MagicMock()
-        mock_instance.get_auth_url.side_effect = Exception("Auth error")
+        mock_instance.get_vehicle_list = AsyncMock(return_value=[])
         mock_client.return_value = mock_instance
 
-        result = await flow.async_step_user(
-            user_input={
-                CONF_CLIENT_ID: "test_client_id",
-                CONF_CLIENT_SECRET: "test_secret",
-                CONF_REDIRECT_URI: "https://example.com/callback",
-            }
+        flow.async_abort = MagicMock(
+            return_value={"type": "abort", "reason": "no_vehicles"}
         )
 
-        assert result["type"] == "form"
-        assert result["errors"]["base"] == "auth_url_failed"
-
-
-async def test_async_step_authorize_no_input():
-    """Test authorize step with no input."""
-    flow = NissanNAConfigFlow()
-    flow.async_external_step_done = MagicMock(return_value={"type": "external_done"})
-
-    result = await flow.async_step_authorize(user_input=None)
-
-    assert flow.async_external_step_done.called
-
-
-async def test_async_step_authorize_success():
-    """Test successful OAuth authorization."""
-    flow = NissanNAConfigFlow()
-    flow.init_data = {
-        CONF_CLIENT_ID: "test_id",
-        CONF_CLIENT_SECRET: "test_secret",
-        CONF_REDIRECT_URI: "https://example.com",
-    }
-
-    mock_client = MagicMock()
-    mock_client.authenticate = AsyncMock(
-        return_value={
-            "access_token": "test_access",
-            "refresh_token": "test_refresh",
+        data = {
+            "token": {
+                "access_token": "test_access",
+                "refresh_token": "test_refresh",
+            }
         }
-    )
-    mock_vehicle = MagicMock()
-    mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
-    flow.client = mock_client
 
-    result = await flow.async_step_authorize(user_input={CONF_CODE: "test_auth_code"})
+        result = await flow.async_oauth_create_entry(data)
 
-    assert result["type"] == "create_entry"
-    assert result["title"] == "Nissan (Smartcar)"
-    assert result["data"][CONF_ACCESS_TOKEN] == "test_access"
-    assert result["data"][CONF_REFRESH_TOKEN] == "test_refresh"
+        assert result["type"] == "abort"
+        assert result["reason"] == "no_vehicles"
 
 
-async def test_async_step_authorize_no_vehicles():
-    """Test authorization when no vehicles are found."""
-    flow = NissanNAConfigFlow()
-    flow.init_data = {}
+async def test_oauth_create_entry_connection_error():
+    """Test OAuth flow when connection fails."""
+    from custom_components.nissan_na.config_flow import OAuth2FlowHandler
 
-    mock_client = MagicMock()
-    mock_client.authenticate = AsyncMock(
-        return_value={
-            "access_token": "test_access",
-            "refresh_token": "test_refresh",
+    flow = OAuth2FlowHandler()
+    flow.hass = MagicMock()
+    flow.flow_impl = MagicMock()
+    flow.flow_impl.client_id = "test_client"
+    flow.flow_impl.client_secret = "test_secret"
+    flow.flow_impl.redirect_uri = "https://my.home-assistant.io/redirect/oauth"
+
+    # Mock the API client to raise exception
+    with patch(
+        "custom_components.nissan_na.nissan_api.SmartcarApiClient"
+    ) as mock_client:
+        mock_instance = MagicMock()
+        mock_instance.get_vehicle_list = AsyncMock(
+            side_effect=Exception("Connection failed")
+        )
+        mock_client.return_value = mock_instance
+
+        flow.async_abort = MagicMock(
+            return_value={"type": "abort", "reason": "connection_error"}
+        )
+
+        data = {
+            "token": {
+                "access_token": "test_access",
+                "refresh_token": "test_refresh",
+            }
         }
-    )
-    mock_client.get_vehicle_list = AsyncMock(return_value=[])
-    flow.client = mock_client
 
-    result = await flow.async_step_authorize(user_input={CONF_CODE: "test_auth_code"})
+        result = await flow.async_oauth_create_entry(data)
 
-    assert result["type"] == "abort"
-    assert result["reason"] == "auth_failed"
-
-
-async def test_async_step_authorize_auth_error():
-    """Test authorization when authentication fails."""
-    flow = NissanNAConfigFlow()
-    flow.init_data = {}
-
-    mock_client = MagicMock()
-    mock_client.authenticate = AsyncMock(side_effect=Exception("Auth failed"))
-    flow.client = mock_client
-
-    result = await flow.async_step_authorize(user_input={CONF_CODE: "test_auth_code"})
-
-    assert result["type"] == "abort"
-    assert result["reason"] == "auth_failed"
-
-
-async def test_async_step_authorize_no_code():
-    """Test authorization when no code is provided."""
-    flow = NissanNAConfigFlow()
-
-    result = await flow.async_step_authorize(user_input={})
-
-    assert result["type"] == "abort"
-    assert result["reason"] == "auth_failed"
-
-
-def test_options_flow_init():
-    """Test options flow initialization."""
-    config_entry = MagicMock()
-    flow = NissanNAOptionsFlow(config_entry)
-
-    assert flow.config_entry == config_entry
-
-
-async def test_async_step_init_no_input():
-    """Test options flow init step with no input."""
-    config_entry = MagicMock()
-    config_entry.options = {"update_interval": 20}
-    flow = NissanNAOptionsFlow(config_entry)
-
-    result = await flow.async_step_init(user_input=None)
-
-    assert result["type"] == "form"
-    assert result["step_id"] == "init"
-
-
-async def test_async_step_init_with_input():
-    """Test options flow init step with valid input."""
-    config_entry = MagicMock()
-    config_entry.options = {}
-    flow = NissanNAOptionsFlow(config_entry)
-
-    result = await flow.async_step_init(user_input={"update_interval": 30})
-
-    assert result["type"] == "create_entry"
-    assert result["data"]["update_interval"] == 30
-
-
-async def test_async_step_init_default_interval():
-    """Test options flow with default update interval."""
-    config_entry = MagicMock()
-    config_entry.options = {}
-    flow = NissanNAOptionsFlow(config_entry)
-
-    result = await flow.async_step_init(user_input=None)
-
-    assert result["type"] == "form"
-    # Default interval is 15
-    assert "update_interval" in str(result["data_schema"])
-
-
-def test_async_get_options_flow():
-    """Test getting the options flow."""
-    config_entry = MagicMock()
-
-    flow = NissanNAConfigFlow.async_get_options_flow(config_entry)
-
-    assert isinstance(flow, NissanNAOptionsFlow)
-    assert flow.config_entry == config_entry
+        assert result["type"] == "abort"
+        assert result["reason"] == "connection_error"

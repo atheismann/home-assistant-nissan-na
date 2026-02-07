@@ -1,5 +1,6 @@
-"""
-Home Assistant custom integration for Nissan North America vehicles using Smartcar API.
+"""Home Assistant custom integration for Nissan North America vehicles.
+
+Uses Smartcar API for vehicle integration.
 """
 
 import logging
@@ -7,13 +8,14 @@ from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.event import async_track_time_interval
 
+from .api import SmartcarOAuth2Implementation
 from .const import (
     CONF_ACCESS_TOKEN,
     CONF_CLIENT_ID,
     CONF_CLIENT_SECRET,
-    CONF_REDIRECT_URI,
     CONF_REFRESH_TOKEN,
     DOMAIN,
     PLATFORMS,
@@ -23,16 +25,47 @@ from .nissan_api import SmartcarApiClient
 _LOGGER = logging.getLogger(__name__)
 
 
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Set up the Nissan NA component."""
+    # Register OAuth2 implementation
+    config_entry_oauth2_flow.async_register_implementation(
+        hass,
+        DOMAIN,
+        SmartcarOAuth2Implementation(
+            hass,
+            DOMAIN,
+            config.get(DOMAIN, {}).get(CONF_CLIENT_ID, ""),
+            config.get(DOMAIN, {}).get(CONF_CLIENT_SECRET, ""),
+            "https://connect.smartcar.com/oauth/authorize",
+            "https://connect.smartcar.com/oauth/token",
+        ),
+    )
+    return True
+
+
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Set up Nissan NA from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
-    # Extract configuration
-    client_id = config_entry.data[CONF_CLIENT_ID]
-    client_secret = config_entry.data[CONF_CLIENT_SECRET]
-    redirect_uri = config_entry.data[CONF_REDIRECT_URI]
-    access_token = config_entry.data.get(CONF_ACCESS_TOKEN)
-    refresh_token = config_entry.data.get(CONF_REFRESH_TOKEN)
+    # OAuth2 implementation stores tokens differently
+    # Extract from token dict if present, otherwise fall back to direct keys
+    token_data = config_entry.data.get("token", {})
+    access_token = token_data.get("access_token") or config_entry.data.get(
+        CONF_ACCESS_TOKEN
+    )
+    refresh_token = token_data.get("refresh_token") or config_entry.data.get(
+        CONF_REFRESH_TOKEN
+    )
+
+    # Get client credentials from implementation
+    implementation = (
+        await config_entry_oauth2_flow.async_get_config_entry_implementation(
+            hass, config_entry
+        )
+    )
+    client_id = implementation.client_id
+    client_secret = implementation.client_secret
+    redirect_uri = implementation.redirect_uri
 
     # Initialize Smartcar client
     client = SmartcarApiClient(

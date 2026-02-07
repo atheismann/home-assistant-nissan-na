@@ -8,6 +8,10 @@
     "pydantic>=1.10.0",
     "smartcar>=6.0.0"
   ],
+  "dependencies": [
+    "application_credentials",
+    "http"
+  ],
   "codeowners": [
     "@atheismann"
   ],

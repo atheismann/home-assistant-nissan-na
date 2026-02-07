@@ -1,10 +1,9 @@
 """Tests for the Nissan NA sensor platform."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import entity_registry as er
 
 from custom_components.nissan_na.const import DOMAIN
 from custom_components.nissan_na.sensor import NissanGenericSensor, async_setup_entry

@@ -3,7 +3,8 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, "custom_components/nissan_na")
-import nissan_api
+
+import nissan_api  # noqa: E402
 
 SmartcarApiClient = nissan_api.SmartcarApiClient
 
