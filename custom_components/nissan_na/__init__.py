@@ -6,7 +6,9 @@ Uses Smartcar API for vehicle integration.
 import logging
 from datetime import timedelta
 
+from homeassistant.components import webhook
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_WEBHOOK_ID
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.event import async_track_time_interval
@@ -21,6 +23,11 @@ from .const import (
     PLATFORMS,
 )
 from .nissan_api import SmartcarApiClient
+from .webhook import (
+    async_generate_webhook_url,
+    async_register_webhook,
+    async_unregister_webhook,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -46,6 +53,31 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Set up Nissan NA from a config entry."""
     hass.data.setdefault(DOMAIN, {})
+
+    # Register webhook if webhook_id exists
+    webhook_id = config_entry.data.get(CONF_WEBHOOK_ID)
+    if webhook_id:
+        async_register_webhook(hass, config_entry.entry_id, webhook_id)
+        webhook_url = async_generate_webhook_url(hass, webhook_id)
+        _LOGGER.info("Webhook registered at: %s", webhook_url)
+        _LOGGER.info(
+            "Configure this URL in your Smartcar Dashboard to receive real-time updates"
+        )
+    else:
+        # Generate webhook ID for new setups
+        webhook_id = webhook.async_generate_id()
+        webhook_url = async_generate_webhook_url(hass, webhook_id)
+
+        # Update config entry with webhook ID
+        hass.config_entries.async_update_entry(
+            config_entry, data={**config_entry.data, CONF_WEBHOOK_ID: webhook_id}
+        )
+
+        async_register_webhook(hass, config_entry.entry_id, webhook_id)
+        _LOGGER.info("Webhook registered at: %s", webhook_url)
+        _LOGGER.info(
+            "Configure this URL in your Smartcar Dashboard to receive real-time updates"
+        )
 
     # OAuth2 implementation stores tokens differently
     # Extract from token dict if present, otherwise fall back to direct keys
@@ -162,31 +194,11 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         except Exception as err:
             _LOGGER.error("Failed to refresh status: %s", err)
 
-    async def handle_start_engine(call):
-        """Handle start engine service call."""
-        vehicle_id = call.data.get("vehicle_id")
-        try:
-            await client.start_engine(vehicle_id)
-            _LOGGER.info("Started engine for vehicle %s", vehicle_id)
-        except Exception as err:
-            _LOGGER.error("Failed to start engine: %s", err)
-
-    async def handle_stop_engine(call):
-        """Handle stop engine service call."""
-        vehicle_id = call.data.get("vehicle_id")
-        try:
-            await client.stop_engine(vehicle_id)
-            _LOGGER.info("Stopped engine for vehicle %s", vehicle_id)
-        except Exception as err:
-            _LOGGER.error("Failed to stop engine: %s", err)
-
     # Register all services
     hass.services.async_register(DOMAIN, "lock_doors", handle_lock_doors)
     hass.services.async_register(DOMAIN, "unlock_doors", handle_unlock_doors)
     hass.services.async_register(DOMAIN, "start_charge", handle_start_charge)
     hass.services.async_register(DOMAIN, "stop_charge", handle_stop_charge)
-    hass.services.async_register(DOMAIN, "start_engine", handle_start_engine)
-    hass.services.async_register(DOMAIN, "stop_engine", handle_stop_engine)
     hass.services.async_register(DOMAIN, "refresh_status", handle_refresh_status)
 
     # Set up platforms (sensor, lock, climate, device_tracker)
@@ -197,6 +209,11 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
 async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    # Unregister webhook
+    webhook_id = config_entry.data.get(CONF_WEBHOOK_ID)
+    if webhook_id:
+        async_unregister_webhook(hass, webhook_id)
+
     # Unload platforms
     unload_ok = await hass.config_entries.async_unload_platforms(
         config_entry, PLATFORMS

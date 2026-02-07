@@ -3,9 +3,11 @@
 import logging
 from typing import Any
 
+import voluptuous as vol
+from homeassistant import config_entries
 from homeassistant.helpers import config_entry_oauth2_flow
 
-from .const import DOMAIN
+from .const import CONF_MANAGEMENT_TOKEN, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,19 +28,38 @@ class OAuth2FlowHandler(
     def extra_authorize_data(self) -> dict[str, Any]:
         """Extra data that needs to be appended to the authorize url."""
         scopes = [
+            # Required permissions
             "required:read_vehicle_info",
             "required:read_location",
             "required:read_odometer",
             "required:control_security",
+            # EV/Battery permissions
             "read_battery",
             "read_charge",
             "control_charge",
+            "read_charge_locations",
+            "read_charge_records",
+            # General vehicle data
             "read_fuel",
             "read_vin",
+            "read_security",
             "read_tires",
             "read_engine_oil",
             "read_thermometer",
-            "control_engine",
+            "read_speedometer",
+            "read_compass",
+            # Climate control
+            "read_climate",
+            "control_climate",
+            # Advanced features
+            "read_alerts",
+            "read_diagnostics",
+            "read_extended_vehicle_info",
+            "read_service_history",
+            "read_user_profile",
+            # Additional control
+            "control_navigation",
+            "control_trunk",
         ]
         return {
             "scope": " ".join(scopes),
@@ -86,3 +107,59 @@ class OAuth2FlowHandler(
         if user_input is None:
             return self.async_show_form(step_id="reauth_confirm")
         return await self.async_step_user()
+
+    @staticmethod
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Get the options flow for this handler."""
+        return NissanNAOptionsFlowHandler(config_entry)
+
+
+class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options flow for Nissan NA integration."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> dict:
+        """Manage the webhook options."""
+        if user_input is not None:
+            # Update the config entry data with management token
+            new_data = {**self.config_entry.data}
+            if user_input.get(CONF_MANAGEMENT_TOKEN):
+                new_data[CONF_MANAGEMENT_TOKEN] = user_input[CONF_MANAGEMENT_TOKEN]
+
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, data=new_data
+            )
+
+            return self.async_create_entry(title="", data={})
+
+        current_token = self.config_entry.data.get(CONF_MANAGEMENT_TOKEN, "")
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_MANAGEMENT_TOKEN,
+                        description={"suggested_value": current_token},
+                    ): str,
+                }
+            ),
+            description_placeholders={
+                "webhook_info": (
+                    "To enable real-time webhook updates from "
+                    "Smartcar, you need to:\n"
+                    "1. Get your Application Management Token from "
+                    "the Smartcar Dashboard\n"
+                    "2. Enter it below\n"
+                    "3. Configure the webhook URL in your Smartcar "
+                    "Dashboard\n\n"
+                    "The webhook URL will be shown in the logs after "
+                    "saving."
+                )
+            },
+        )

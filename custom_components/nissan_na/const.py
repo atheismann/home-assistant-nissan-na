@@ -8,4 +8,8 @@ CONF_ACCESS_TOKEN = "access_token"
 CONF_REFRESH_TOKEN = "refresh_token"
 CONF_CODE = "code"
 
+# Webhook configuration
+CONF_WEBHOOK_ID = "webhook_id"
+CONF_MANAGEMENT_TOKEN = "management_token"
+
 PLATFORMS = ["sensor", "lock", "climate", "device_tracker"]
