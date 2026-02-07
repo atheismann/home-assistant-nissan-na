@@ -189,9 +189,7 @@ async def test_async_step_authorize_no_code():
     flow = NissanNAConfigFlow()
     flow._oauth_data = {"state": "test_state"}
 
-    result = await flow.async_step_authorize(
-        user_input={"state": "test_state"}
-    )
+    result = await flow.async_step_authorize(user_input={"state": "test_state"})
 
     assert result["type"] == "abort"
     assert result["reason"] == "auth_failed"
