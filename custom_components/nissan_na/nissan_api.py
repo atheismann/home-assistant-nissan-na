@@ -9,6 +9,7 @@ starting/stopping climate control, location tracking, and more.
 Smartcar API documentation: https://smartcar.com/docs/
 """
 
+import asyncio
 from typing import Any, Dict, List, Optional
 
 import smartcar
@@ -158,7 +159,7 @@ class SmartcarApiClient:
 
         # Exchange code for tokens
         # v6 returns an Access NamedTuple
-        response = client.exchange_code(code)
+        response = await asyncio.to_thread(client.exchange_code, code)
         self.access_token = response.access_token
         self.refresh_token = response.refresh_token
 
@@ -189,7 +190,9 @@ class SmartcarApiClient:
         )
 
         # v6 returns an Access NamedTuple
-        response = client.exchange_refresh_token(self.refresh_token)
+        response = await asyncio.to_thread(
+            client.exchange_refresh_token, self.refresh_token
+        )
         self.access_token = response.access_token
         self.refresh_token = response.refresh_token
 
@@ -214,7 +217,7 @@ class SmartcarApiClient:
             raise ValueError("Not authenticated. Call authenticate() first.")
 
         # Get vehicle IDs - v6 returns a Vehicles NamedTuple
-        response = smartcar.get_vehicles(self.access_token)
+        response = await asyncio.to_thread(smartcar.get_vehicles, self.access_token)
         vehicle_ids = response.vehicles
 
         vehicles = []
@@ -223,8 +226,8 @@ class SmartcarApiClient:
             self._vehicles_cache[vehicle_id] = vehicle
 
             # Get vehicle attributes and VIN (v6 API)
-            attrs = vehicle.attributes()
-            vin_response = vehicle.vin()
+            attrs = await asyncio.to_thread(vehicle.attributes)
+            vin_response = await asyncio.to_thread(vehicle.vin)
 
             # Convert namedtuple responses to dict
             attrs_dict = _namedtuple_to_dict(attrs)
@@ -269,8 +272,8 @@ class SmartcarApiClient:
             dict: Vehicle information.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        attrs = vehicle.attributes()
-        vin_response = vehicle.vin()
+        attrs = await asyncio.to_thread(vehicle.attributes)
+        vin_response = await asyncio.to_thread(vehicle.vin)
 
         # Convert namedtuple responses to dict for v6
         attrs_dict = _namedtuple_to_dict(attrs)
@@ -300,7 +303,7 @@ class SmartcarApiClient:
             dict: Location data with latitude and longitude.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        location = vehicle.location()
+        location = await asyncio.to_thread(vehicle.location)
         return _namedtuple_to_dict(location)
 
     async def get_battery_level(self, vehicle_id: str) -> Dict[str, Any]:
@@ -314,7 +317,7 @@ class SmartcarApiClient:
             dict: Battery level percentage.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        battery = vehicle.battery()
+        battery = await asyncio.to_thread(vehicle.battery)
         return _namedtuple_to_dict(battery)
 
     async def get_battery_capacity(self, vehicle_id: str) -> Dict[str, Any]:
@@ -328,7 +331,7 @@ class SmartcarApiClient:
             dict: Battery capacity in kWh.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        capacity = vehicle.battery_capacity()
+        capacity = await asyncio.to_thread(vehicle.battery_capacity)
         return _namedtuple_to_dict(capacity)
 
     async def get_charge_status(self, vehicle_id: str) -> Dict[str, Any]:
@@ -342,7 +345,7 @@ class SmartcarApiClient:
             dict: Charging status information.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        charge = vehicle.charge()
+        charge = await asyncio.to_thread(vehicle.charge)
         return _namedtuple_to_dict(charge)
 
     async def get_odometer(self, vehicle_id: str) -> Dict[str, Any]:
@@ -356,7 +359,7 @@ class SmartcarApiClient:
             dict: Odometer distance.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        odometer = vehicle.odometer()
+        odometer = await asyncio.to_thread(vehicle.odometer)
         return _namedtuple_to_dict(odometer)
 
     async def get_fuel_level(self, vehicle_id: str) -> Dict[str, Any]:
@@ -370,7 +373,7 @@ class SmartcarApiClient:
             dict: Fuel level information.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        fuel = vehicle.fuel()
+        fuel = await asyncio.to_thread(vehicle.fuel)
         return _namedtuple_to_dict(fuel)
 
     async def lock_doors(self, vehicle_id: str) -> Dict[str, Any]:
@@ -384,7 +387,7 @@ class SmartcarApiClient:
             dict: API response with action status.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        result = vehicle.lock()
+        result = await asyncio.to_thread(vehicle.lock)
         return _namedtuple_to_dict(result)
 
     async def unlock_doors(self, vehicle_id: str) -> Dict[str, Any]:
@@ -398,7 +401,7 @@ class SmartcarApiClient:
             dict: API response with action status.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        result = vehicle.unlock()
+        result = await asyncio.to_thread(vehicle.unlock)
         return _namedtuple_to_dict(result)
 
     async def start_charge(self, vehicle_id: str) -> Dict[str, Any]:
@@ -412,7 +415,7 @@ class SmartcarApiClient:
             dict: API response with action status.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        result = vehicle.start_charge()
+        result = await asyncio.to_thread(vehicle.start_charge)
         return _namedtuple_to_dict(result)
 
     async def stop_charge(self, vehicle_id: str) -> Dict[str, Any]:
@@ -426,7 +429,7 @@ class SmartcarApiClient:
             dict: API response with action status.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        result = vehicle.stop_charge()
+        result = await asyncio.to_thread(vehicle.stop_charge)
         return _namedtuple_to_dict(result)
 
     async def disconnect(self, vehicle_id: str) -> bool:
@@ -440,7 +443,7 @@ class SmartcarApiClient:
             bool: True if successful.
         """
         vehicle = self._get_vehicle(vehicle_id)
-        vehicle.disconnect()
+        await asyncio.to_thread(vehicle.disconnect)
         if vehicle_id in self._vehicles_cache:
             del self._vehicles_cache[vehicle_id]
         return True
