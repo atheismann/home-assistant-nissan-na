@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Remote engine start/stop functionality
+- Support for additional vehicle sensors:
+  - Tire pressure monitoring
+  - Engine oil life
+  - Interior/exterior temperature
+- Comprehensive OAuth scopes for all vehicle features
+- Non-blocking async operations using asyncio.to_thread() for all Smartcar SDK calls
+
 ### Changed
 
 - **BREAKING**: Migrated to OAuth2 Application Credentials flow
@@ -13,6 +23,7 @@ All notable changes to this project will be documented in this file.
   - Must use `https://my.home-assistant.io/redirect/oauth` as redirect URI
 - Improved OAuth state management and reliability
 - Enhanced reauth support for expired credentials
+- Fixed blocking I/O operations that could cause event loop warnings
 
 ### Migration Guide
 

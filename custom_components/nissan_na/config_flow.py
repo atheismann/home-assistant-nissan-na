@@ -25,7 +25,23 @@ class OAuth2FlowHandler(
     @property
     def extra_authorize_data(self) -> dict[str, Any]:
         """Extra data that needs to be appended to the authorize url."""
+        scopes = [
+            "required:read_vehicle_info",
+            "required:read_location",
+            "required:read_odometer",
+            "required:control_security",
+            "read_battery",
+            "read_charge",
+            "control_charge",
+            "read_fuel",
+            "read_vin",
+            "read_tires",
+            "read_engine_oil",
+            "read_thermometer",
+            "control_engine",
+        ]
         return {
+            "scope": " ".join(scopes),
             "make": "NISSAN",
             "single_select": "true",
         }

@@ -135,6 +135,20 @@ data:
   vehicle_id: "your-vehicle-id"
 ```
 
+### `nissan_na.start_engine`
+```yaml
+service: nissan_na.start_engine
+data:
+  vehicle_id: "your-vehicle-id"
+```
+
+### `nissan_na.stop_engine`
+```yaml
+service: nissan_na.stop_engine
+data:
+  vehicle_id: "your-vehicle-id"
+```
+
 ### `nissan_na.refresh_status`
 ```yaml
 service: nissan_na.refresh_status
