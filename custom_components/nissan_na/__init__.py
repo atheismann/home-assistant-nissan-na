@@ -145,11 +145,18 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     async def async_update_all_vehicles(now):
         """Update all vehicles periodically."""
         try:
+            # Get client from hass.data
+            data = hass.data[DOMAIN].get(config_entry.entry_id)
+            if not data:
+                _LOGGER.warning("Client not found for entry %s", config_entry.entry_id)
+                return
+            client = data["client"]
+            
             # Refresh access token if needed
             await client.refresh_access_token()
 
             # Update vehicle data
-            vehicles = hass.data[DOMAIN][config_entry.entry_id]["vehicles"]
+            vehicles = data["vehicles"]
             for vehicle in vehicles:
                 try:
                     await client.get_vehicle_status(vehicle.id)
@@ -159,15 +166,21 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         except Exception as err:
             _LOGGER.error("Failed to refresh token: %s", err)
 
-    # Schedule periodic updates
-    async_track_time_interval(
+    # Schedule periodic updates and store unsub function
+    update_listener = async_track_time_interval(
         hass, async_update_all_vehicles, timedelta(minutes=update_minutes)
     )
+    hass.data[DOMAIN][config_entry.entry_id]["update_listener"] = update_listener
 
     # Register services
     async def handle_lock_doors(call):
         """Handle lock doors service call."""
         vehicle_id = call.data.get("vehicle_id")
+        data = hass.data[DOMAIN].get(config_entry.entry_id)
+        if not data:
+            _LOGGER.error("Client not found for entry %s", config_entry.entry_id)
+            return
+        client = data["client"]
         try:
             await client.lock_doors(vehicle_id)
             _LOGGER.info("Locked doors for vehicle %s", vehicle_id)
@@ -177,6 +190,11 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     async def handle_unlock_doors(call):
         """Handle unlock doors service call."""
         vehicle_id = call.data.get("vehicle_id")
+        data = hass.data[DOMAIN].get(config_entry.entry_id)
+        if not data:
+            _LOGGER.error("Client not found for entry %s", config_entry.entry_id)
+            return
+        client = data["client"]
         try:
             await client.unlock_doors(vehicle_id)
             _LOGGER.info("Unlocked doors for vehicle %s", vehicle_id)
@@ -186,6 +204,11 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     async def handle_start_charge(call):
         """Handle start charging service call."""
         vehicle_id = call.data.get("vehicle_id")
+        data = hass.data[DOMAIN].get(config_entry.entry_id)
+        if not data:
+            _LOGGER.error("Client not found for entry %s", config_entry.entry_id)
+            return
+        client = data["client"]
         try:
             await client.start_charge(vehicle_id)
             _LOGGER.info("Started charging for vehicle %s", vehicle_id)
@@ -195,6 +218,11 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     async def handle_stop_charge(call):
         """Handle stop charging service call."""
         vehicle_id = call.data.get("vehicle_id")
+        data = hass.data[DOMAIN].get(config_entry.entry_id)
+        if not data:
+            _LOGGER.error("Client not found for entry %s", config_entry.entry_id)
+            return
+        client = data["client"]
         try:
             await client.stop_charge(vehicle_id)
             _LOGGER.info("Stopped charging for vehicle %s", vehicle_id)
@@ -204,6 +232,11 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     async def handle_refresh_status(call):
         """Handle refresh status service call."""
         vehicle_id = call.data.get("vehicle_id")
+        data = hass.data[DOMAIN].get(config_entry.entry_id)
+        if not data:
+            _LOGGER.error("Client not found for entry %s", config_entry.entry_id)
+            return
+        client = data["client"]
         try:
             await client.get_vehicle_status(vehicle_id)
             _LOGGER.info("Refreshed status for vehicle %s", vehicle_id)
@@ -225,6 +258,11 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
 
 async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
     """Unload a config entry."""
+    # Cancel periodic update listener
+    data = hass.data[DOMAIN].get(config_entry.entry_id, {})
+    if "update_listener" in data:
+        data["update_listener"]()
+
     # Unregister webhook
     webhook_id = config_entry.data.get(CONF_WEBHOOK_ID)
     if webhook_id:

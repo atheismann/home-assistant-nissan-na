@@ -53,7 +53,7 @@ async def test_async_setup_entry(hass: HomeAssistant, mock_client, mock_vehicle)
     config_entry = MagicMock()
     config_entry.entry_id = "test_entry"
 
-    hass.data[DOMAIN] = {config_entry.entry_id: mock_client}
+    hass.data[DOMAIN] = {config_entry.entry_id: {"client": mock_client, "vehicles": []}}
 
     entities = []
     async_add_entities = MagicMock(side_effect=lambda ents: entities.extend(ents))

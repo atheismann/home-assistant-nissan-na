@@ -8,7 +8,8 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     """
     Set up Nissan NA climate entities for each vehicle.
     """
-    client = hass.data[DOMAIN][config_entry.entry_id]
+    data = hass.data[DOMAIN][config_entry.entry_id]
+    client = data["client"]
     vehicles = await client.get_vehicle_list()
     entities = [NissanClimateEntity(vehicle, client) for vehicle in vehicles]
     async_add_entities(entities)
