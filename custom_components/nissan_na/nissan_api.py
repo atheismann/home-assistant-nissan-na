@@ -138,7 +138,7 @@ class SmartcarApiClient:
         }
         if state:
             options["state"] = state
-        return client.get_auth_url(scope=scope, options=options if options else None)
+        return client.get_auth_url(scope=scope, options=options)
 
     async def authenticate(self, code: str) -> Dict[str, Any]:
         """
