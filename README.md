@@ -127,16 +127,21 @@ You can adjust settings after setup:
 
 1. Go to **Settings > Devices & Services** in Home Assistant
 2. Find the Nissan North America integration and click **Configure**
-3. Choose from the menu:
-   - **Configure Webhooks** - Set up webhook support for real-time updates
-   - **Re-authorize Integration** - Update OAuth permissions when new features are added
+3. A menu will appear with two options:
 
-### Webhook Configuration
+### Menu Options
 
-To enable webhook support:
-- Select **Configure Webhooks** from the menu
-- Enter your **Application Management Token** (from Smartcar Dashboard)
-- Your webhook URL will be displayed for use in Smartcar Dashboard setup
+#### Configure Webhooks
+- Set up webhook support for real-time vehicle updates
+- Enter your **Application Management Token** from Smartcar Dashboard
+- View your webhook URL for registering in Smartcar Dashboard
+- Optional but recommended for instant updates and reduced API usage
+
+#### Re-authorize Integration
+- Manually refresh OAuth tokens when needed
+- Update permissions when new features are added
+- Typically not needed as tokens refresh automatically
+- Only use when automatic token refresh fails or new permissions are required
 
 ---
 
@@ -276,22 +281,35 @@ All webhook payloads are verified using HMAC-SHA256 signatures:
 
 > **Note:** Without webhooks, the integration will continue to work using polling at your configured update interval.
 
-### Re-authorizing the Integration
+### Automatic Token Refresh
 
-The integration **automatically renews OAuth tokens** when they expire, so you typically won't need to manually re-authorize. However, manual re-authorization may be needed when:
+The integration **automatically renews OAuth tokens** when they expire, eliminating the need for manual re-authorization in most cases. Here's how it works:
+
+1. **Access tokens** expire after a short period (typically 2 hours)
+2. The integration automatically refreshes them using the refresh token
+3. New tokens are saved to the config entry for persistence across restarts
+4. If a refresh fails, the integration attempts one more time
+5. Only if all refresh attempts fail will you be prompted to re-authorize
+
+### Manual Re-authorization
+
+Manual re-authorization is rarely needed but may be required when:
 
 - **New features are added** that require additional OAuth permissions
-- **The refresh token expires** (usually after 60 days of inactivity)
+- **The refresh token expires** (typically after 60 days of inactivity)
 - **Smartcar API changes** require updated credentials
+- **Automatic token refresh fails** repeatedly
 
-To manually re-authorize:
+**To manually re-authorize:**
 
 1. Go to **Settings > Devices & Services**
 2. Find **Nissan North America** integration and click **Configure**
-3. Select **Re-authorize Integration** from the menu
-4. Complete the OAuth flow to grant updated permissions
+3. Select **Re-authorize Integration** from the configuration menu
+4. Click **Submit** to start the OAuth flow
+5. Log in to your Nissan account and grant permissions
+6. You'll be redirected back to Home Assistant
 
-The integration will automatically attempt to refresh expired access tokens before prompting you to re-authorize. You'll only see a re-authorization notification if automatic token refresh fails.
+**Note:** The integration will attempt automatic token refresh before showing any re-authorization prompts. You'll only see a notification if automatic refresh is not possible.
 
 ---
 

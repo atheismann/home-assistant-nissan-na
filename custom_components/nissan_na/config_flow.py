@@ -143,7 +143,10 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
         """Show menu for configuration options."""
         return self.async_show_menu(
             step_id="init",
-            menu_options=["webhook_config", "reauth"],
+            menu_options={
+                "webhook_config": "Configure Webhooks",
+                "reauth": "Re-authorize Integration",
+            },
             description_placeholders={
                 "webhook_info": "Configure real-time vehicle updates via webhooks",
                 "reauth_info": "Update OAuth permissions when new features are added",
