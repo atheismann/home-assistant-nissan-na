@@ -132,6 +132,10 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_menu(
             step_id="init",
             menu_options=["webhook_config", "reauth"],
+            description_placeholders={
+                "webhook_info": "Configure real-time vehicle updates via webhooks",
+                "reauth_info": "Update OAuth permissions when new features are added"
+            },
         )
 
     async def async_step_webhook_config(self, user_input: dict[str, Any] | None = None) -> dict:
@@ -179,8 +183,15 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_reauth(self, user_input: dict[str, Any] | None = None) -> dict:
         """Handle reauthorization request from options."""
-        # Trigger reauth flow using the proper API
-        await self.hass.config_entries.async_request_reauth(
-            self.config_entry, reason="Manual reauthorization requested"
+        # Trigger reauth flow by initiating a new config flow with reauth context
+        self.hass.async_create_task(
+            self.hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={
+                    "source": config_entries.SOURCE_REAUTH,
+                    "entry_id": self.config_entry.entry_id,
+                },
+                data=self.config_entry.data,
+            )
         )
         return self.async_abort(reason="reauth_triggered")

@@ -7,7 +7,7 @@ import logging
 from datetime import timedelta
 
 from homeassistant.components import webhook as ha_webhook
-from homeassistant.config_entries import ConfigEntry
+from homeassistant import config_entries
 from homeassistant.const import CONF_WEBHOOK_ID
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_entry_oauth2_flow
@@ -50,7 +50,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, config_entry: config_entries.ConfigEntry) -> bool:
     """Set up Nissan NA from a config entry."""
     hass.data.setdefault(DOMAIN, {})
 
@@ -139,10 +139,38 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         refresh_token=refresh_token,
     )
 
+    async def refresh_and_update_token():
+        """Refresh access token and update config entry."""
+        try:
+            _LOGGER.debug("Attempting to refresh access token")
+            new_tokens = await client.refresh_access_token()
+            
+            # Update config entry with new tokens
+            new_data = {**config_entry.data}
+            
+            # Update token dict if it exists, otherwise update direct keys
+            if "token" in new_data:
+                new_data["token"] = {
+                    **new_data["token"],
+                    "access_token": new_tokens["access_token"],
+                    "refresh_token": new_tokens["refresh_token"],
+                }
+            else:
+                new_data[CONF_ACCESS_TOKEN] = new_tokens["access_token"]
+                new_data[CONF_REFRESH_TOKEN] = new_tokens["refresh_token"]
+            
+            hass.config_entries.async_update_entry(config_entry, data=new_data)
+            _LOGGER.info("Successfully refreshed and saved access token")
+            return True
+        except Exception as refresh_err:
+            _LOGGER.error("Failed to refresh token: %s", refresh_err)
+            return False
+
     # Store client in hass data
     hass.data[DOMAIN][config_entry.entry_id] = {
         "client": client,
         "vehicles": [],
+        "refresh_token_func": refresh_and_update_token,
     }
 
     # Get initial vehicle list
@@ -151,8 +179,50 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         hass.data[DOMAIN][config_entry.entry_id]["vehicles"] = vehicles
         _LOGGER.info("Found %d vehicle(s)", len(vehicles))
     except Exception as err:
-        _LOGGER.error("Failed to get vehicle list: %s", err)
-        return False
+        error_message = str(err)
+        _LOGGER.error("Failed to get vehicle list: %s", error_message)
+        
+        # Check if it's an authentication error
+        if "AUTHENTICATION" in error_message or "authentication" in error_message.lower():
+            _LOGGER.warning("Authentication error detected - attempting token refresh")
+            
+            # Try to refresh the token first
+            if await refresh_and_update_token():
+                # Retry getting vehicle list with new token
+                try:
+                    vehicles = await client.get_vehicle_list()
+                    hass.data[DOMAIN][config_entry.entry_id]["vehicles"] = vehicles
+                    _LOGGER.info("Successfully retrieved %d vehicle(s) after token refresh", len(vehicles))
+                except Exception as retry_err:
+                    _LOGGER.error("Still failed after token refresh: %s", retry_err)
+                    # Token refresh didn't help, trigger reauth
+                    hass.async_create_task(
+                        hass.config_entries.flow.async_init(
+                            DOMAIN,
+                            context={
+                                "source": config_entries.SOURCE_REAUTH,
+                                "entry_id": config_entry.entry_id,
+                            },
+                            data=config_entry.data,
+                        )
+                    )
+                    return False
+            else:
+                # Token refresh failed, trigger reauth
+                _LOGGER.warning("Token refresh failed - triggering reauth flow")
+                hass.async_create_task(
+                    hass.config_entries.flow.async_init(
+                        DOMAIN,
+                        context={
+                            "source": config_entries.SOURCE_REAUTH,
+                            "entry_id": config_entry.entry_id,
+                        },
+                        data=config_entry.data,
+                    )
+                )
+                return False
+        else:
+            return False
 
     # Periodic update interval (default 15 minutes, can be changed in options)
     update_minutes = config_entry.options.get("update_interval", 15)
@@ -167,8 +237,10 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
                 return
             client = data["client"]
 
-            # Refresh access token if needed
-            await client.refresh_access_token()
+            # Refresh access token and save to config entry
+            refresh_func = data.get("refresh_token_func")
+            if refresh_func:
+                await refresh_func()
 
             # Update vehicle data
             vehicles = data["vehicles"]
@@ -177,9 +249,49 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
                     await client.get_vehicle_status(vehicle.id)
                     _LOGGER.debug("Updated vehicle %s", vehicle.vin)
                 except Exception as err:
-                    _LOGGER.error("Failed to update vehicle %s: %s", vehicle.vin, err)
+                    error_msg = str(err)
+                    _LOGGER.error("Failed to update vehicle %s: %s", vehicle.vin, error_msg)
+                    
+                    # Check for authentication errors
+                    if "AUTHENTICATION" in error_msg or "authentication" in error_msg.lower():
+                        _LOGGER.warning("Authentication error during update - trying token refresh")
+                        
+                        # Try to refresh token
+                        refresh_func = data.get("refresh_token_func")
+                        if refresh_func and await refresh_func():
+                            _LOGGER.info("Token refreshed successfully, continuing updates")
+                            # Don't return, continue with other vehicles
+                        else:
+                            # Refresh failed, trigger reauth
+                            _LOGGER.warning("Token refresh failed - triggering reauth")
+                            hass.async_create_task(
+                                hass.config_entries.flow.async_init(
+                                    DOMAIN,
+                                    context={
+                                        "source": config_entries.SOURCE_REAUTH,
+                                        "entry_id": config_entry.entry_id,
+                                    },
+                                    data=config_entry.data,
+                                )
+                            )
+                            return
         except Exception as err:
-            _LOGGER.error("Failed to refresh token: %s", err)
+            error_msg = str(err)
+            _LOGGER.error("Failed to refresh token: %s", error_msg)
+            
+            # Check for authentication errors during the main refresh attempt
+            if "AUTHENTICATION" in error_msg or "authentication" in error_msg.lower():
+                _LOGGER.warning("Authentication error during periodic refresh - triggering reauth")
+                hass.async_create_task(
+                    hass.config_entries.flow.async_init(
+                        DOMAIN,
+                        context={
+                            "source": config_entries.SOURCE_REAUTH,
+                            "entry_id": config_entry.entry_id,
+                        },
+                        data=config_entry.data,
+                    )
+                )
 
     # Schedule periodic updates and store unsub function
     update_listener = async_track_time_interval(
@@ -271,7 +383,7 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, config_entry: config_entries.ConfigEntry) -> bool:
     """Unload a config entry."""
     # Cancel periodic update listener
     data = hass.data[DOMAIN].get(config_entry.entry_id, {})
