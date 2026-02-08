@@ -144,14 +144,75 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_menu(
             step_id="init",
             menu_options={
+                "refresh_sensors": "Refresh All Sensors",
                 "webhook_config": "Configure Webhooks",
                 "reauth": "Re-authorize Integration",
             },
             description_placeholders={
+                "refresh_info": "Manually fetch current vehicle data from Smartcar",
                 "webhook_info": "Configure real-time vehicle updates via webhooks",
                 "reauth_info": "Update OAuth permissions when new features are added",
             },
         )
+
+    async def async_step_refresh_sensors(
+        self, user_input: dict[str, Any] | None = None
+    ) -> dict:
+        """Manually refresh all sensors for this integration."""
+        try:
+            # Get integration data
+            data = self.hass.data[DOMAIN].get(self.config_entry.entry_id)
+            if not data:
+                return self.async_abort(reason="integration_not_loaded")
+
+            sensors = data.get("sensors", {})
+            total_sensors = sum(len(vehicle_sensors) for vehicle_sensors in sensors.values())
+            
+            if total_sensors == 0:
+                return self.async_abort(reason="no_sensors_found")
+
+            # Refresh all sensors
+            refreshed = 0
+            failed = 0
+            for vehicle_id, vehicle_sensors in sensors.items():
+                for sensor_key, sensor in vehicle_sensors.items():
+                    try:
+                        await sensor.async_update()
+                        refreshed += 1
+                    except Exception as err:
+                        _LOGGER.warning(
+                            "Failed to refresh sensor %s: %s",
+                            sensor._attr_name if hasattr(sensor, '_attr_name') else sensor_key,
+                            err,
+                        )
+                        failed += 1
+
+            _LOGGER.info(
+                "Manual refresh completed: %d sensors updated, %d failed",
+                refreshed,
+                failed,
+            )
+
+            # Show success message and return to menu
+            return self.async_show_form(
+                step_id="refresh_complete",
+                description_placeholders={
+                    "refreshed": str(refreshed),
+                    "failed": str(failed),
+                    "total": str(total_sensors),
+                },
+            )
+
+        except Exception as err:
+            _LOGGER.error("Error refreshing sensors: %s", err, exc_info=True)
+            return self.async_abort(reason="refresh_failed")
+
+    async def async_step_refresh_complete(
+        self, user_input: dict[str, Any] | None = None
+    ) -> dict:
+        """Show refresh completion and return to menu."""
+        # Return to main menu
+        return await self.async_step_init()
 
     async def async_step_webhook_config(
         self, user_input: dict[str, Any] | None = None

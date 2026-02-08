@@ -8,7 +8,7 @@ from .const import DOMAIN
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """
     Set up Nissan NA climate entities for each vehicle.
-    Only creates climate entities if the vehicle has control_climate permission.
+    Creates climate entities unless we can confirm the vehicle doesn't support it.
     """
     data = hass.data[DOMAIN][config_entry.entry_id]
     client = data["client"]
@@ -16,15 +16,23 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     entities = []
 
     for vehicle in vehicles:
-        # Check if vehicle has climate control permission
+        # Default to creating the entity unless we have evidence it's not supported
+        should_create = True
+
         try:
             permissions = await client.get_permissions(vehicle.id)
-            if "control_climate" in permissions:
-                entities.append(
-                    NissanClimateEntity(vehicle, client, config_entry.entry_id)
-                )
+            # Only skip if we got a valid, non-empty permission list without control_climate
+            if (
+                permissions
+                and len(permissions) > 0
+                and "control_climate" not in permissions
+            ):
+                should_create = False
         except Exception:
-            # If we can't check permissions, create the entity anyway
+            # If permission check fails, create the entity (conservative approach)
+            pass
+
+        if should_create:
             entities.append(NissanClimateEntity(vehicle, client, config_entry.entry_id))
 
     async_add_entities(entities)

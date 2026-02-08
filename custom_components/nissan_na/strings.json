@@ -18,7 +18,10 @@
       "connection_error": "Failed to connect to Smartcar API. Please check your credentials and try again.",
       "missing_credentials": "OAuth credentials not configured. Please set up Application Credentials in Home Assistant settings first.",
       "reauth_successful": "Reauthorization successful",
-      "reauth_triggered": "Reauthorization started. Please complete the OAuth flow in the notifications."
+      "reauth_triggered": "Reauthorization started. Please complete the OAuth flow in the notifications.",
+      "integration_not_loaded": "Integration data not found. Please reload the integration.",
+      "no_sensors_found": "No sensors found to refresh.",
+      "refresh_failed": "Failed to refresh sensors. Please check the logs for details."
     }
   },
   "application_credentials": {
@@ -28,7 +31,15 @@
     "step": {
       "init": {
         "title": "Nissan NA Configuration",
-        "description": "Choose a configuration option:\n\nConfigure Webhooks: {webhook_info}\n\nRe-authorize Integration: {reauth_info}"
+        "description": "Choose a configuration option:\n\nRefresh All Sensors: {refresh_info}\n\nConfigure Webhooks: {webhook_info}\n\nRe-authorize Integration: {reauth_info}"
+      },
+      "refresh_sensors": {
+        "title": "Refresh All Sensors",
+        "description": "Manually fetch the latest vehicle data from Smartcar for all sensors."
+      },
+      "refresh_complete": {
+        "title": "Refresh Complete",
+        "description": "Sensor refresh completed:\n\n✓ {refreshed} sensors updated successfully\n✗ {failed} sensors failed\n\nTotal sensors: {total}\n\nClick Submit to return to the menu."
       },
       "webhook_config": {
         "title": "Webhook Configuration",

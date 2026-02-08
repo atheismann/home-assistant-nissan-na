@@ -573,7 +573,8 @@ class SmartcarApiClient:
             vehicle_id: Smartcar vehicle ID.
 
         Returns:
-            List[str]: List of permission strings (e.g., 'read_battery', 'control_security').
+            List[str]: List of permission strings
+                (e.g., 'read_battery', 'control_security').
         """
         vehicle = self._get_vehicle(vehicle_id)
         response = await asyncio.to_thread(vehicle.permissions)
