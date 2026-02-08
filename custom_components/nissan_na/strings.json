@@ -26,15 +26,20 @@
   "options": {
     "step": {
       "init": {
+        "title": "Nissan NA Options",
+        "menu_options": {
+          "webhook_config": "Configure Webhooks",
+          "reauth": "Re-authorize Integration"
+        }
+      },
+      "webhook_config": {
         "title": "Webhook Configuration",
         "description": "{webhook_info}",
         "data": {
-          "management_token": "Application Management Token (optional)",
-          "trigger_reauth": "Re-authorize Integration"
+          "management_token": "Application Management Token (optional)"
         },
         "data_description": {
-          "management_token": "Required for webhook support. Get this from your Smartcar Dashboard.",
-          "trigger_reauth": "Check this to re-authorize and grant updated permissions"
+          "management_token": "Required for webhook support. Get this from your Smartcar Dashboard."
         }
       }
     }

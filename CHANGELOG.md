@@ -4,18 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### BREAKING CHANGES
-
-- **Entity naming convention changed**
-  - Entity names now use nickname (if set) or "YYYY Make Model" format instead of VIN
-  - Example: "2023 Nissan LEAF Climate" instead of "1N4AZ1CP8JC123456 Climate"
-  - **Impact**: All entity IDs will change if you don't have nicknames set
-  - **Migration**: You must update all automations, scripts, and dashboard references to use new entity names
-  - **No backward compatibility**: Unique IDs remain based on VIN, but friendly names will change
-  - Set vehicle nicknames in your Nissan/Smartcar account before updating to preserve existing names
-
 ### Added
 
+- **Re-authorization capability** - Users can now manually re-authorize the integration from the options menu
+  - Menu-based configuration UI with clear options
+  - "Configure Webhooks" option for webhook setup
+  - "Re-authorize Integration" option to grant updated permissions
+  - Webhook URL now displayed directly in the configuration UI (no need to check logs)
 - **Webhook support for real-time updates**
   - Integration now supports Smartcar webhooks for instant vehicle state updates
   - Eliminates need for constant polling when webhooks are configured

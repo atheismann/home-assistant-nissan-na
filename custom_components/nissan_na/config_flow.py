@@ -128,17 +128,15 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options flow for Nissan NA integration."""
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> dict:
-        """Manage the webhook options."""
+        """Show menu for configuration options."""
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=["webhook_config", "reauth"],
+        )
+
+    async def async_step_webhook_config(self, user_input: dict[str, Any] | None = None) -> dict:
+        """Manage the webhook configuration."""
         if user_input is not None:
-            # Check if user requested reauth
-            if user_input.get("trigger_reauth"):
-                # Trigger reauth flow
-                return self.hass.config_entries.flow.async_init(
-                    DOMAIN,
-                    context={"source": config_entries.SOURCE_REAUTH},
-                    data=self.config_entry.data,
-                )
-            
             # Update the config entry data with management token
             new_data = {**self.config_entry.data}
             if user_input.get(CONF_MANAGEMENT_TOKEN):
@@ -154,14 +152,13 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
         webhook_url = self.config_entry.data.get("webhook_url", "Not configured")
 
         return self.async_show_form(
-            step_id="init",
+            step_id="webhook_config",
             data_schema=vol.Schema(
                 {
                     vol.Optional(
                         CONF_MANAGEMENT_TOKEN,
                         description={"suggested_value": current_token},
                     ): str,
-                    vol.Optional("trigger_reauth", default=False): bool,
                 }
             ),
             description_placeholders={
@@ -175,9 +172,16 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
                     "3. Configure this webhook URL in your Smartcar "
                     f"Dashboard: {webhook_url}\n\n"
                     "Your webhook URL will be automatically registered "
-                    "once you save.\n\n"
-                    "Check 'Re-authorize Integration' below if you need to "
-                    "grant additional permissions or update your authorization."
+                    "once you save."
                 )
             },
+        )
+
+    async def async_step_reauth(self, user_input: dict[str, Any] | None = None) -> dict:
+        """Handle reauthorization request from options."""
+        # Trigger reauth flow
+        return await self.hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_REAUTH},
+            data=self.config_entry.data,
         )

@@ -126,10 +126,17 @@ Before installing, you need to:
 You can adjust settings after setup:
 
 1. Go to **Settings > Devices & Services** in Home Assistant
-2. Find the Nissan North America integration and click the three dots (⋮) > **Configure**
-3. Configure optional settings:
-   - **Update interval** (5-60 minutes, default is 15)
-   - **Management Token** (required for webhook support - see section below)
+2. Find the Nissan North America integration and click **Configure**
+3. Choose from the menu:
+   - **Configure Webhooks** - Set up webhook support for real-time updates
+   - **Re-authorize Integration** - Update OAuth permissions when new features are added
+
+### Webhook Configuration
+
+To enable webhook support:
+- Select **Configure Webhooks** from the menu
+- Enter your **Application Management Token** (from Smartcar Dashboard)
+- Your webhook URL will be displayed for use in Smartcar Dashboard setup
 
 ---
 
@@ -169,13 +176,14 @@ The integration supports Smartcar webhooks for real-time vehicle updates instead
 
 1. Go to **Settings > Devices & Services**
 2. Find **Nissan North America** integration
-3. Click the three dots (⋮) > **Configure**
-4. Enter your **Application Management Token**
-5. Save the configuration
-6. Check your Home Assistant logs for the webhook URL (it will look like):
+3. Click **Configure**
+4. Select **Configure Webhooks** from the menu
+5. Enter your **Application Management Token**
+6. Note the **Webhook URL** displayed (it will look like):
    ```
-   Webhook registered at: https://your-ha-url/api/webhook/XXXXXXXX
+   https://your-ha-url/api/webhook/XXXXXXXX
    ```
+7. Save the configuration
 
 #### 3. Register Webhook in Smartcar Dashboard
 
@@ -267,6 +275,17 @@ All webhook payloads are verified using HMAC-SHA256 signatures:
 - Make a change to your vehicle (lock/unlock) to test
 
 > **Note:** Without webhooks, the integration will continue to work using polling at your configured update interval.
+
+### Re-authorizing the Integration
+
+When the integration is updated with new features that require additional permissions, you may need to re-authorize:
+
+1. Go to **Settings > Devices & Services**
+2. Find **Nissan North America** integration and click **Configure**
+3. Select **Re-authorize Integration** from the menu
+4. Complete the OAuth flow to grant updated permissions
+
+This ensures the integration has access to all supported features for your vehicle.
 
 ---
 
