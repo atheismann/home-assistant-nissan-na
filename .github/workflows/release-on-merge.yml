@@ -92,24 +92,28 @@ jobs:
           GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
 
 
+      # Pull the changes to get the commit with updated manifest
+      - name: Pull latest changes
+        run: |
+          git pull origin main
+
+
       # Now create the tag (after files are updated)
       - name: Create version tag
-        id: bump
-        uses: mathieudutour/github-tag-action@v6.2
-        with:
-          github_token: ${{ steps.get_workflow_token.outputs.token }}
-          tag_prefix: v
-          default_bump: patch
-          release_branches: main
-          dry_run: false
+        run: |
+          git tag ${{ steps.determine_version.outputs.new_tag }}
+          git push origin ${{ steps.determine_version.outputs.new_tag }}
+        env:
+          GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
 
 
       # Create GitHub Release
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.bump.outputs.new_tag }}
-          name: Release ${{ steps.bump.outputs.new_tag }}
+          tag_name: ${{ steps.determine_version.outputs.new_tag }}
+          name: Release ${{ steps.determine_version.outputs.new_tag }}
+          body: ${{ steps.determine_version.outputs.changelog }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
