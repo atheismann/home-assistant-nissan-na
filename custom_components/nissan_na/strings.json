@@ -26,13 +26,13 @@
   "options": {
     "step": {
       "init": {
-        "title": "Nissan North America Options",
-        "description": "Configure update interval for vehicle data",
+        "title": "Webhook Configuration",
+        "description": "{webhook_info}",
         "data": {
-          "update_interval": "Update Interval (minutes)"
+          "management_token": "Application Management Token (optional)"
         },
         "data_description": {
-          "update_interval": "How often to poll for vehicle updates (5-60 minutes)"
+          "management_token": "Required for webhook support. Get this from your Smartcar Dashboard."
         }
       }
     }

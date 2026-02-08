@@ -67,7 +67,7 @@ async def test_async_lock(mock_vehicle, mock_client):
 
     await lock.async_lock()
 
-    mock_client.lock_doors.assert_called_once_with(mock_vehicle.vin)
+    mock_client.lock_doors.assert_called_once_with(mock_vehicle.id)
     assert lock.is_locked is True
     assert lock.async_write_ha_state.called
 
@@ -79,7 +79,7 @@ async def test_async_unlock(mock_vehicle, mock_client):
 
     await lock.async_unlock()
 
-    mock_client.unlock_doors.assert_called_once_with(mock_vehicle.vin)
+    mock_client.unlock_doors.assert_called_once_with(mock_vehicle.id)
     assert lock.is_locked is False
     assert lock.async_write_ha_state.called
 

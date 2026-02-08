@@ -142,6 +142,7 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data={})
 
         current_token = self.config_entry.data.get(CONF_MANAGEMENT_TOKEN, "")
+        webhook_url = self.config_entry.data.get("webhook_url", "Not configured")
 
         return self.async_show_form(
             step_id="init",
@@ -154,16 +155,17 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
                 }
             ),
             description_placeholders={
+                "webhook_url": webhook_url,
                 "webhook_info": (
                     "To enable real-time webhook updates from "
                     "Smartcar, you need to:\n"
                     "1. Get your Application Management Token from "
                     "the Smartcar Dashboard\n"
                     "2. Enter it below\n"
-                    "3. Configure the webhook URL in your Smartcar "
-                    "Dashboard\n\n"
-                    "The webhook URL will be shown in the logs after "
-                    "saving."
+                    "3. Configure this webhook URL in your Smartcar "
+                    f"Dashboard: {webhook_url}\n\n"
+                    "Your webhook URL will be automatically registered "
+                    "once you save."
                 )
             },
         )

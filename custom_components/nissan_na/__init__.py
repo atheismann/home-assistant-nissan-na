@@ -63,14 +63,19 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         _LOGGER.info(
             "Configure this URL in your Smartcar Dashboard to receive real-time updates"
         )
+        # Store webhook URL in config entry for easy access in UI
+        hass.config_entries.async_update_entry(
+            config_entry, data={**config_entry.data, "webhook_url": webhook_url}
+        )
     else:
         # Generate webhook ID for new setups
         webhook_id = ha_webhook.async_generate_id()
         webhook_url = async_generate_webhook_url(hass, webhook_id)
 
-        # Update config entry with webhook ID
+        # Update config entry with webhook ID and URL
         hass.config_entries.async_update_entry(
-            config_entry, data={**config_entry.data, CONF_WEBHOOK_ID: webhook_id}
+            config_entry,
+            data={**config_entry.data, CONF_WEBHOOK_ID: webhook_id, "webhook_url": webhook_url},
         )
 
         async_register_webhook(hass, config_entry.entry_id, webhook_id)

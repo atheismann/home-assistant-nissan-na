@@ -44,13 +44,13 @@ class NissanDoorLockEntity(LockEntity):
 
     async def async_lock(self, **kwargs):
         """Lock the vehicle doors via the Nissan API."""
-        await self._client.lock_doors(self._vehicle.vin)
+        await self._client.lock_doors(self._vehicle.id)
         self._is_locked = True
         self.async_write_ha_state()
 
     async def async_unlock(self, **kwargs):
         """Unlock the vehicle doors via the Nissan API."""
-        await self._client.unlock_doors(self._vehicle.vin)
+        await self._client.unlock_doors(self._vehicle.id)
         self._is_locked = False
         self.async_write_ha_state()
 
