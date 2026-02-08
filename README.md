@@ -278,14 +278,20 @@ All webhook payloads are verified using HMAC-SHA256 signatures:
 
 ### Re-authorizing the Integration
 
-When the integration is updated with new features that require additional permissions, you may need to re-authorize:
+The integration **automatically renews OAuth tokens** when they expire, so you typically won't need to manually re-authorize. However, manual re-authorization may be needed when:
+
+- **New features are added** that require additional OAuth permissions
+- **The refresh token expires** (usually after 60 days of inactivity)
+- **Smartcar API changes** require updated credentials
+
+To manually re-authorize:
 
 1. Go to **Settings > Devices & Services**
 2. Find **Nissan North America** integration and click **Configure**
 3. Select **Re-authorize Integration** from the menu
 4. Complete the OAuth flow to grant updated permissions
 
-This ensures the integration has access to all supported features for your vehicle.
+The integration will automatically attempt to refresh expired access tokens before prompting you to re-authorize. You'll only see a re-authorization notification if automatic token refresh fails.
 
 ---
 

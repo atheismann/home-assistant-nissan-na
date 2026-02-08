@@ -98,7 +98,15 @@ class OAuth2FlowHandler(
             _LOGGER.error("Error fetching vehicles: %s", err, exc_info=True)
             return self.async_abort(reason="connection_error")
 
-        # Create config entry
+        # Check if this is a reauth flow
+        if self.source == config_entries.SOURCE_REAUTH:
+            # Update existing entry with new tokens
+            entry = await self.async_set_unique_id(self.unique_id)
+            self.hass.config_entries.async_update_entry(entry, data=data)
+            await self.hass.config_entries.async_reload(entry.entry_id)
+            return self.async_abort(reason="reauth_successful")
+
+        # Create new config entry
         return self.async_create_entry(
             title="Nissan (Smartcar)",
             data=data,
@@ -106,6 +114,10 @@ class OAuth2FlowHandler(
 
     async def async_step_reauth(self, entry_data: dict) -> dict:
         """Perform reauth upon an API authentication error."""
+        # Store the entry being reauthenticated
+        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        if entry and entry.unique_id:
+            await self.async_set_unique_id(entry.unique_id)
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
@@ -134,11 +146,13 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
             menu_options=["webhook_config", "reauth"],
             description_placeholders={
                 "webhook_info": "Configure real-time vehicle updates via webhooks",
-                "reauth_info": "Update OAuth permissions when new features are added"
+                "reauth_info": "Update OAuth permissions when new features are added",
             },
         )
 
-    async def async_step_webhook_config(self, user_input: dict[str, Any] | None = None) -> dict:
+    async def async_step_webhook_config(
+        self, user_input: dict[str, Any] | None = None
+    ) -> dict:
         """Manage the webhook configuration."""
         if user_input is not None:
             # Update the config entry data with management token
@@ -177,7 +191,7 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
                     f"Dashboard: {webhook_url}\n\n"
                     "Your webhook URL will be automatically registered "
                     "once you save."
-                )
+                ),
             },
         )
 

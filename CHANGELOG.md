@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Automatic token refresh** - Access tokens now automatically renew when expired
+  - Tokens are refreshed and persisted to config entry
+  - Eliminates most manual re-authorization needs
+  - Falls back to re-auth flow only if refresh token expires
 - **Re-authorization capability** - Users can now manually re-authorize the integration from the options menu
   - Menu-based configuration UI with clear options
   - "Configure Webhooks" option for webhook setup
@@ -41,6 +45,11 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Reauth flow creates duplicate entries** - Fixed reauth flow to update existing entry instead of creating new one
+- **Authentication error handling** - Integration now automatically attempts token refresh before triggering reauth
+  - Catches authentication errors during setup and periodic updates
+  - Attempts automatic token refresh first
+  - Only prompts for re-authorization if refresh fails
 - **Webhook import naming conflict** - Renamed `webhook` import to `ha_webhook` to avoid collision
 - **OptionsFlow config_entry property issue** - Removed custom `__init__` that was conflicting with base class
 - **Missing auth_implementation handling** - Added defensive checks for missing OAuth implementation
