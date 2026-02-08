@@ -26,7 +26,8 @@ class NissanDoorLockEntity(LockEntity):
     def __init__(self, vehicle, client):
         self._vehicle = vehicle
         self._client = client
-        self._attr_name = f"{vehicle.nickname or vehicle.vin} Door Lock"
+        nickname = getattr(vehicle, "nickname", None)
+        self._attr_name = f"{nickname or vehicle.vin} Door Lock"
         self._attr_unique_id = f"{vehicle.vin}_door_lock"
         self._is_locked = None
 

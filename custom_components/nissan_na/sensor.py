@@ -61,7 +61,8 @@ class NissanGenericSensor(Entity):
         self._vehicle = vehicle
         self._status = status
         self._key = key
-        self._attr_name = f"{vehicle.nickname or vehicle.vin} {name}"
+        nickname = getattr(vehicle, "nickname", None)
+        self._attr_name = f"{nickname or vehicle.vin} {name}"
         self._unit = unit
 
     @property

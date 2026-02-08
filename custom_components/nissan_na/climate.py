@@ -29,7 +29,8 @@ class NissanClimateEntity(ClimateEntity):
     def __init__(self, vehicle, client):
         self._vehicle = vehicle
         self._client = client
-        self._attr_name = f"{vehicle.nickname or vehicle.vin} Climate"
+        nickname = getattr(vehicle, "nickname", None)
+        self._attr_name = f"{nickname or vehicle.vin} Climate"
         self._attr_unique_id = f"{vehicle.vin}_climate"
         self._hvac_mode = HVACMode.OFF
 

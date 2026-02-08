@@ -29,7 +29,8 @@ class NissanVehicleTracker(TrackerEntity):
     def __init__(self, vehicle, status):
         self._vehicle = vehicle
         self._status = status
-        self._attr_name = f"{vehicle.nickname or vehicle.vin} Location"
+        nickname = getattr(vehicle, "nickname", None)
+        self._attr_name = f"{nickname or vehicle.vin} Location"
         self._attr_unique_id = f"{vehicle.vin}_location"
 
     @property
