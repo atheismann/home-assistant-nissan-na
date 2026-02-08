@@ -26,10 +26,11 @@
   "options": {
     "step": {
       "init": {
-        "title": "Nissan NA Options",
+        "title": "Nissan NA Configuration",
+        "description": "Choose a configuration option:",
         "menu_options": {
-          "webhook_config": "Configure Webhooks",
-          "reauth": "Re-authorize Integration"
+          "webhook_config": "⚡ Configure Webhooks",
+          "reauth": "🔑 Re-authorize Integration"
         }
       },
       "webhook_config": {
