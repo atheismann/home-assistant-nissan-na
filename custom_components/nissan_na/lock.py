@@ -27,7 +27,18 @@ class NissanDoorLockEntity(LockEntity):
         self._vehicle = vehicle
         self._client = client
         nickname = getattr(vehicle, "nickname", None)
-        self._attr_name = f"{nickname or vehicle.vin} Door Lock"
+        if nickname:
+            display_name = nickname
+        else:
+            # Use year/make/model if available, otherwise fall back to VIN
+            year = getattr(vehicle, "year", "")
+            make = getattr(vehicle, "make", "")
+            model = getattr(vehicle, "model", "")
+            if year and make and model:
+                display_name = f"{year} {make} {model}"
+            else:
+                display_name = vehicle.vin
+        self._attr_name = f"{display_name} Door Lock"
         self._attr_unique_id = f"{vehicle.vin}_door_lock"
         self._is_locked = None
 

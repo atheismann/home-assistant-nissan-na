@@ -18,6 +18,7 @@ def mock_vehicle():
     vehicle.nickname = "My Nissan"
     vehicle.model = "LEAF"
     vehicle.year = 2023
+    vehicle.make = "Nissan"
     return vehicle
 
 
@@ -141,4 +142,4 @@ def test_sensor_no_nickname(mock_vehicle, mock_vehicle_status):
         mock_vehicle, mock_vehicle_status, "batteryLevel", "Battery Level", "%"
     )
 
-    assert "TEST123VIN" in sensor.name
+    assert "2023 Nissan LEAF" in sensor.name

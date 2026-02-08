@@ -21,6 +21,8 @@ def mock_vehicle():
     vehicle.id = "vehicle-id-123"
     vehicle.nickname = "My Nissan"
     vehicle.model = "LEAF"
+    vehicle.year = 2023
+    vehicle.make = "Nissan"
     return vehicle
 
 
@@ -128,4 +130,4 @@ def test_tracker_no_nickname(mock_vehicle, mock_vehicle_status):
     mock_vehicle.nickname = None
     tracker = NissanVehicleTracker(mock_vehicle, mock_vehicle_status)
 
-    assert "TEST123VIN" in tracker.name
+    assert "2023 Nissan LEAF" in tracker.name

@@ -62,7 +62,18 @@ class NissanGenericSensor(Entity):
         self._status = status
         self._key = key
         nickname = getattr(vehicle, "nickname", None)
-        self._attr_name = f"{nickname or vehicle.vin} {name}"
+        if nickname:
+            display_name = nickname
+        else:
+            # Use year/make/model if available, otherwise fall back to VIN
+            year = getattr(vehicle, "year", "")
+            make = getattr(vehicle, "make", "")
+            model = getattr(vehicle, "model", "")
+            if year and make and model:
+                display_name = f"{year} {make} {model}"
+            else:
+                display_name = vehicle.vin
+        self._attr_name = f"{display_name} {name}"
         self._unit = unit
 
     @property

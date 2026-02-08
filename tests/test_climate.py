@@ -18,6 +18,8 @@ def mock_vehicle():
     vehicle.id = "vehicle-id-123"
     vehicle.nickname = "My Nissan"
     vehicle.model = "LEAF"
+    vehicle.year = 2023
+    vehicle.make = "Nissan"
     return vehicle
 
 
@@ -132,4 +134,4 @@ def test_climate_entity_no_nickname(mock_vehicle, mock_client):
     mock_vehicle.nickname = None
     climate = NissanClimateEntity(mock_vehicle, mock_client)
 
-    assert "TEST123VIN" in climate.name
+    assert "2023 Nissan LEAF" in climate.name

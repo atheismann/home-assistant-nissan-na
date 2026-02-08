@@ -17,6 +17,8 @@ def mock_vehicle():
     vehicle.id = "vehicle-id-123"
     vehicle.nickname = "My Nissan"
     vehicle.model = "LEAF"
+    vehicle.year = 2023
+    vehicle.make = "Nissan"
     return vehicle
 
 
@@ -103,4 +105,4 @@ def test_lock_entity_no_nickname(mock_vehicle, mock_client):
     mock_vehicle.nickname = None
     lock = NissanDoorLockEntity(mock_vehicle, mock_client)
 
-    assert "TEST123VIN" in lock.name
+    assert "2023 Nissan LEAF" in lock.name
