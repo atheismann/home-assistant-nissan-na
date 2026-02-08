@@ -1,5 +1,6 @@
 from homeassistant.components.climate import ClimateEntity
 from homeassistant.components.climate.const import HVACMode
+from homeassistant.const import UnitOfTemperature
 
 from .const import DOMAIN
 
@@ -25,6 +26,8 @@ class NissanClimateEntity(ClimateEntity):
     """
 
     _attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO]
+    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_supported_features = 0
 
     def __init__(self, vehicle, client):
         self._vehicle = vehicle
