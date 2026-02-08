@@ -52,22 +52,22 @@ jobs:
           git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.get_workflow_token.outputs.app-slug }}[bot]@users.noreply.github.com'
 
 
-      # Bump version and create tag
-      - name: Bump version and push tag
-        id: bump
+      # Determine next version (dry run)
+      - name: Determine next version
+        id: determine_version
         uses: mathieudutour/github-tag-action@v6.2
         with:
           github_token: ${{ steps.get_workflow_token.outputs.token }}
           tag_prefix: v
           default_bump: patch
           release_branches: main
-          dry_run: false
+          dry_run: true
 
 
       # Update manifest.json version
       - name: Update manifest.json version
         run: |
-          VERSION=$(echo "${{ steps.bump.outputs.new_tag }}" | sed 's/^v//')
+          VERSION=$(echo "${{ steps.determine_version.outputs.new_tag }}" | sed 's/^v//')
           jq '.version = "'${VERSION}'"' custom_components/nissan_na/manifest.json > tmp.$$.json && mv tmp.$$.json custom_components/nissan_na/manifest.json
 
 
@@ -78,7 +78,7 @@ jobs:
           configuration: .github/changelog-configuration.json
         env:
           GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
-          version: ${{ steps.bump.outputs.new_tag }}
+          version: ${{ steps.determine_version.outputs.new_tag }}
 
 
       # Commit and push CHANGELOG.md and manifest.json
@@ -86,10 +86,22 @@ jobs:
         run: |
           git add CHANGELOG.md
           git add custom_components/nissan_na/manifest.json
-          git commit -m "chore: update CHANGELOG.md and manifest.json for ${{ steps.bump.outputs.new_tag }} [skip ci]" || echo "No changes to commit"
+          git commit -m "chore: update CHANGELOG.md and manifest.json for ${{ steps.determine_version.outputs.new_tag }} [skip ci]" || echo "No changes to commit"
           git push origin HEAD:main
         env:
           GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
+
+
+      # Now create the tag (after files are updated)
+      - name: Create version tag
+        id: bump
+        uses: mathieudutour/github-tag-action@v6.2
+        with:
+          github_token: ${{ steps.get_workflow_token.outputs.token }}
+          tag_prefix: v
+          default_bump: patch
+          release_branches: main
+          dry_run: false
 
 
       # Create GitHub Release
