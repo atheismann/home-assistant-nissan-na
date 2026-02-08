@@ -132,12 +132,14 @@ You can adjust settings after setup:
 ### Menu Options
 
 #### Configure Webhooks
+
 - Set up webhook support for real-time vehicle updates
 - Enter your **Application Management Token** from Smartcar Dashboard
 - View your webhook URL for registering in Smartcar Dashboard
 - Optional but recommended for instant updates and reduced API usage
 
 #### Re-authorize Integration
+
 - Manually refresh OAuth tokens when needed
 - Update permissions when new features are added
 - Typically not needed as tokens refresh automatically
@@ -185,9 +187,11 @@ The integration supports Smartcar webhooks for real-time vehicle updates instead
 4. Select **Configure Webhooks** from the menu
 5. Enter your **Application Management Token**
 6. Note the **Webhook URL** displayed (it will look like):
-   ```
+
+   ```text
    https://your-ha-url/api/webhook/XXXXXXXX
    ```
+
 7. Save the configuration
 
 #### 3. Register Webhook in Smartcar Dashboard
@@ -251,6 +255,7 @@ The integration handles three types of webhook events:
 ### Security
 
 All webhook payloads are verified using HMAC-SHA256 signatures:
+
 - Smartcar signs each webhook with your Application Management Token
 - The integration verifies signatures before processing
 - Invalid signatures are rejected (HTTP 401)
@@ -258,23 +263,27 @@ All webhook payloads are verified using HMAC-SHA256 signatures:
 
 ### Webhook Troubleshooting
 
-**Webhook Not Receiving Data**
+#### Webhook Not Receiving Data
+
 - Verify your HA instance is accessible from the internet
 - Check HTTPS is working with a valid SSL certificate
 - Ensure the webhook URL matches exactly (including the webhook ID)
 - Test with: `curl -k https://your-ha-url/api/webhook/XXXXXXXX` (should return HTTP 200)
 
-**Invalid Signature Errors**
+#### Invalid Signature Errors
+
 - Check Management Token is correctly entered in HA configuration
 - Verify Management Token hasn't been regenerated in Smartcar Dashboard
 - Re-enter your Management Token in Integration > Configure
 
-**Webhook Not Verified**
+#### Webhook Not Verified
+
 - Check Home Assistant logs during webhook creation
 - Ensure VERIFY event was received and processed
 - Delete and re-create webhook in Smartcar Dashboard
 
-**No Real-time Updates**
+#### No Real-time Updates
+
 - Verify webhook signals are properly configured in Smartcar Dashboard
 - Check triggers are set appropriately
 - Make a change to your vehicle (lock/unlock) to test
@@ -323,8 +332,8 @@ When a permission is not supported by your vehicle, the corresponding entities s
 
 These permissions are mandatory for basic integration functionality:
 
-| Permission | Purpose | Entities Created |
-|-----------|---------|------------------|
+| Permission                       | Purpose                              | Entities Created         |
+| -------------------------------- | ------------------------------------ | ------------------------ |
 | `required:read_vehicle_info` | Vehicle identification and details | Device info, VIN sensor |
 | `required:read_location` | GPS location tracking | Device tracker |
 | `required:read_odometer` | Mileage tracking | Odometer sensor |
@@ -334,9 +343,9 @@ These permissions are mandatory for basic integration functionality:
 
 Enhanced permissions for electric and hybrid vehicles:
 
-| Permission | Purpose |
-|-----------|---------|
-| `read_battery` | Battery level monitoring |
+| Permission              | Purpose                        |
+| ----------------------- | ------------------------------ |
+| `read_battery`          | Battery level monitoring       |
 | `read_charge` | Charging status |
 | `control_charge` | Start/stop charging |
 | `read_charge_locations` | Charging location history |
@@ -346,8 +355,8 @@ Enhanced permissions for electric and hybrid vehicles:
 
 Standard vehicle monitoring capabilities:
 
-| Permission | Purpose |
-|-----------|---------|
+| Permission              | Purpose                        |
+| ----------------------- | ------------------------------ |
 | `read_fuel` | Fuel level for gas vehicles |
 | `read_vin` | Vehicle identification number |
 | `read_security` | Door lock status |
@@ -361,8 +370,8 @@ Standard vehicle monitoring capabilities:
 
 HVAC system monitoring and control:
 
-| Permission | Purpose |
-|-----------|---------|
+| Permission        | Purpose                   |
+| ----------------- | ------------------------- |
 | `read_climate` | Climate system status |
 | `control_climate` | Remote climate control |
 
@@ -370,8 +379,8 @@ HVAC system monitoring and control:
 
 Maintenance and health monitoring:
 
-| Permission | Purpose |
-|-----------|---------|
+| Permission                      | Purpose                            |
+| ------------------------------- | ---------------------------------- |
 | `read_alerts` | Vehicle warnings and alerts |
 | `read_diagnostics` | System diagnostics and DTCs |
 | `read_extended_vehicle_info` | Additional vehicle configuration |
@@ -382,20 +391,22 @@ Maintenance and health monitoring:
 
 Advanced remote control capabilities:
 
-| Permission | Purpose |
-|-----------|---------|
+| Permission           | Purpose                          |
+| -------------------- | -------------------------------- |
 | `control_navigation` | Send destinations to vehicle |
 | `control_trunk` | Remote trunk/frunk control |
 
 ### Why Request All Permissions?
 
 **Maximize Compatibility**: By requesting comprehensive permissions upfront:
+
 - ✅ Users with newer vehicles get all available features automatically
 - ✅ No need to reconfigure when vehicle capabilities are updated
 - ✅ Ensures compatibility across different Nissan models
 - ✅ Future-proofs the integration as Smartcar adds support for more features
 
-**User Privacy**: 
+**User Privacy**:
+
 - Permissions that aren't supported by your vehicle are never granted
 - Even if granted, the integration only uses permissions to retrieve/control vehicle features
 - No data is shared with third parties beyond Smartcar's API
@@ -408,29 +419,30 @@ The integration creates multiple entities for your vehicle. **Entity availabilit
 
 ### Lock Entity
 
-| Entity | Description | Requirements |
-|--------|-------------|--------------|
+| Entity         | Description               | Requirements               |
+| -------------- | ------------------------- | -------------------------- |
 | **Door Lock** | Lock/unlock vehicle doors | `control_security` permission |
 
 ### Device Tracker
 
-| Entity | Description | Requirements |
-|--------|-------------|--------------|
+| Entity               | Description                    | Requirements           |
+| -------------------- | ------------------------------ | ---------------------- |
 | **Vehicle Location** | GPS location of your vehicle | `read_location` permission |
 
 ### Climate Entity
 
-| Entity | Description | Requirements |
-|--------|-------------|--------------|
+| Entity              | Description                         | Requirements               |
+| ------------------- | ----------------------------------- | -------------------------- |
 | **Climate Control** | Start/stop climate system (HVAC) | `control_climate` permission |
-| | **Note**: Uses direct Smartcar API calls. Climate control may not be available on all vehicle models. HVAC modes (HEAT/COOL/AUTO) all start the climate system; only OFF stops it. |
+
+**Note**: Uses direct Smartcar API calls. Climate control may not be available on all vehicle models. HVAC modes (HEAT/COOL/AUTO) all start the climate system; only OFF stops it.
 
 ### Sensors
 
 #### Electric Vehicle Sensors
 
-| Sensor | Description | Unit | Requirements |
-|--------|-------------|------|--------------|
+| Sensor             | Description                          | Unit   | Requirements   |
+| ------------------ | ------------------------------------ | ------ | -------------- |
 | **Battery Level** | Current battery charge percentage | % | `read_battery` |
 | **Battery Capacity** | Total battery capacity | kWh | `read_battery` |
 | **Charging Status** | Whether vehicle is charging | - | `read_charge` |
@@ -439,8 +451,8 @@ The integration creates multiple entities for your vehicle. **Entity availabilit
 
 #### General Vehicle Sensors
 
-| Sensor | Description | Unit | Requirements |
-|--------|-------------|------|--------------|
+| Sensor            | Description                       | Unit   | Requirements      |
+| ----------------- | --------------------------------- | ------ | ----------------- |
 | **Odometer** | Total vehicle mileage | km/mi | `read_odometer` |
 | **Fuel Level** | Fuel tank level (gas vehicles) | % | `read_fuel` |
 | **Tire Pressure** | Individual tire pressures | kPa/PSI | `read_tires` |
@@ -454,12 +466,14 @@ The integration creates multiple entities for your vehicle. **Entity availabilit
 ### Important Notes
 
 ⚠️ **Vehicle Compatibility**: The actual entities and sensors that appear depend on:
+
 - Your vehicle's year and model
 - Whether your vehicle is electric (EV/PHEV) or gas-powered
 - What data your vehicle manufacturer makes available through Smartcar
 - The Smartcar API compatibility for your specific vehicle
 
 🔍 **Missing Entities?** If expected sensors don't appear:
+
 - Check [Smartcar's compatibility page](https://smartcar.com/docs/api-reference/compatibility/) for your vehicle
 - Verify your vehicle supports the feature (e.g., only EVs have battery sensors)
 - Some features may require specific trim levels or packages
@@ -474,7 +488,9 @@ The integration creates multiple entities for your vehicle. **Entity availabilit
 Call these services from automations or the Developer Tools:
 
 ### `nissan_na.lock_doors`
+
 Lock the vehicle doors.
+
 ```yaml
 service: nissan_na.lock_doors
 data:
@@ -482,7 +498,9 @@ data:
 ```
 
 ### `nissan_na.unlock_doors`
+
 Unlock the vehicle doors.
+
 ```yaml
 service: nissan_na.unlock_doors
 data:
@@ -490,7 +508,9 @@ data:
 ```
 
 ### `nissan_na.start_charge`
+
 Start charging the vehicle (EVs only).
+
 ```yaml
 service: nissan_na.start_charge
 data:
@@ -498,7 +518,9 @@ data:
 ```
 
 ### `nissan_na.stop_charge`
+
 Stop charging the vehicle (EVs only).
+
 ```yaml
 service: nissan_na.stop_charge
 data:
@@ -506,7 +528,9 @@ data:
 ```
 
 ### `nissan_na.refresh_status`
+
 Force a refresh of vehicle status.
+
 ```yaml
 service: nissan_na.refresh_status
 data:
@@ -522,7 +546,9 @@ data:
 The integration requests comprehensive permissions to maximize compatibility, but actual feature availability varies by vehicle.
 
 ### Nissan Leaf (Electric)
+
 ✅ **Highly Compatible** - All EV-related permissions supported
+
 - Full battery monitoring and control
 - Charging status and control
 - Climate control (pre-conditioning)
@@ -531,7 +557,9 @@ The integration requests comprehensive permissions to maximize compatibility, bu
 - Service alerts
 
 ### Nissan Ariya (Electric)
+
 ✅ **Highly Compatible** - Latest EV technology
+
 - Enhanced battery management
 - Bidirectional charging information
 - Advanced climate controls
@@ -539,7 +567,9 @@ The integration requests comprehensive permissions to maximize compatibility, bu
 - Service history integration
 
 ### Nissan Altima / Maxima / Sentra (Gas)
+
 ⚠️ **Partial Compatibility** - Connected services required
+
 - Basic vehicle location
 - Door lock/unlock
 - Odometer reading
@@ -548,7 +578,9 @@ The integration requests comprehensive permissions to maximize compatibility, bu
 - Limited climate control on newer models
 
 ### Nissan Rogue / Pathfinder / Murano (Gas/Hybrid)
+
 ⚠️ **Variable Compatibility** - Depends on year and trim
+
 - Connected services required
 - Hybrid models may support battery monitoring
 - Advanced trims have more features
@@ -561,6 +593,7 @@ Visit https://smartcar.com/docs/api-reference/compatibility/ to check specific f
 
 **Method 2: Try the Integration**  
 The safest approach is to install and configure the integration:
+
 1. During OAuth authorization, Smartcar will only request permissions your vehicle supports
 2. After setup, only compatible entities will appear in Home Assistant
 3. Missing entities indicate unsupported features
@@ -573,32 +606,38 @@ Log in to your Smartcar Dashboard at https://dashboard.smartcar.com to see which
 ## Troubleshooting
 
 ### OAuth Authentication Issues
+
 - Ensure **Redirect URI** in Smartcar is set to: `https://my.home-assistant.io/redirect/oauth`
 - Verify your **Client ID** and **Client Secret** are correct in Application Credentials
 - Check that your Home Assistant instance is accessible externally
 - Try removing and re-adding the application credentials if authentication fails
 
 ### Application Credentials Not Found
+
 - Go to **Settings > Devices & Services > Application Credentials**
 - Add credentials for **Nissan North America (Smartcar)**
 - You must add credentials before adding the integration
 
 ### No Vehicles Found
+
 - Verify your Nissan account has vehicles registered
 - Check [Smartcar compatibility](https://smartcar.com/docs/api-reference/compatibility/)
 - Ensure your vehicle supports connected services
 - Verify NissanConnect subscription is active
 
 ### Token Expired Errors
+
 - The integration automatically refreshes tokens
 - If persistent, try removing and re-adding the integration
 
 ### Rate Limiting
+
 - Smartcar has API rate limits (varies by plan)
 - Increase your update interval if you see rate limit errors
 - Consider using webhooks to reduce API calls
 
 ### Services Not Working
+
 - **Common Issue**: Using VIN instead of vehicle_id
 - **Solution**: Get vehicle_id from entity attributes and use it in service calls
 
@@ -609,6 +648,7 @@ Log in to your Smartcar Dashboard at https://dashboard.smartcar.com to see which
 ### Why don't I see all the sensors listed in the documentation?
 
 Not all Nissan vehicles support all features. The sensors that appear depend on:
+
 - Your vehicle's year, make, and model
 - Your vehicle's trim level and optional packages
 - Whether your vehicle is electric or gas-powered
@@ -619,6 +659,7 @@ Check [Smartcar's compatibility page](https://smartcar.com/docs/api-reference/co
 ### My vehicle isn't connecting or shows errors
 
 Try these troubleshooting steps:
+
 1. Verify your vehicle is compatible with Smartcar
 2. Check that your Nissan account credentials are correct
 3. Ensure your vehicle's telematics service is active and paid up
@@ -632,6 +673,7 @@ No. Remote engine start/stop is not currently available through the Smartcar API
 ### Why is the battery/charging information missing? I have an electric Nissan Leaf/Ariya
 
 Make sure:
+
 1. Your vehicle is actually connected to Smartcar (check the Smartcar dashboard)
 2. The `read_battery` and `read_charge` permissions were granted during OAuth
 3. Your vehicle's year/model supports these features in Smartcar
@@ -650,6 +692,7 @@ Yes! Each vehicle connected to your Nissan/Smartcar account will automatically a
 ### Does this work with Infiniti vehicles?
 
 This integration is specifically for Nissan vehicles in North America. However, since Infiniti is Nissan's luxury brand and shares technology, it may work with some Infiniti models. You would need to:
+
 1. Try connecting your Infiniti through Smartcar
 2. Select "Nissan" or "Infiniti" (if available) during OAuth
 3. Check Smartcar's compatibility list for your specific Infiniti model
@@ -657,6 +700,7 @@ This integration is specifically for Nissan vehicles in North America. However, 
 ### What's the difference between this and the official Nissan integration?
 
 This integration uses Smartcar's API instead of Nissan's direct API:
+
 - **Smartcar**: Actively maintained, standardized API, broad vehicle support, requires paid Smartcar account for heavy usage
 - **Official Nissan**: Direct Nissan API access, may have different features, depends on Nissan's API availability
 
@@ -665,6 +709,7 @@ Choose based on your needs and which API works better for your vehicle.
 ### Why does the integration show my car is X km/miles away from home?
 
 The GPS location sensor shows your vehicle's last reported location. If the location seems incorrect:
+
 - The vehicle may have moved since the last update
 - GPS accuracy varies (typically 10-50 meters)
 - The vehicle may be in a garage or area with poor GPS signal
@@ -683,6 +728,7 @@ Smartcar offers a free developer tier. Check [Smartcar pricing](https://smartcar
 ## Automation Examples
 
 ### Lock doors when leaving home
+
 ```yaml
 automation:
   - alias: "Lock Nissan when leaving"
@@ -698,6 +744,7 @@ automation:
 ```
 
 ### Notify when charging complete
+
 ```yaml
 automation:
   - alias: "Nissan charging complete"
@@ -712,6 +759,7 @@ automation:
 ```
 
 ### Start climate before departure
+
 ```yaml
 automation:
   - alias: "Pre-condition Nissan"
@@ -731,6 +779,7 @@ automation:
 ```
 
 ### Alert on low battery
+
 ```yaml
 automation:
   - alias: "Low battery alert"
@@ -754,6 +803,7 @@ automation:
 - **Home Assistant Forums**: [community.home-assistant.io](https://community.home-assistant.io/)
 
 **Need help?** Open a GitHub issue with:
+
 - Home Assistant version
 - Vehicle make/model/year
 - Error messages from logs

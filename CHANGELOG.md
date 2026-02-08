@@ -85,6 +85,7 @@ All notable changes to this project will be documented in this file.
 ### Migration Guide
 
 **For Existing Users:**
+
 1. Note your current Smartcar Client ID and Client Secret
 2. Remove existing integration instance
 3. Update Smartcar app redirect URI to: `https://my.home-assistant.io/redirect/oauth`
@@ -94,7 +95,7 @@ All notable changes to this project will be documented in this file.
 
 ## [0.0.1] - 2026-01-02
 
-### Added
+### Initial Release
 
 - Initial release of the Nissan North America Home Assistant integration.
 - Support for vehicle sensors, lock, climate, and device tracker.
