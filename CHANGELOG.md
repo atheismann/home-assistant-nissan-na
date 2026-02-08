@@ -28,6 +28,11 @@ All notable changes to this project will be documented in this file.
   - Added control_navigation for sending destinations to vehicle
   - Added control_trunk for remote trunk/frunk control
   - Total of 32 permissions requested to maximize feature availability
+- **Climate control platform**
+  - Supports start/stop HVAC system via climate entity
+  - Uses direct Smartcar REST API calls (not available in Python SDK)
+  - Includes HEAT, COOL, AUTO, and OFF modes
+  - Temperature control not supported (API limitation)
 
 ### Fixed
 

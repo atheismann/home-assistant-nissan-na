@@ -76,7 +76,7 @@ async def test_set_hvac_mode_off(mock_vehicle, mock_client):
 
     await climate.async_set_hvac_mode(HVACMode.OFF)
 
-    mock_client.stop_climate.assert_called_once_with(mock_vehicle.vin)
+    mock_client.stop_climate.assert_called_once_with(mock_vehicle.id)
     assert climate.hvac_mode == HVACMode.OFF
     assert climate.async_write_ha_state.called
 
@@ -88,7 +88,7 @@ async def test_set_hvac_mode_heat(mock_vehicle, mock_client):
 
     await climate.async_set_hvac_mode(HVACMode.HEAT)
 
-    mock_client.start_climate.assert_called_once_with(mock_vehicle.vin)
+    mock_client.start_climate.assert_called_once_with(mock_vehicle.id)
     assert climate.hvac_mode == HVACMode.HEAT
     assert climate.async_write_ha_state.called
 
@@ -100,7 +100,7 @@ async def test_set_hvac_mode_cool(mock_vehicle, mock_client):
 
     await climate.async_set_hvac_mode(HVACMode.COOL)
 
-    mock_client.start_climate.assert_called_once_with(mock_vehicle.vin)
+    mock_client.start_climate.assert_called_once_with(mock_vehicle.id)
     assert climate.hvac_mode == HVACMode.COOL
     assert climate.async_write_ha_state.called
 
@@ -112,7 +112,7 @@ async def test_set_hvac_mode_auto(mock_vehicle, mock_client):
 
     await climate.async_set_hvac_mode(HVACMode.AUTO)
 
-    mock_client.start_climate.assert_called_once_with(mock_vehicle.vin)
+    mock_client.start_climate.assert_called_once_with(mock_vehicle.id)
     assert climate.hvac_mode == HVACMode.AUTO
     assert climate.async_write_ha_state.called
 

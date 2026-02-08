@@ -20,6 +20,15 @@ class NissanClimateEntity(ClimateEntity):
     """
     Climate entity representing the vehicle's climate control.
 
+    This entity uses direct Smartcar API calls for climate control since
+    the Python SDK does not expose these endpoints. Supports starting and
+    stopping the vehicle's HVAC system.
+
+    Note:
+        - HEAT, COOL, and AUTO modes all start the climate system
+        - Only OFF mode stops the climate system
+        - Temperature control is not supported by Smartcar API
+
     Args:
         vehicle: Vehicle object.
         client: NissanNAApiClient instance.
@@ -27,7 +36,6 @@ class NissanClimateEntity(ClimateEntity):
 
     _attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT, HVACMode.COOL, HVACMode.AUTO]
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_supported_features = 0
 
     def __init__(self, vehicle, client):
         self._vehicle = vehicle
@@ -43,9 +51,9 @@ class NissanClimateEntity(ClimateEntity):
         Starts or stops climate based on the selected mode.
         """
         if hvac_mode == HVACMode.OFF:
-            await self._client.stop_climate(self._vehicle.vin)
+            await self._client.stop_climate(self._vehicle.id)
         else:
-            await self._client.start_climate(self._vehicle.vin)
+            await self._client.start_climate(self._vehicle.id)
         self._hvac_mode = hvac_mode
         self.async_write_ha_state()
 

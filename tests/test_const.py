@@ -28,6 +28,8 @@ class TestConstants(unittest.TestCase):
         self.assertEqual(len(const.PLATFORMS), 4)
         self.assertIn("sensor", const.PLATFORMS)
         self.assertIn("lock", const.PLATFORMS)
+        self.assertIn("device_tracker", const.PLATFORMS)
+        self.assertIn("climate", const.PLATFORMS)
         self.assertIn("climate", const.PLATFORMS)
         self.assertIn("device_tracker", const.PLATFORMS)
 

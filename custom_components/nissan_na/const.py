@@ -12,4 +12,4 @@ CONF_CODE = "code"
 CONF_WEBHOOK_ID = "webhook_id"
 CONF_MANAGEMENT_TOKEN = "management_token"
 
-PLATFORMS = ["sensor", "lock", "climate", "device_tracker"]
+PLATFORMS = ["sensor", "lock", "device_tracker", "climate"]

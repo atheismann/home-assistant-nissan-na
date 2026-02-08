@@ -380,7 +380,7 @@ The integration creates multiple entities for your vehicle. **Entity availabilit
 | Entity | Description | Requirements |
 |--------|-------------|--------------|
 | **Climate Control** | Start/stop climate system (HVAC) | `control_climate` permission |
-| | **Note**: Climate control may not be available on all vehicle models |
+| | **Note**: Uses direct Smartcar API calls. Climate control may not be available on all vehicle models. HVAC modes (HEAT/COOL/AUTO) all start the climate system; only OFF stops it. |
 
 ### Sensors
 

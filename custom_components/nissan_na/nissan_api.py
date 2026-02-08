@@ -12,6 +12,7 @@ Smartcar API documentation: https://smartcar.com/docs/
 import asyncio
 from typing import Any, Dict, List, Optional
 
+import aiohttp
 import smartcar
 from pydantic import BaseModel
 
@@ -78,7 +79,14 @@ class SmartcarApiClient:
         unlock_doors: Unlock the vehicle doors.
         start_charge: Start charging the vehicle.
         stop_charge: Stop charging the vehicle.
+        start_climate: Start climate control (direct API call).
+        stop_climate: Stop climate control (direct API call).
+        get_climate_status: Get climate status (direct API call).
         disconnect: Disconnect a vehicle from Smartcar.
+
+    Note:
+        Climate control methods use direct HTTP requests to Smartcar API
+        since they are not exposed in the Python SDK.
     """
 
     def __init__(
@@ -108,6 +116,11 @@ class SmartcarApiClient:
         self.access_token = access_token
         self.refresh_token = refresh_token
         self._vehicles_cache: Dict[str, smartcar.Vehicle] = {}
+        self._api_base_url = (
+            "https://api.smartcar.com/v2.0"
+            if not test_mode
+            else "https://api.smartcar.com/v2.0"
+        )
 
     def get_auth_url(self, state: Optional[str] = None) -> str:
         """
@@ -473,6 +486,68 @@ class SmartcarApiClient:
         vehicle = self._get_vehicle(vehicle_id)
         result = await asyncio.to_thread(vehicle.stop_charge)
         return _namedtuple_to_dict(result)
+
+    async def start_climate(self, vehicle_id: str) -> Dict[str, Any]:
+        """
+        Start the vehicle's climate control system.
+
+        Uses direct API call since Python SDK doesn't expose this endpoint.
+
+        Args:
+            vehicle_id: Smartcar vehicle ID.
+
+        Returns:
+            dict: API response with action status.
+        """
+        url = f"{self._api_base_url}/vehicles/{vehicle_id}/climate"
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        data = {"action": "START"}
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=data) as response:
+                response.raise_for_status()
+                return await response.json()
+
+    async def stop_climate(self, vehicle_id: str) -> Dict[str, Any]:
+        """
+        Stop the vehicle's climate control system.
+
+        Uses direct API call since Python SDK doesn't expose this endpoint.
+
+        Args:
+            vehicle_id: Smartcar vehicle ID.
+
+        Returns:
+            dict: API response with action status.
+        """
+        url = f"{self._api_base_url}/vehicles/{vehicle_id}/climate"
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+        data = {"action": "STOP"}
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(url, headers=headers, json=data) as response:
+                response.raise_for_status()
+                return await response.json()
+
+    async def get_climate_status(self, vehicle_id: str) -> Dict[str, Any]:
+        """
+        Get the vehicle's climate control status.
+
+        Uses direct API call since Python SDK doesn't expose this endpoint.
+
+        Args:
+            vehicle_id: Smartcar vehicle ID.
+
+        Returns:
+            dict: Climate status information.
+        """
+        url = f"{self._api_base_url}/vehicles/{vehicle_id}/climate"
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers) as response:
+                response.raise_for_status()
+                return await response.json()
 
     async def disconnect(self, vehicle_id: str) -> bool:
         """
