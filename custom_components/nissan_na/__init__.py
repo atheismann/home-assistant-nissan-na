@@ -10,7 +10,7 @@ from homeassistant.components import webhook as ha_webhook
 from homeassistant import config_entries
 from homeassistant.const import CONF_WEBHOOK_ID
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import config_entry_oauth2_flow
+from homeassistant.helpers import config_entry_oauth2_flow, device_registry as dr
 from homeassistant.helpers.event import async_track_time_interval
 
 from .api import SmartcarOAuth2Implementation
@@ -185,6 +185,33 @@ async def async_setup_entry(
         vehicles = await client.get_vehicle_list()
         hass.data[DOMAIN][config_entry.entry_id]["vehicles"] = vehicles
         _LOGGER.info("Found %d vehicle(s)", len(vehicles))
+        
+        # Create device for each vehicle
+        device_registry = dr.async_get(hass)
+        for vehicle in vehicles:
+            # Get vehicle info for device details
+            try:
+                info = await client.get_vehicle_info(vehicle.id)
+                make = info.get("make", "Nissan")
+                model = info.get("model", "Unknown")
+                year = info.get("year", "")
+            except Exception:
+                make = "Nissan"
+                model = "Vehicle"
+                year = ""
+            
+            device_registry.async_get_or_create(
+                config_entry_id=config_entry.entry_id,
+                identifiers={(DOMAIN, vehicle.vin)},
+                manufacturer=make,
+                model=f"{year} {model}" if year else model,
+                name=f"{year} {make} {model}" if year else f"{make} {model}",
+                sw_version=None,
+            )
+            _LOGGER.info(
+                "Created device for vehicle: %s %s %s (VIN: %s)",
+                year, make, model, vehicle.vin
+            )
     except Exception as err:
         error_message = str(err)
         _LOGGER.error("Failed to get vehicle list: %s", error_message)

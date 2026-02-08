@@ -10,7 +10,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     data = hass.data[DOMAIN][config_entry.entry_id]
     client = data["client"]
     vehicles = await client.get_vehicle_list()
-    entities = [NissanDoorLockEntity(vehicle, client) for vehicle in vehicles]
+    entities = [NissanDoorLockEntity(vehicle, client, config_entry.entry_id) for vehicle in vehicles]
     async_add_entities(entities)
 
 
@@ -21,11 +21,13 @@ class NissanDoorLockEntity(LockEntity):
     Args:
         vehicle: Vehicle object.
         client: NissanNAApiClient instance.
+        entry_id: Config entry ID for device linking.
     """
 
-    def __init__(self, vehicle, client):
+    def __init__(self, vehicle, client, entry_id):
         self._vehicle = vehicle
         self._client = client
+        self._entry_id = entry_id
         nickname = getattr(vehicle, "nickname", None)
         if nickname:
             display_name = nickname
@@ -58,3 +60,11 @@ class NissanDoorLockEntity(LockEntity):
     def is_locked(self):
         """Return the current lock state."""
         return self._is_locked
+
+    @property
+    def device_info(self):
+        """Return device information to link this entity to a device."""
+        return {
+            "identifiers": {(DOMAIN, self._vehicle.vin)},
+            "via_device": (DOMAIN, self._entry_id),
+        }

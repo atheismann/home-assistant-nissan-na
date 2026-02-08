@@ -13,7 +13,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     entities = []
     for vehicle in vehicles:
         status = await client.get_vehicle_status(vehicle.vin)
-        entities.append(NissanVehicleTracker(vehicle, status))
+        entities.append(NissanVehicleTracker(vehicle, status, config_entry.entry_id))
     async_add_entities(entities)
 
 
@@ -24,11 +24,13 @@ class NissanVehicleTracker(TrackerEntity):
     Args:
         vehicle: Vehicle object.
         status: Status dictionary for the vehicle.
+        entry_id: Config entry ID for device linking.
     """
 
-    def __init__(self, vehicle, status):
+    def __init__(self, vehicle, status, entry_id):
         self._vehicle = vehicle
         self._status = status
+        self._entry_id = entry_id
         nickname = getattr(vehicle, "nickname", None)
         if nickname:
             display_name = nickname
@@ -60,3 +62,11 @@ class NissanVehicleTracker(TrackerEntity):
     def source_type(self):
         """Return the source type (GPS)."""
         return SourceType.GPS
+
+    @property
+    def device_info(self):
+        """Return device information to link this entity to a device."""
+        return {
+            "identifiers": {(DOMAIN, self._vehicle.vin)},
+            "via_device": (DOMAIN, self._entry_id),
+        }

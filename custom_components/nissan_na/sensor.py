@@ -20,26 +20,26 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         entities.extend(
             [
                 NissanGenericSensor(
-                    vehicle, status, "batteryLevel", "Battery Level", "%"
+                    vehicle, status, "batteryLevel", "Battery Level", "%", config_entry.entry_id
                 ),
                 NissanGenericSensor(
-                    vehicle, status, "chargingStatus", "Charging Status", None
+                    vehicle, status, "chargingStatus", "Charging Status", None, config_entry.entry_id
                 ),
-                NissanGenericSensor(vehicle, status, "plugStatus", "Plug Status", None),
-                NissanGenericSensor(vehicle, status, "odometer", "Odometer", "km"),
-                NissanGenericSensor(vehicle, status, "range", "Range", "km"),
+                NissanGenericSensor(vehicle, status, "plugStatus", "Plug Status", None, config_entry.entry_id),
+                NissanGenericSensor(vehicle, status, "odometer", "Odometer", "km", config_entry.entry_id),
+                NissanGenericSensor(vehicle, status, "range", "Range", "km", config_entry.entry_id),
                 NissanGenericSensor(
-                    vehicle, status, "tirePressure", "Tire Pressure", "kPa"
+                    vehicle, status, "tirePressure", "Tire Pressure", "kPa", config_entry.entry_id
                 ),
-                NissanGenericSensor(vehicle, status, "doorStatus", "Door Status", None),
+                NissanGenericSensor(vehicle, status, "doorStatus", "Door Status", None, config_entry.entry_id),
                 NissanGenericSensor(
-                    vehicle, status, "windowStatus", "Window Status", None
+                    vehicle, status, "windowStatus", "Window Status", None, config_entry.entry_id
                 ),
-                NissanGenericSensor(vehicle, status, "lastUpdate", "Last Update", None),
+                NissanGenericSensor(vehicle, status, "lastUpdate", "Last Update", None, config_entry.entry_id),
                 NissanGenericSensor(
-                    vehicle, status, "climateStatus", "Climate Status", None
+                    vehicle, status, "climateStatus", "Climate Status", None, config_entry.entry_id
                 ),
-                NissanGenericSensor(vehicle, status, "location", "Location", None),
+                NissanGenericSensor(vehicle, status, "location", "Location", None, config_entry.entry_id),
             ]
         )
     async_add_entities(entities)
@@ -55,12 +55,14 @@ class NissanGenericSensor(Entity):
         key: Key in the status dict to expose as a sensor.
         name: Human-readable name for the sensor.
         unit: Unit of measurement (if any).
+        entry_id: Config entry ID for device linking.
     """
 
-    def __init__(self, vehicle, status, key, name, unit):
+    def __init__(self, vehicle, status, key, name, unit, entry_id):
         self._vehicle = vehicle
         self._status = status
         self._key = key
+        self._entry_id = entry_id
         nickname = getattr(vehicle, "nickname", None)
         if nickname:
             display_name = nickname
@@ -98,3 +100,11 @@ class NissanGenericSensor(Entity):
     def unit_of_measurement(self):
         """Return the unit of measurement for the sensor, if any."""
         return self._unit
+
+    @property
+    def device_info(self):
+        """Return device information to link this entity to a device."""
+        return {
+            "identifiers": {(DOMAIN, self._vehicle.vin)},
+            "via_device": (DOMAIN, self._entry_id),
+        }
