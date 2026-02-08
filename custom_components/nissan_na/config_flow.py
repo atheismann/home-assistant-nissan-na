@@ -101,9 +101,9 @@ class OAuth2FlowHandler(
         # Check if this is a reauth flow
         if self.source == config_entries.SOURCE_REAUTH:
             # Update existing entry with new tokens
-            entry = await self.async_set_unique_id(self.unique_id)
-            self.hass.config_entries.async_update_entry(entry, data=data)
-            await self.hass.config_entries.async_reload(entry.entry_id)
+            reauth_entry = self._get_reauth_entry()
+            self.hass.config_entries.async_update_entry(reauth_entry, data=data)
+            await self.hass.config_entries.async_reload(reauth_entry.entry_id)
             return self.async_abort(reason="reauth_successful")
 
         # Create new config entry
