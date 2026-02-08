@@ -29,10 +29,12 @@
         "title": "Webhook Configuration",
         "description": "{webhook_info}",
         "data": {
-          "management_token": "Application Management Token (optional)"
+          "management_token": "Application Management Token (optional)",
+          "trigger_reauth": "Re-authorize Integration"
         },
         "data_description": {
-          "management_token": "Required for webhook support. Get this from your Smartcar Dashboard."
+          "management_token": "Required for webhook support. Get this from your Smartcar Dashboard.",
+          "trigger_reauth": "Check this to re-authorize and grant updated permissions"
         }
       }
     }

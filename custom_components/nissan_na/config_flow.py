@@ -130,6 +130,15 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> dict:
         """Manage the webhook options."""
         if user_input is not None:
+            # Check if user requested reauth
+            if user_input.get("trigger_reauth"):
+                # Trigger reauth flow
+                return self.hass.config_entries.flow.async_init(
+                    DOMAIN,
+                    context={"source": config_entries.SOURCE_REAUTH},
+                    data=self.config_entry.data,
+                )
+            
             # Update the config entry data with management token
             new_data = {**self.config_entry.data}
             if user_input.get(CONF_MANAGEMENT_TOKEN):
@@ -152,6 +161,7 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
                         CONF_MANAGEMENT_TOKEN,
                         description={"suggested_value": current_token},
                     ): str,
+                    vol.Optional("trigger_reauth", default=False): bool,
                 }
             ),
             description_placeholders={
@@ -165,7 +175,9 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
                     "3. Configure this webhook URL in your Smartcar "
                     f"Dashboard: {webhook_url}\n\n"
                     "Your webhook URL will be automatically registered "
-                    "once you save."
+                    "once you save.\n\n"
+                    "Check 'Re-authorize Integration' below if you need to "
+                    "grant additional permissions or update your authorization."
                 )
             },
         )
