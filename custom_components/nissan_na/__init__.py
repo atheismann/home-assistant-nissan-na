@@ -185,7 +185,7 @@ async def async_setup_entry(
         vehicles = await client.get_vehicle_list()
         hass.data[DOMAIN][config_entry.entry_id]["vehicles"] = vehicles
         _LOGGER.info("Found %d vehicle(s)", len(vehicles))
-        
+
         # Create device for each vehicle
         device_registry = dr.async_get(hass)
         for vehicle in vehicles:
@@ -199,7 +199,7 @@ async def async_setup_entry(
                 make = "Nissan"
                 model = "Vehicle"
                 year = ""
-            
+
             device_registry.async_get_or_create(
                 config_entry_id=config_entry.entry_id,
                 identifiers={(DOMAIN, vehicle.vin)},
@@ -210,7 +210,10 @@ async def async_setup_entry(
             )
             _LOGGER.info(
                 "Created device for vehicle: %s %s %s (VIN: %s)",
-                year, make, model, vehicle.vin
+                year,
+                make,
+                model,
+                vehicle.vin,
             )
     except Exception as err:
         error_message = str(err)

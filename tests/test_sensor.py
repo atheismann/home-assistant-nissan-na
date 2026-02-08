@@ -69,7 +69,12 @@ async def test_async_setup_entry(hass: HomeAssistant, mock_client, mock_vehicle)
 def test_sensor_battery_level(mock_vehicle, mock_vehicle_status):
     """Test battery level sensor."""
     sensor = NissanGenericSensor(
-        mock_vehicle, mock_vehicle_status, "batteryLevel", "Battery Level", "%"
+        mock_vehicle,
+        mock_vehicle_status,
+        "batteryLevel",
+        "Battery Level",
+        "%",
+        "test_entry",
     )
 
     assert sensor.state == 85
@@ -81,7 +86,12 @@ def test_sensor_battery_level(mock_vehicle, mock_vehicle_status):
 def test_sensor_charging_status(mock_vehicle, mock_vehicle_status):
     """Test charging status sensor."""
     sensor = NissanGenericSensor(
-        mock_vehicle, mock_vehicle_status, "chargingStatus", "Charging Status", None
+        mock_vehicle,
+        mock_vehicle_status,
+        "chargingStatus",
+        "Charging Status",
+        None,
+        "test_entry",
     )
 
     assert sensor.state == "Charging"
@@ -92,7 +102,7 @@ def test_sensor_charging_status(mock_vehicle, mock_vehicle_status):
 def test_sensor_location(mock_vehicle, mock_vehicle_status):
     """Test location sensor."""
     sensor = NissanGenericSensor(
-        mock_vehicle, mock_vehicle_status, "location", "Location", None
+        mock_vehicle, mock_vehicle_status, "location", "Location", None, "test_entry"
     )
 
     assert sensor.state == "37.7749,-122.4194"
@@ -102,7 +112,9 @@ def test_sensor_location(mock_vehicle, mock_vehicle_status):
 def test_sensor_location_missing(mock_vehicle):
     """Test location sensor with missing location data."""
     status = {"location": None}
-    sensor = NissanGenericSensor(mock_vehicle, status, "location", "Location", None)
+    sensor = NissanGenericSensor(
+        mock_vehicle, status, "location", "Location", None, "test_entry"
+    )
 
     assert sensor.state is None
 
@@ -110,7 +122,9 @@ def test_sensor_location_missing(mock_vehicle):
 def test_sensor_location_incomplete(mock_vehicle):
     """Test location sensor with incomplete location data."""
     status = {"location": {"lat": 37.7749}}
-    sensor = NissanGenericSensor(mock_vehicle, status, "location", "Location", None)
+    sensor = NissanGenericSensor(
+        mock_vehicle, status, "location", "Location", None, "test_entry"
+    )
 
     assert sensor.state is None
 
@@ -118,7 +132,7 @@ def test_sensor_location_incomplete(mock_vehicle):
 def test_sensor_odometer(mock_vehicle, mock_vehicle_status):
     """Test odometer sensor."""
     sensor = NissanGenericSensor(
-        mock_vehicle, mock_vehicle_status, "odometer", "Odometer", "km"
+        mock_vehicle, mock_vehicle_status, "odometer", "Odometer", "km", "test_entry"
     )
 
     assert sensor.state == 15000
@@ -129,7 +143,7 @@ def test_sensor_missing_key(mock_vehicle):
     """Test sensor with missing data key."""
     status = {}
     sensor = NissanGenericSensor(
-        mock_vehicle, status, "batteryLevel", "Battery Level", "%"
+        mock_vehicle, status, "batteryLevel", "Battery Level", "%", "test_entry"
     )
 
     assert sensor.state is None
@@ -139,7 +153,12 @@ def test_sensor_no_nickname(mock_vehicle, mock_vehicle_status):
     """Test sensor name when vehicle has no nickname."""
     mock_vehicle.nickname = None
     sensor = NissanGenericSensor(
-        mock_vehicle, mock_vehicle_status, "batteryLevel", "Battery Level", "%"
+        mock_vehicle,
+        mock_vehicle_status,
+        "batteryLevel",
+        "Battery Level",
+        "%",
+        "test_entry",
     )
 
     assert "2023 Nissan LEAF" in sensor.name

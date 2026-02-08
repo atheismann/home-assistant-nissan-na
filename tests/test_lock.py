@@ -51,7 +51,7 @@ async def test_async_setup_entry(hass: HomeAssistant, mock_client):
 
 def test_lock_entity_init(mock_vehicle, mock_client):
     """Test lock entity initialization."""
-    lock = NissanDoorLockEntity(mock_vehicle, mock_client)
+    lock = NissanDoorLockEntity(mock_vehicle, mock_client, "test_entry")
 
     assert lock._vehicle == mock_vehicle
     assert lock._client == mock_client
@@ -62,7 +62,7 @@ def test_lock_entity_init(mock_vehicle, mock_client):
 
 async def test_async_lock(mock_vehicle, mock_client):
     """Test locking the vehicle."""
-    lock = NissanDoorLockEntity(mock_vehicle, mock_client)
+    lock = NissanDoorLockEntity(mock_vehicle, mock_client, "test_entry")
     lock.async_write_ha_state = MagicMock()
 
     await lock.async_lock()
@@ -74,7 +74,7 @@ async def test_async_lock(mock_vehicle, mock_client):
 
 async def test_async_unlock(mock_vehicle, mock_client):
     """Test unlocking the vehicle."""
-    lock = NissanDoorLockEntity(mock_vehicle, mock_client)
+    lock = NissanDoorLockEntity(mock_vehicle, mock_client, "test_entry")
     lock.async_write_ha_state = MagicMock()
 
     await lock.async_unlock()
@@ -86,7 +86,7 @@ async def test_async_unlock(mock_vehicle, mock_client):
 
 def test_is_locked_property(mock_vehicle, mock_client):
     """Test is_locked property."""
-    lock = NissanDoorLockEntity(mock_vehicle, mock_client)
+    lock = NissanDoorLockEntity(mock_vehicle, mock_client, "test_entry")
 
     # Initially None
     assert lock.is_locked is None
@@ -103,6 +103,6 @@ def test_is_locked_property(mock_vehicle, mock_client):
 def test_lock_entity_no_nickname(mock_vehicle, mock_client):
     """Test lock entity when vehicle has no nickname."""
     mock_vehicle.nickname = None
-    lock = NissanDoorLockEntity(mock_vehicle, mock_client)
+    lock = NissanDoorLockEntity(mock_vehicle, mock_client, "test_entry")
 
     assert "2023 Nissan LEAF" in lock.name

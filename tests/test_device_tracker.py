@@ -64,7 +64,7 @@ async def test_async_setup_entry(hass: HomeAssistant, mock_client):
 
 def test_tracker_init(mock_vehicle, mock_vehicle_status):
     """Test device tracker initialization."""
-    tracker = NissanVehicleTracker(mock_vehicle, mock_vehicle_status)
+    tracker = NissanVehicleTracker(mock_vehicle, mock_vehicle_status, "test_entry")
 
     assert tracker._vehicle == mock_vehicle
     assert tracker._status == mock_vehicle_status
@@ -74,21 +74,21 @@ def test_tracker_init(mock_vehicle, mock_vehicle_status):
 
 def test_latitude_property(mock_vehicle, mock_vehicle_status):
     """Test latitude property."""
-    tracker = NissanVehicleTracker(mock_vehicle, mock_vehicle_status)
+    tracker = NissanVehicleTracker(mock_vehicle, mock_vehicle_status, "test_entry")
 
     assert tracker.latitude == 37.7749
 
 
 def test_longitude_property(mock_vehicle, mock_vehicle_status):
     """Test longitude property."""
-    tracker = NissanVehicleTracker(mock_vehicle, mock_vehicle_status)
+    tracker = NissanVehicleTracker(mock_vehicle, mock_vehicle_status, "test_entry")
 
     assert tracker.longitude == -122.4194
 
 
 def test_source_type_property(mock_vehicle, mock_vehicle_status):
     """Test source type property."""
-    tracker = NissanVehicleTracker(mock_vehicle, mock_vehicle_status)
+    tracker = NissanVehicleTracker(mock_vehicle, mock_vehicle_status, "test_entry")
 
     assert tracker.source_type == SourceType.GPS
 
@@ -96,7 +96,7 @@ def test_source_type_property(mock_vehicle, mock_vehicle_status):
 def test_latitude_missing_location(mock_vehicle):
     """Test latitude when location is missing."""
     status = {}
-    tracker = NissanVehicleTracker(mock_vehicle, status)
+    tracker = NissanVehicleTracker(mock_vehicle, status, "test_entry")
 
     assert tracker.latitude is None
 
@@ -104,7 +104,7 @@ def test_latitude_missing_location(mock_vehicle):
 def test_longitude_missing_location(mock_vehicle):
     """Test longitude when location is missing."""
     status = {}
-    tracker = NissanVehicleTracker(mock_vehicle, status)
+    tracker = NissanVehicleTracker(mock_vehicle, status, "test_entry")
 
     assert tracker.longitude is None
 
@@ -112,7 +112,7 @@ def test_longitude_missing_location(mock_vehicle):
 def test_latitude_incomplete_location(mock_vehicle):
     """Test latitude when location data is incomplete."""
     status = {"location": {"lon": -122.4194}}
-    tracker = NissanVehicleTracker(mock_vehicle, status)
+    tracker = NissanVehicleTracker(mock_vehicle, status, "test_entry")
 
     assert tracker.latitude is None
 
@@ -120,7 +120,7 @@ def test_latitude_incomplete_location(mock_vehicle):
 def test_longitude_incomplete_location(mock_vehicle):
     """Test longitude when location data is incomplete."""
     status = {"location": {"lat": 37.7749}}
-    tracker = NissanVehicleTracker(mock_vehicle, status)
+    tracker = NissanVehicleTracker(mock_vehicle, status, "test_entry")
 
     assert tracker.longitude is None
 
@@ -128,6 +128,6 @@ def test_longitude_incomplete_location(mock_vehicle):
 def test_tracker_no_nickname(mock_vehicle, mock_vehicle_status):
     """Test device tracker when vehicle has no nickname."""
     mock_vehicle.nickname = None
-    tracker = NissanVehicleTracker(mock_vehicle, mock_vehicle_status)
+    tracker = NissanVehicleTracker(mock_vehicle, mock_vehicle_status, "test_entry")
 
     assert "2023 Nissan LEAF" in tracker.name

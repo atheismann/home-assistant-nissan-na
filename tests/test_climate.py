@@ -52,7 +52,7 @@ async def test_async_setup_entry(hass: HomeAssistant, mock_client):
 
 def test_climate_entity_init(mock_vehicle, mock_client):
     """Test climate entity initialization."""
-    climate = NissanClimateEntity(mock_vehicle, mock_client)
+    climate = NissanClimateEntity(mock_vehicle, mock_client, "test_entry")
 
     assert climate._vehicle == mock_vehicle
     assert climate._client == mock_client
@@ -63,7 +63,7 @@ def test_climate_entity_init(mock_vehicle, mock_client):
 
 def test_hvac_modes_available(mock_vehicle, mock_client):
     """Test available HVAC modes."""
-    climate = NissanClimateEntity(mock_vehicle, mock_client)
+    climate = NissanClimateEntity(mock_vehicle, mock_client, "test_entry")
 
     assert HVACMode.OFF in climate.hvac_modes
     assert HVACMode.HEAT in climate.hvac_modes
@@ -73,7 +73,7 @@ def test_hvac_modes_available(mock_vehicle, mock_client):
 
 async def test_set_hvac_mode_off(mock_vehicle, mock_client):
     """Test setting HVAC mode to OFF."""
-    climate = NissanClimateEntity(mock_vehicle, mock_client)
+    climate = NissanClimateEntity(mock_vehicle, mock_client, "test_entry")
     climate.async_write_ha_state = MagicMock()
 
     await climate.async_set_hvac_mode(HVACMode.OFF)
@@ -85,7 +85,7 @@ async def test_set_hvac_mode_off(mock_vehicle, mock_client):
 
 async def test_set_hvac_mode_heat(mock_vehicle, mock_client):
     """Test setting HVAC mode to HEAT."""
-    climate = NissanClimateEntity(mock_vehicle, mock_client)
+    climate = NissanClimateEntity(mock_vehicle, mock_client, "test_entry")
     climate.async_write_ha_state = MagicMock()
 
     await climate.async_set_hvac_mode(HVACMode.HEAT)
@@ -97,7 +97,7 @@ async def test_set_hvac_mode_heat(mock_vehicle, mock_client):
 
 async def test_set_hvac_mode_cool(mock_vehicle, mock_client):
     """Test setting HVAC mode to COOL."""
-    climate = NissanClimateEntity(mock_vehicle, mock_client)
+    climate = NissanClimateEntity(mock_vehicle, mock_client, "test_entry")
     climate.async_write_ha_state = MagicMock()
 
     await climate.async_set_hvac_mode(HVACMode.COOL)
@@ -109,7 +109,7 @@ async def test_set_hvac_mode_cool(mock_vehicle, mock_client):
 
 async def test_set_hvac_mode_auto(mock_vehicle, mock_client):
     """Test setting HVAC mode to AUTO."""
-    climate = NissanClimateEntity(mock_vehicle, mock_client)
+    climate = NissanClimateEntity(mock_vehicle, mock_client, "test_entry")
     climate.async_write_ha_state = MagicMock()
 
     await climate.async_set_hvac_mode(HVACMode.AUTO)
@@ -121,7 +121,7 @@ async def test_set_hvac_mode_auto(mock_vehicle, mock_client):
 
 def test_hvac_mode_property(mock_vehicle, mock_client):
     """Test hvac_mode property."""
-    climate = NissanClimateEntity(mock_vehicle, mock_client)
+    climate = NissanClimateEntity(mock_vehicle, mock_client, "test_entry")
 
     assert climate.hvac_mode == HVACMode.OFF
 
@@ -132,6 +132,6 @@ def test_hvac_mode_property(mock_vehicle, mock_client):
 def test_climate_entity_no_nickname(mock_vehicle, mock_client):
     """Test climate entity when vehicle has no nickname."""
     mock_vehicle.nickname = None
-    climate = NissanClimateEntity(mock_vehicle, mock_client)
+    climate = NissanClimateEntity(mock_vehicle, mock_client, "test_entry")
 
     assert "2023 Nissan LEAF" in climate.name
