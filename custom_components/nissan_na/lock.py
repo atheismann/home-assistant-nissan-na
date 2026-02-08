@@ -6,14 +6,27 @@ from .const import DOMAIN
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """
     Set up Nissan NA lock entities for each vehicle.
+    Only creates lock entities if the vehicle has control_security permission.
     """
     data = hass.data[DOMAIN][config_entry.entry_id]
     client = data["client"]
     vehicles = await client.get_vehicle_list()
-    entities = [
-        NissanDoorLockEntity(vehicle, client, config_entry.entry_id)
-        for vehicle in vehicles
-    ]
+    entities = []
+
+    for vehicle in vehicles:
+        # Check if vehicle has lock control permission
+        try:
+            permissions = await client.get_permissions(vehicle.id)
+            if "control_security" in permissions:
+                entities.append(
+                    NissanDoorLockEntity(vehicle, client, config_entry.entry_id)
+                )
+        except Exception:
+            # If we can't check permissions, create the entity anyway
+            entities.append(
+                NissanDoorLockEntity(vehicle, client, config_entry.entry_id)
+            )
+
     async_add_entities(entities)
 
 

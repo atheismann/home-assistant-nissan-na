@@ -565,6 +565,21 @@ class SmartcarApiClient:
             del self._vehicles_cache[vehicle_id]
         return True
 
+    async def get_permissions(self, vehicle_id: str) -> List[str]:
+        """
+        Get the list of permissions granted for a vehicle.
+
+        Args:
+            vehicle_id: Smartcar vehicle ID.
+
+        Returns:
+            List[str]: List of permission strings (e.g., 'read_battery', 'control_security').
+        """
+        vehicle = self._get_vehicle(vehicle_id)
+        response = await asyncio.to_thread(vehicle.permissions)
+        permissions_dict = _namedtuple_to_dict(response)
+        return permissions_dict.get("permissions", [])
+
     async def get_vehicle_status(self, vehicle_id: str) -> Dict[str, Any]:
         """
         Get comprehensive vehicle status.

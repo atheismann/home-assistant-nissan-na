@@ -327,6 +327,32 @@ class TestSmartcarApiClient(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status["info"], MOCK_VEHICLE_INFO)
         self.assertEqual(status["location"], MOCK_LOCATION_RESPONSE)
 
+    @patch("smartcar.Vehicle")
+    async def test_get_permissions(self, mock_vehicle_class):
+        """Test getting vehicle permissions."""
+        self.client.access_token = "mock_access_token"
+        mock_vehicle = MagicMock()
+        mock_permissions = MagicMock()
+        mock_permissions._asdict.return_value = {
+            "permissions": [
+                "read_vehicle_info",
+                "read_location",
+                "read_odometer",
+                "control_security",
+                "read_battery",
+                "read_charge",
+            ],
+            "meta": {},
+        }
+        mock_vehicle.permissions.return_value = mock_permissions
+        mock_vehicle_class.return_value = mock_vehicle
+
+        permissions = await self.client.get_permissions("vehicle-id-123")
+
+        self.assertIsInstance(permissions, list)
+        self.assertIn("read_vehicle_info", permissions)
+        self.assertIn("control_security", permissions)
+
 
 if __name__ == "__main__":
     unittest.main()

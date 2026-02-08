@@ -30,6 +30,7 @@ def mock_client(mock_vehicle):
     client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
     client.start_climate = AsyncMock(return_value={"status": "success"})
     client.stop_climate = AsyncMock(return_value={"status": "success"})
+    client.get_permissions = AsyncMock(return_value=["control_climate"])
     return client
 
 

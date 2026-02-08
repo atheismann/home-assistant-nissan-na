@@ -8,14 +8,25 @@ from .const import DOMAIN
 async def async_setup_entry(hass, config_entry, async_add_entities):
     """
     Set up Nissan NA climate entities for each vehicle.
+    Only creates climate entities if the vehicle has control_climate permission.
     """
     data = hass.data[DOMAIN][config_entry.entry_id]
     client = data["client"]
     vehicles = await client.get_vehicle_list()
-    entities = [
-        NissanClimateEntity(vehicle, client, config_entry.entry_id)
-        for vehicle in vehicles
-    ]
+    entities = []
+
+    for vehicle in vehicles:
+        # Check if vehicle has climate control permission
+        try:
+            permissions = await client.get_permissions(vehicle.id)
+            if "control_climate" in permissions:
+                entities.append(
+                    NissanClimateEntity(vehicle, client, config_entry.entry_id)
+                )
+        except Exception:
+            # If we can't check permissions, create the entity anyway
+            entities.append(NissanClimateEntity(vehicle, client, config_entry.entry_id))
+
     async_add_entities(entities)
 
 

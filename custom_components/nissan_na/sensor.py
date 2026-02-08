@@ -8,92 +8,64 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     Set up Nissan NA sensors for each vehicle and status data point.
 
     Creates a sensor entity for each relevant vehicle status field
-    (battery, charging, odometer, etc.).
+    (battery, charging, odometer, etc.) that the vehicle actually supports.
     """
     data = hass.data[DOMAIN][config_entry.entry_id]
     client = data["client"]
     vehicles = await client.get_vehicle_list()
     entities = []
+
     for vehicle in vehicles:
+        # Get permissions to determine what entities to create
+        try:
+            permissions = await client.get_permissions(vehicle.id)
+        except Exception:
+            # If we can't get permissions, default to all entities
+            permissions = []
+
         status = await client.get_vehicle_status(vehicle.vin)
-        # Add sensors for all relevant data points
-        entities.extend(
-            [
-                NissanGenericSensor(
-                    vehicle,
-                    status,
-                    "batteryLevel",
-                    "Battery Level",
-                    "%",
-                    config_entry.entry_id,
-                ),
-                NissanGenericSensor(
-                    vehicle,
-                    status,
-                    "chargingStatus",
-                    "Charging Status",
-                    None,
-                    config_entry.entry_id,
-                ),
-                NissanGenericSensor(
-                    vehicle,
-                    status,
-                    "plugStatus",
-                    "Plug Status",
-                    None,
-                    config_entry.entry_id,
-                ),
-                NissanGenericSensor(
-                    vehicle, status, "odometer", "Odometer", "km", config_entry.entry_id
-                ),
-                NissanGenericSensor(
-                    vehicle, status, "range", "Range", "km", config_entry.entry_id
-                ),
-                NissanGenericSensor(
-                    vehicle,
-                    status,
-                    "tirePressure",
-                    "Tire Pressure",
-                    "kPa",
-                    config_entry.entry_id,
-                ),
-                NissanGenericSensor(
-                    vehicle,
-                    status,
-                    "doorStatus",
-                    "Door Status",
-                    None,
-                    config_entry.entry_id,
-                ),
-                NissanGenericSensor(
-                    vehicle,
-                    status,
-                    "windowStatus",
-                    "Window Status",
-                    None,
-                    config_entry.entry_id,
-                ),
-                NissanGenericSensor(
-                    vehicle,
-                    status,
-                    "lastUpdate",
-                    "Last Update",
-                    None,
-                    config_entry.entry_id,
-                ),
-                NissanGenericSensor(
-                    vehicle,
-                    status,
-                    "climateStatus",
-                    "Climate Status",
-                    None,
-                    config_entry.entry_id,
-                ),
-                NissanGenericSensor(
-                    vehicle, status, "location", "Location", None, config_entry.entry_id
-                ),
-            ]
-        )
+
+        # Sensor definitions: (key, name, unit, required_permission)
+        sensor_definitions = [
+            ("batteryLevel", "Battery Level", "%", "read_battery"),
+            ("chargingStatus", "Charging Status", None, "read_charge"),
+            ("plugStatus", "Plug Status", None, "read_charge"),
+            ("odometer", "Odometer", "km", "read_odometer"),
+            ("range", "Range", "km", "read_battery"),
+            ("tirePressure", "Tire Pressure", "kPa", "read_tires"),
+            ("doorStatus", "Door Status", None, "read_security"),
+            ("windowStatus", "Window Status", None, "read_security"),
+            ("lastUpdate", "Last Update", None, None),  # Always available
+            ("climateStatus", "Climate Status", None, "read_climate"),
+            ("location", "Location", None, "read_location"),
+        ]
+
+        # Only create sensors if permission is granted or data exists in status
+        for key, name, unit, required_permission in sensor_definitions:
+            should_create = False
+
+            # Always create if no permission required
+            if required_permission is None:
+                should_create = True
+            # Create if permission is granted
+            elif permissions and required_permission in permissions:
+                should_create = True
+            # Create if data exists in status (fallback for when permissions check fails)
+            elif key in status and status[key] is not None:
+                should_create = True
+
+            if should_create:
+                entities.append(
+                    NissanGenericSensor(
+                        vehicle,
+                        status,
+                        key,
+                        name,
+                        unit,
+                        config_entry.entry_id,
+                    )
+                )
+
     async_add_entities(entities)
 
 

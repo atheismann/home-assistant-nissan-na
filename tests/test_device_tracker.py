@@ -41,6 +41,7 @@ def mock_client(mock_vehicle, mock_vehicle_status):
     client = MagicMock()
     client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
     client.get_vehicle_status = AsyncMock(return_value=mock_vehicle_status)
+    client.get_permissions = AsyncMock(return_value=["read_location"])
     return client
 
 
