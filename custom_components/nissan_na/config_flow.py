@@ -179,9 +179,8 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_reauth(self, user_input: dict[str, Any] | None = None) -> dict:
         """Handle reauthorization request from options."""
-        # Trigger reauth flow
-        return await self.hass.config_entries.flow.async_init(
-            DOMAIN,
-            context={"source": config_entries.SOURCE_REAUTH},
-            data=self.config_entry.data,
+        # Trigger reauth flow using the proper API
+        await self.hass.config_entries.async_request_reauth(
+            self.config_entry, reason="Manual reauthorization requested"
         )
+        return self.async_abort(reason="reauth_triggered")

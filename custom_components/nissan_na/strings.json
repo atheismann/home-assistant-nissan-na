@@ -17,7 +17,8 @@
       "no_vehicles": "No vehicles found on your Smartcar account. Please ensure your Nissan vehicle is connected.",
       "connection_error": "Failed to connect to Smartcar API. Please check your credentials and try again.",
       "missing_credentials": "OAuth credentials not configured. Please set up Application Credentials in Home Assistant settings first.",
-      "reauth_successful": "Reauthorization successful"
+      "reauth_successful": "Reauthorization successful",
+      "reauth_triggered": "Reauthorization started. Please complete the OAuth flow in the notifications."
     }
   },
   "application_credentials": {
@@ -27,7 +28,6 @@
     "step": {
       "init": {
         "title": "Nissan NA Configuration",
-        "description": "Choose a configuration option:",
         "menu_options": {
           "webhook_config": "⚡ Configure Webhooks",
           "reauth": "🔑 Re-authorize Integration"
