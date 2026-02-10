@@ -7,7 +7,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.helpers import config_entry_oauth2_flow
 
-from .const import CONF_MANAGEMENT_TOKEN, DOMAIN
+from .const import CONF_MANAGEMENT_TOKEN, CONF_UNIT_SYSTEM, DOMAIN, UNIT_SYSTEM_IMPERIAL, UNIT_SYSTEM_METRIC
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -144,16 +144,59 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
         return self.async_show_menu(
             step_id="init",
             menu_options={
+                "unit_system": "Configure Units (Metric/Imperial)",
                 "refresh_sensors": "Refresh All Sensors",
                 "reload_entities": "Re-load Entities",
                 "webhook_config": "Configure Webhooks",
                 "reauth": "Re-authorize Integration",
             },
             description_placeholders={
+                "unit_info": "Configure measurement units (kilometers/miles, liters/gallons, etc.)",
                 "refresh_info": "Manually fetch current vehicle data from Smartcar",
                 "reload_info": "Discover and load any new entities not in previous version",
                 "webhook_info": "Configure real-time vehicle updates via webhooks",
                 "reauth_info": "Update OAuth permissions when new features are added",
+            },
+        )
+
+    async def async_step_unit_system(
+        self, user_input: dict[str, Any] | None = None
+    ) -> dict:
+        """Configure unit system (metric/imperial)."""
+        if user_input is not None:
+            # Update options with new unit system
+            new_options = {**self.config_entry.options}
+            new_options[CONF_UNIT_SYSTEM] = user_input[CONF_UNIT_SYSTEM]
+            
+            self.hass.config_entries.async_update_entry(
+                self.config_entry, options=new_options
+            )
+            
+            # Reload the integration to apply new units
+            await self.hass.config_entries.async_reload(self.config_entry.entry_id)
+            
+            return self.async_create_entry(title="", data={})
+
+        # Get current unit system or default to metric
+        current_unit_system = self.config_entry.options.get(
+            CONF_UNIT_SYSTEM, UNIT_SYSTEM_METRIC
+        )
+
+        return self.async_show_form(
+            step_id="unit_system",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_UNIT_SYSTEM,
+                        default=current_unit_system,
+                    ): vol.In({
+                        UNIT_SYSTEM_METRIC: "Metric (km, L, °C, bar)",
+                        UNIT_SYSTEM_IMPERIAL: "Imperial (mi, gal, °F, psi)",
+                    }),
+                }
+            ),
+            description_placeholders={
+                "current_system": "Metric" if current_unit_system == UNIT_SYSTEM_METRIC else "Imperial",
             },
         )
 

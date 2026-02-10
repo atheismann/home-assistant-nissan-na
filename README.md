@@ -89,6 +89,7 @@ All features depend on your vehicle model and Smartcar's support for your specif
 
 ### 🔄 Enhanced Features
 
+- **Unit System Configuration** - Switch between metric and imperial units (NEW!)
 - **Entity Reload Option** - Discover new sensors after upgrades
 - **Diagnostics Support** - View webhook URL and integration status
 - **Real-time Webhooks** - Instant updates for all entity types
@@ -193,6 +194,15 @@ You can adjust settings after setup:
 3. A menu will appear with these options:
 
 ### Menu Options
+
+#### Configure Units (Metric/Imperial)
+
+- **NEW!** Switch between metric and imperial units of measurement
+- **Metric**: kilometers (km), liters (L), Celsius (°C), bar
+- **Imperial**: miles (mi), gallons (gal), Fahrenheit (°F), PSI
+- Automatically converts and displays all applicable sensors
+- Integration reloads automatically to apply the change
+- Affects: Range, fuel/battery capacity, tire pressure, odometer, temperature sensors
 
 #### Refresh All Sensors
 

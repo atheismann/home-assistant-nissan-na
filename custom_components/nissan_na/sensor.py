@@ -3,7 +3,8 @@ import logging
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
-from .const import DOMAIN
+from .const import CONF_UNIT_SYSTEM, DOMAIN, UNIT_SYSTEM_METRIC
+from .unit_conversion import convert_value, get_display_unit
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -97,6 +98,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         
         # Get available signals from Smartcar API
         available_signals = set()
+        permissions = []
         try:
             signals = await client.get_vehicle_signals(vehicle.id)
             available_signals = set(signals)
@@ -112,6 +114,9 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                 vehicle.id,
                 err,
             )
+        
+        # Get permissions once per vehicle (not per sensor)
+        if not available_signals:
             # Fall back to permission-based if signals API fails
             try:
                 permissions = await client.get_permissions(vehicle.id)
@@ -168,12 +173,11 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                     )
             elif required_permission:
                 # Fall back to permission checking if signals API failed
-                try:
-                    permissions = await client.get_permissions(vehicle.id)
-                    should_create = (
-                        permissions and required_permission in permissions
-                    )
-                except Exception:
+                # Use cached permissions from earlier
+                should_create = (
+                    permissions and required_permission in permissions
+                )
+                if not should_create:
                     # If we can't check permissions, check if data exists
                     api_key = signal_id.split(".")[0]
                     should_create = api_key in status and status[api_key] is not None
@@ -219,8 +223,11 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     async_add_entities(entities)
     
     # Fetch fresh initial state for all sensors after adding them
-    _LOGGER.info("Refreshing initial state for %d sensors", len(entities))
+    # Skip WebhookUrlSensor as it doesn't need API refresh
+    _LOGGER.info("Refreshing initial state for %d sensors", len(entities) - 1)
     for entity in entities:
+        if isinstance(entity, WebhookUrlSensor):
+            continue
         try:
             await entity.async_update()
         except Exception as err:
@@ -290,6 +297,7 @@ class NissanGenericSensor(SensorEntity):
         self._entry_id = entry_id
         self._icon = icon
         self._device_class = device_class
+        self._metric_unit = unit  # Store original metric unit
         nickname = getattr(vehicle, "nickname", None)
         if nickname:
             display_name = nickname
@@ -303,8 +311,13 @@ class NissanGenericSensor(SensorEntity):
             else:
                 display_name = vehicle.vin
         self._attr_name = f"{display_name} {name}"
-        self._unit = unit
         self._unsub_dispatcher = None
+        
+        # Get unit system from config entry options
+        config_entry = self.hass.config_entries.async_get_entry(entry_id)
+        self._unit_system = UNIT_SYSTEM_METRIC
+        if config_entry:
+            self._unit_system = config_entry.options.get(CONF_UNIT_SYSTEM, UNIT_SYSTEM_METRIC)
 
     async def async_added_to_hass(self):
         """Subscribe to webhook updates when entity is added to hass."""
@@ -425,27 +438,31 @@ class NissanGenericSensor(SensorEntity):
                 self._api_key,
                 value,
             )
-            return value
+        else:
+            # If it's a namedtuple or object, try to get the attribute
+            try:
+                value = getattr(api_response, self._field_name, None)
+                _LOGGER.debug(
+                    "Sensor %s: extracted attribute %s from %s = %s",
+                    self._attr_name,
+                    self._field_name,
+                    self._api_key,
+                    value,
+                )
+            except AttributeError:
+                _LOGGER.debug(
+                    "Attribute %s not found on %s for sensor %s",
+                    self._field_name,
+                    self._api_key,
+                    self._attr_name,
+                )
+                return None
         
-        # If it's a namedtuple or object, try to get the attribute
-        try:
-            value = getattr(api_response, self._field_name, None)
-            _LOGGER.debug(
-                "Sensor %s: extracted attribute %s from %s = %s",
-                self._attr_name,
-                self._field_name,
-                self._api_key,
-                value,
-            )
-            return value
-        except AttributeError:
-            _LOGGER.debug(
-                "Attribute %s not found on %s for sensor %s",
-                self._field_name,
-                self._api_key,
-                self._attr_name,
-            )
-            return None
+        # Convert value based on unit system if it's numeric
+        if value is not None and isinstance(value, (int, float)) and self._metric_unit:
+            return convert_value(value, self._metric_unit, self._unit_system)
+        
+        return value
 
     @property
     def unique_id(self):
@@ -455,7 +472,9 @@ class NissanGenericSensor(SensorEntity):
     @property
     def native_unit_of_measurement(self):
         """Return the unit of measurement for the sensor, if any."""
-        return self._unit
+        if self._metric_unit:
+            return get_display_unit(self._metric_unit, self._unit_system)
+        return None
 
     @property
     def icon(self):
@@ -488,6 +507,11 @@ class WebhookUrlSensor(SensorEntity):
     async def async_added_to_hass(self) -> None:
         """Subscribe to config entry updates."""
         await super().async_added_to_hass()
+    
+    async def async_update(self) -> None:
+        """Update the webhook URL from config entry."""
+        # URL is retrieved from config entry data, no API call needed
+        pass
     
     @property
     def native_value(self):

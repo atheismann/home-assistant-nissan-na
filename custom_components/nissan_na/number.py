@@ -205,27 +205,27 @@ class NissanChargeLimitNumber(NumberEntity):
         return f"{self._vehicle.vin}_charge_limit"
 
     @property
-    def value(self):
+    def native_value(self):
         """Return the current charge limit."""
         return self._value
 
     @property
-    def min_value(self):
+    def native_min_value(self):
         """Return the minimum charge limit."""
         return 0
 
     @property
-    def max_value(self):
+    def native_max_value(self):
         """Return the maximum charge limit."""
         return 100
 
     @property
-    def step(self):
+    def native_step(self):
         """Return the step size for the charge limit."""
         return 1
 
     @property
-    def unit_of_measurement(self):
+    def native_unit_of_measurement(self):
         """Return the unit of measurement."""
         return "%"
 

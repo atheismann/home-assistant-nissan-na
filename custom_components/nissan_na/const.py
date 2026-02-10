@@ -12,4 +12,9 @@ CONF_CODE = "code"
 CONF_WEBHOOK_ID = "webhook_id"
 CONF_MANAGEMENT_TOKEN = "management_token"
 
+# Unit system configuration
+CONF_UNIT_SYSTEM = "unit_system"
+UNIT_SYSTEM_METRIC = "metric"
+UNIT_SYSTEM_IMPERIAL = "imperial"
+
 PLATFORMS = ["sensor", "binary_sensor", "switch", "number", "lock", "device_tracker", "climate"]
