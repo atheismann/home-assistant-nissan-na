@@ -7,6 +7,7 @@ import logging
 from datetime import timedelta
 
 from homeassistant.components import webhook as ha_webhook
+from homeassistant.components.application_credentials import config_entry_oauth2_flow
 from homeassistant import config_entries
 from homeassistant.const import CONF_WEBHOOK_ID
 from homeassistant.core import HomeAssistant
