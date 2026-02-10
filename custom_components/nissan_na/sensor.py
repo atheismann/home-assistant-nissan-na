@@ -56,8 +56,8 @@ SENSOR_DEFINITIONS = [
     ("connectivity.softwareVersion", "softwareVersion", "Firmware Version", None, None, "mdi:chip", None),
     
     # Location sensors (from location API response)
-    ("location.latitude", "latitude", "Location Latitude", "°", "read_location", None, SensorDeviceClass.LATITUDE),
-    ("location.longitude", "longitude", "longitude", "°", "read_location", None, SensorDeviceClass.LONGITUDE),
+    ("location.latitude", "latitude", "Location Latitude", "°", "read_location", "mdi:map-marker", None),
+    ("location.longitude", "longitude", "longitude", "°", "read_location", "mdi:map-marker", None),
     
     # Connectivity sensors (webhook only)
     ("connectivity.isOnline", "isOnline", "Online", None, None, "mdi:wifi", None),
