@@ -286,17 +286,37 @@ class NissanGenericSensor(SensorEntity):
             data: Dictionary containing updated vehicle data from webhook
         """
         _LOGGER.debug(
-            "Webhook data received for %s: %s",
+            "Webhook data received for %s: %d fields updated",
             self._attr_name,
-            data,
+            len(data) if isinstance(data, dict) else 0,
+        )
+        _LOGGER.debug(
+            "Webhook fields: %s",
+            list(data.keys()) if isinstance(data, dict) else "N/A",
         )
         
         # Update the status dict with webhook data
         # Webhook may contain partial updates, so merge with existing status
         if isinstance(data, dict):
+            old_value = self._status.get(self._key)
             self._status.update(data)
+            new_value = self._status.get(self._key)
+            if old_value != new_value:
+                _LOGGER.info(
+                    "Sensor %s updated via webhook: %s -> %s",
+                    self._attr_name,
+                    old_value,
+                    new_value,
+                )
             # Trigger state update
             self.async_write_ha_state()
+            _LOGGER.debug("State written for sensor %s", self._attr_name)
+        else:
+            _LOGGER.warning(
+                "Invalid webhook data type for %s: %s",
+                self._attr_name,
+                type(data),
+            )
 
     @property
     def should_poll(self):
@@ -326,13 +346,30 @@ class NissanGenericSensor(SensorEntity):
     def native_value(self):
         """
         Return the current value of the sensor.
+        Extracts numeric values from nested API responses.
         For location, returns a "lat,lon" string if available.
         """
         value = self._status.get(self._key)
-        if self._key == "location" and value:
+        if not value:
+            return None
+            
+        # Handle location specially - return formatted lat,lon
+        if self._key == "location" and isinstance(value, dict):
             lat = value.get("lat")
             lon = value.get("lon")
             return f"{lat},{lon}" if lat and lon else None
+        
+        # For dict values with numeric data, extract the main value
+        # API returns nested structures like: {'distance': 6218.5, 'meta': {...}}
+        if isinstance(value, dict):
+            # Try common numeric value keys
+            for key in ["distance", "value", "amount"]:
+                if key in value and isinstance(value[key], (int, float)):
+                    return value[key]
+            # If no standard key found, return None for dict values
+            return None
+        
+        # Return the value as-is if it's already a scalar (string, number, bool)
         return value
 
     @property

@@ -108,16 +108,40 @@ class NissanVehicleTracker(TrackerEntity):
             data: Dictionary containing updated vehicle data from webhook
         """
         _LOGGER.debug(
-            "Webhook data received for device tracker %s: %s",
+            "Webhook data received for device tracker %s: %d fields updated",
             self._attr_name,
-            data,
+            len(data) if isinstance(data, dict) else 0,
+        )
+        _LOGGER.debug(
+            "Webhook fields: %s",
+            list(data.keys()) if isinstance(data, dict) else "N/A",
         )
         
         # Update the status dict with webhook data
         if isinstance(data, dict):
+            old_location = self._status.get("location")
             self._status.update(data)
+            new_location = self._status.get("location")
+            if old_location != new_location:
+                _LOGGER.info(
+                    "Device tracker %s location updated via webhook",
+                    self._attr_name,
+                )
+                if isinstance(new_location, dict):
+                    _LOGGER.debug(
+                        "New location: lat=%s, lon=%s",
+                        new_location.get("latitude"),
+                        new_location.get("longitude"),
+                    )
             # Trigger state update
             self.async_write_ha_state()
+            _LOGGER.debug("Location state written for device tracker %s", self._attr_name)
+        else:
+            _LOGGER.warning(
+                "Invalid webhook data type for %s: %s",
+                self._attr_name,
+                type(data),
+            )
 
     @property
     def should_poll(self):
@@ -147,13 +171,23 @@ class NissanVehicleTracker(TrackerEntity):
     def latitude(self):
         """Return the latitude of the vehicle's last known location."""
         loc = self._status.get("location")
-        return loc.get("lat") if loc else None
+        if not loc:
+            return None
+        # Handle nested structure with metadata: {'lat': ..., 'lon': ..., 'meta': {...}}
+        if isinstance(loc, dict):
+            return loc.get("lat")
+        return None
 
     @property
     def longitude(self):
         """Return the longitude of the vehicle's last known location."""
         loc = self._status.get("location")
-        return loc.get("lon") if loc else None
+        if not loc:
+            return None
+        # Handle nested structure with metadata: {'lat': ..., 'lon': ..., 'meta': {...}}
+        if isinstance(loc, dict):
+            return loc.get("lon")
+        return None
 
     @property
     def source_type(self):

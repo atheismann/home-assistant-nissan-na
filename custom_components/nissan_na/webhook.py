@@ -75,6 +75,7 @@ async def async_handle_webhook(
     2. VEHICLE_STATE - Vehicle data updates when triggers fire
     3. VEHICLE_ERROR - Error notifications from Smartcar
     """
+    _LOGGER.debug("Webhook request received for webhook_id: %s", webhook_id)
     try:
         # Get management token from config
         # The integration that registered this webhook should store it
@@ -88,12 +89,14 @@ async def async_handle_webhook(
 
         if not entry:
             _LOGGER.error("No config entry found for webhook %s", webhook_id)
+            _LOGGER.debug("Available config entries: %s", [ce.entry_id for ce in hass.config_entries.async_entries(DOMAIN)])
             return web.Response(status=HTTPStatus.NOT_FOUND)
 
         management_token = entry.data.get(CONF_MANAGEMENT_TOKEN)
 
         # Read raw body for signature verification
         body_bytes = await request.read()
+        _LOGGER.debug("Webhook payload size: %d bytes", len(body_bytes))
 
         # Parse JSON payload
         try:
@@ -102,12 +105,16 @@ async def async_handle_webhook(
             payload = json.loads(body_bytes.decode("utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError) as err:
             _LOGGER.error("Invalid JSON payload: %s", err)
+            _LOGGER.debug("Raw payload (first 200 chars): %s", body_bytes[:200])
             return web.Response(status=HTTPStatus.BAD_REQUEST)
 
         event_type = payload.get("eventType")
+        vehicle_id = payload.get("vehicleId", "N/A")
+        _LOGGER.debug("Webhook event_type: %s, vehicle_id: %s", event_type, vehicle_id)
 
         # Handle VERIFY event (no signature verification needed for initial setup)
         if event_type == EVENT_TYPE_VERIFY:
+            _LOGGER.info("Handling webhook VERIFY event")
             if not management_token:
                 _LOGGER.error(
                     "Management token not configured for webhook verification"
@@ -117,11 +124,13 @@ async def async_handle_webhook(
             challenge = payload.get("data", {}).get("challenge")
             if not challenge:
                 _LOGGER.error("No challenge in VERIFY webhook payload")
+                _LOGGER.debug("Payload data: %s", payload.get("data", {}))
                 return web.Response(status=HTTPStatus.BAD_REQUEST)
 
             # Hash the challenge and return it
             challenge_hash = hash_challenge(management_token, challenge)
-            _LOGGER.debug("Webhook VERIFY challenge received and hashed")
+            _LOGGER.info("Webhook VERIFY challenge verified successfully")
+            _LOGGER.debug("Challenge hash computed")
 
             return web.json_response({"challenge": challenge_hash})
 
@@ -129,6 +138,7 @@ async def async_handle_webhook(
         signature = request.headers.get("SC-Signature")
         if not signature:
             _LOGGER.warning("Missing SC-Signature header in webhook request")
+            _LOGGER.debug("Available headers: %s", list(request.headers.keys()))
             return web.Response(status=HTTPStatus.UNAUTHORIZED)
 
         if not management_token:
@@ -138,37 +148,46 @@ async def async_handle_webhook(
             return web.Response(status=HTTPStatus.INTERNAL_SERVER_ERROR)
 
         if not verify_signature(management_token, signature, body_bytes):
-            _LOGGER.warning("Invalid webhook signature")
+            _LOGGER.warning("Invalid webhook signature for vehicle %s", vehicle_id)
+            _LOGGER.debug("Expected signature validation failed")
             return web.Response(status=HTTPStatus.UNAUTHORIZED)
 
+        _LOGGER.info("Webhook signature verified for vehicle %s", vehicle_id)
+
         # Process the webhook event
-        _LOGGER.debug("Received %s webhook event", event_type)
+        _LOGGER.debug("Processing %s webhook event for vehicle %s", event_type, vehicle_id)
 
         if event_type == EVENT_TYPE_VEHICLE_STATE:
             # Extract vehicle data and dispatch to coordinators
-            vehicle_id = payload.get("vehicleId")
             data = payload.get("data", {})
 
-            _LOGGER.debug("Vehicle state update for %s: %s", vehicle_id, data)
+            _LOGGER.info("Vehicle state update received for %s with %d data fields", vehicle_id, len(data))
+            _LOGGER.debug("Vehicle state data: %s", data)
 
             # Send signal to update coordinators
-            async_dispatcher_send(hass, f"{SIGNAL_WEBHOOK_DATA}_{vehicle_id}", data)
+            signal_name = f"{SIGNAL_WEBHOOK_DATA}_{vehicle_id}"
+            _LOGGER.debug("Dispatching signal: %s", signal_name)
+            async_dispatcher_send(hass, signal_name, data)
+            _LOGGER.debug("Signal dispatched to subscribers")
 
         elif event_type == EVENT_TYPE_VEHICLE_ERROR:
             # Log errors from Smartcar
-            vehicle_id = payload.get("vehicleId")
             error_data = payload.get("data", {})
 
             _LOGGER.warning("Vehicle error for %s: %s", vehicle_id, error_data)
+            _LOGGER.info("Smartcar reported error for vehicle %s", vehicle_id)
 
         else:
-            _LOGGER.debug("Unknown event type: %s", event_type)
+            _LOGGER.warning("Unknown event type in webhook: %s", event_type)
+            _LOGGER.debug("Full payload: %s", payload)
 
         # Always return 200 to acknowledge receipt
         return web.Response(status=HTTPStatus.OK)
 
     except Exception:  # pylint: disable=broad-except
-        _LOGGER.exception("Error processing Smartcar webhook")
+        vehicle_id_str = vehicle_id if 'vehicle_id' in locals() else "unknown"
+        _LOGGER.exception("Error processing Smartcar webhook for vehicle %s", vehicle_id_str)
+        _LOGGER.debug("Exception details:", exc_info=True)
         # Still return 200 to prevent retries on our errors
         return web.Response(status=HTTPStatus.OK)
 

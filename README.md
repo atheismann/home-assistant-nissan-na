@@ -14,6 +14,7 @@ Easily control and monitor your Nissan vehicle from Home Assistant using the **S
 ## Table of Contents
 
 - [Features](#features)
+- [Recent Updates & Improvements](#recent-updates--improvements)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Setup](#setup)
@@ -23,6 +24,11 @@ Easily control and monitor your Nissan vehicle from Home Assistant using the **S
 - [Available Entities](#available-entities)
 - [Services](#services)
 - [Vehicle Compatibility](#vehicle-compatibility)
+- [Troubleshooting](#troubleshooting)
+- [Debugging & Logging](#debugging--logging)
+- [FAQ](#faq)
+- [Automation Examples](#automation-examples)
+- [Support & Contributing](#support--contributing)
 - [Troubleshooting](#troubleshooting)
 - [FAQ](#faq)
 - [Automation Examples](#automation-examples)
@@ -59,6 +65,39 @@ This integration uses the **Smartcar API** for reliable vehicle connectivity:
 All features depend on your vehicle model and Smartcar's support for your specific vehicle. The integration requests 32 comprehensive permissions to maximize compatibility across all Nissan models.
 
 > **Note:** Remote engine start/stop is not currently available through the Smartcar API. This functionality will be added to the integration when Smartcar adds support for engine control commands.
+
+---
+
+## Recent Updates & Improvements
+
+### v0.13.1+ (Latest)
+
+✨ **Entity State Management**
+- Sensors now use `SensorEntity` for proper state exposure in Home Assistant
+- Device tracker now supports webhook updates for real-time location changes
+- Improved handling of nested API responses (automatic extraction of numeric values)
+
+🔧 **Webhook Enhancements**
+- Device tracker entity now subscribes to webhook updates
+- Better sensor state consistency with webhook data
+- Added comprehensive logging for webhook lifecycle
+
+📊 **Debug Logging**
+- Added detailed debug logging throughout the integration
+- Webhook signal dispatching and entity updates now logged
+- Troubleshooting information for webhook configuration issues
+- Log all webhook events, signature verification, and dispatch operations
+
+🔐 **Stability Improvements**
+- Vehicle object cache cleared on token refresh to ensure fresh credentials
+- Better handling of authentication failures
+- Improved error messages for debugging
+
+### Known Limitations
+
+- Some sensors may show unavailable during initial setup (normal, waits for first API response)
+- Device tracker location only updates when vehicle data is available
+- Tire pressure and door/window sensors depend on vehicle model support
 
 ---
 
@@ -269,18 +308,21 @@ All webhook payloads are verified using HMAC-SHA256 signatures:
 - Check HTTPS is working with a valid SSL certificate
 - Ensure the webhook URL matches exactly (including the webhook ID)
 - Test with: `curl -k https://your-ha-url/api/webhook/XXXXXXXX` (should return HTTP 200)
+- Check logs: Look for "Webhook request received" to confirm webhook is being called
 
 #### Invalid Signature Errors
 
 - Check Management Token is correctly entered in HA configuration
 - Verify Management Token hasn't been regenerated in Smartcar Dashboard
 - Re-enter your Management Token in Integration > Configure
+- Check logs: Look for "Invalid webhook signature" to confirm signature validation failed
 
 #### Webhook Not Verified
 
 - Check Home Assistant logs during webhook creation
 - Ensure VERIFY event was received and processed
-- Delete and re-create webhook in Smartcar Dashboard
+- Look for "Webhook VERIFY challenge verified successfully" in logs
+- Delete and re-create webhook in Smartcar Dashboard if still failing
 
 #### No Real-time Updates
 
@@ -640,6 +682,86 @@ Log in to your Smartcar Dashboard at https://dashboard.smartcar.com to see which
 
 - **Common Issue**: Using VIN instead of vehicle_id
 - **Solution**: Get vehicle_id from entity attributes and use it in service calls
+
+---
+
+## Debugging & Logging
+
+### Enable Debug Logging
+
+To troubleshoot issues, enable debug logging for the integration:
+
+#### Option 1: Via Home Assistant UI
+
+1. Go to **Settings > Devices & Services**
+2. Find **Nissan North America** and click **Enable Debug Logging**
+3. Check logs in **Settings > System > Logs** to see detailed output
+
+#### Option 2: Via configuration.yaml
+
+```yaml
+logger:
+  logs:
+    custom_components.nissan_na: debug
+    custom_components.nissan_na.webhook: debug
+    custom_components.nissan_na.nissan_api: debug
+```
+
+### What to Look For in Logs
+
+#### Webhook Setup and Verification
+```
+INFO - Webhook registered at: http://10.1.0.96:8123/api/webhook/...
+INFO - Configure this URL in your Smartcar Dashboard to receive real-time updates
+INFO - Webhook VERIFY challenge verified successfully
+```
+
+#### Successful Webhook Data Reception
+```
+INFO - Webhook signature verified for vehicle af1ff81d-...
+INFO - Vehicle state update received for af1ff81d-... with 3 data fields
+DEBUG - Vehicle state data: {'odometer': {...}, 'location': {...}, 'battery': {...}}
+DEBUG - Dispatching signal: nissan_na_webhook_data_af1ff81d-...
+INFO - Sensor 2025 NISSAN PATHFINDER Odometer updated via webhook: 6218.5 -> 6225.3
+```
+
+#### Common Errors to Debug
+
+**"No config entry found for webhook"**
+- Webhook ID doesn't match configured webhook
+- Webhook not properly registered during integration setup
+
+**"Invalid webhook signature"**
+- Management token is incorrect
+- Management token was regenerated in Smartcar Dashboard
+- Solution: Re-enter Management Token in integration configuration
+
+**"Missing SC-Signature header"**
+- Webhook not being sent from Smartcar
+- Smartcar Dashboard webhook configuration issue
+- Solution: Delete and recreate webhook in Smartcar Dashboard
+
+**"Webhook data received but sensors not updating"**
+- Sensors not subscribed to webhook signal (should see DEBUG logs)
+- State not being written to Home Assistant
+- Check for errors in Home Assistant logs
+
+### API Data Structure
+
+The Smartcar API returns nested responses with metadata. The integration automatically extracts the numeric values:
+
+```json
+{
+  "odometer": {"distance": 6218.5, "meta": {...}},
+  "location": {"latitude": 37.7749, "longitude": -122.4194, ...},
+  "battery": {"level": 85, "meta": {...}}
+}
+```
+
+The integration extracts and properly handles:
+- Simple values: `{"level": 85}` → `85`
+- Nested with metadata: `{"distance": 6218.5, "meta": {...}}` → `6218.5`
+- Location objects: `{"lat": 37.7749, "lon": -122.4194}` → `"37.7749,-122.4194"`
 
 ---
 

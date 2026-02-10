@@ -6,8 +6,23 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Entity state management improvements**
+  - Sensors now properly use `SensorEntity` base class for correct state exposure
+  - Device tracker now supports real-time webhook updates
+  - Improved handling of nested API responses with automatic value extraction
+- **Comprehensive debug logging**
+  - Added detailed debug logging throughout webhook lifecycle
+  - Webhook signal dispatching now logged for troubleshooting
+  - Entity state changes tracked in logs (old value → new value)
+  - Management token and config entry validation logged
+  - Webhook event reception and processing logged at all stages
+- **Device tracker enhancements**
+  - Device tracker now subscribes to webhook signals for location updates
+  - Proper handling of location data with metadata
+  - Adds context around location updates (latitude/longitude) in logs
 - **Automatic token refresh** - Access tokens now automatically renew when expired
   - Tokens are refreshed and persisted to config entry
+  - Vehicle object cache cleared on token operations to ensure fresh credentials
   - Eliminates most manual re-authorization needs
   - Falls back to re-auth flow only if refresh token expires
 - **Re-authorization capability** - Users can now manually re-authorize the integration from the options menu
@@ -45,6 +60,17 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Sensor state unavailability** - Sensors now properly expose state through SensorEntity
+  - Fixed Entity → SensorEntity inheritance
+  - Proper state property naming (native_value vs state)
+  - Handles nested API responses with metadata
+- **Device tracker unavailability** - Device tracker now receives webhook updates
+  - Subscribes to webhook signals like sensors
+  - Proper state management through TrackerEntity
+  - Location updates trigger through webhook data
+- **Vehicle object cache** - Cache now cleared on token operations
+  - Ensures vehicle objects always have fresh authentication credentials
+  - Prevents authentication failures from stale cached vehicles
 - **Reauth flow creates duplicate entries** - Fixed reauth flow to update existing entry instead of creating new one
 - **Authentication error handling** - Integration now automatically attempts token refresh before triggering reauth
   - Catches authentication errors during setup and periodic updates
