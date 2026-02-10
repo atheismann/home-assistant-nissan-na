@@ -1,7 +1,7 @@
 import logging
 
+from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
-from homeassistant.helpers.entity import Entity
 
 from .const import DOMAIN
 
@@ -222,7 +222,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         )
 
 
-class NissanGenericSensor(Entity):
+class NissanGenericSensor(SensorEntity):
     """
     Generic sensor for a Nissan vehicle status data point.
 
@@ -323,7 +323,7 @@ class NissanGenericSensor(Entity):
             _LOGGER.error("Failed to update sensor %s: %s", self._attr_name, err)
 
     @property
-    def state(self):
+    def native_value(self):
         """
         Return the current value of the sensor.
         For location, returns a "lat,lon" string if available.
@@ -341,7 +341,7 @@ class NissanGenericSensor(Entity):
         return f"{self._vehicle.vin}_{self._key}"
 
     @property
-    def unit_of_measurement(self):
+    def native_unit_of_measurement(self):
         """Return the unit of measurement for the sensor, if any."""
         return self._unit
 
