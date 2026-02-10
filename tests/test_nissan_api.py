@@ -353,6 +353,76 @@ class TestSmartcarApiClient(unittest.IsolatedAsyncioTestCase):
         self.assertIn("read_vehicle_info", permissions)
         self.assertIn("control_security", permissions)
 
+    @patch("nissan_api.smartcar.AuthClient")
+    async def test_vehicle_cache_cleared_on_authenticate(self, mock_auth_client_class):
+        """Test that vehicle cache is cleared when authenticating."""
+        mock_auth_client = MagicMock()
+        mock_auth_client_class.return_value = mock_auth_client
 
-if __name__ == "__main__":
-    unittest.main()
+        # Create initial tokens
+        mock_response = MagicMock()
+        mock_response.access_token = "new_access_token"
+        mock_response.refresh_token = "new_refresh_token"
+        mock_response.expires_in = 7200
+        mock_response.token_type = "Bearer"
+        mock_response.expiration = 1234567890
+        mock_response.refresh_expiration = 1234567900
+
+        mock_auth_client.exchange_code = MagicMock(return_value=mock_response)
+
+        # Create a client and populate the vehicle cache
+        client = SmartcarApiClient(
+            client_id="test_client",
+            client_secret="test_secret",
+            redirect_uri="https://example.com/callback",
+        )
+
+        # Manually add something to the cache to verify it gets cleared
+        client._vehicles_cache["vehicle-1"] = MagicMock()
+        self.assertIn("vehicle-1", client._vehicles_cache)
+
+        # Authenticate with new code
+        await client.authenticate("auth_code_123")
+
+        # Vehicle cache should be cleared
+        self.assertEqual(len(client._vehicles_cache), 0)
+
+    @patch("nissan_api.smartcar.AuthClient")
+    async def test_vehicle_cache_cleared_on_token_refresh(self, mock_auth_client_class):
+        """Test that vehicle cache is cleared when refreshing token."""
+        mock_auth_client = MagicMock()
+        mock_auth_client_class.return_value = mock_auth_client
+
+        # Create refreshed tokens
+        mock_response = MagicMock()
+        mock_response.access_token = "refreshed_access_token"
+        mock_response.refresh_token = "refreshed_refresh_token"
+        mock_response.expires_in = 7200
+        mock_response.token_type = "Bearer"
+        mock_response.expiration = 1234567890
+        mock_response.refresh_expiration = 1234567900
+
+        mock_auth_client.exchange_refresh_token = MagicMock(
+            return_value=mock_response
+        )
+
+        # Create a client with initial tokens
+        client = SmartcarApiClient(
+            client_id="test_client",
+            client_secret="test_secret",
+            redirect_uri="https://example.com/callback",
+            access_token="initial_access_token",
+            refresh_token="initial_refresh_token",
+        )
+
+        # Manually add something to the cache
+        client._vehicles_cache["vehicle-1"] = MagicMock()
+        self.assertIn("vehicle-1", client._vehicles_cache)
+
+        # Refresh the token
+        await client.refresh_access_token()
+
+        # Vehicle cache should be cleared
+        self.assertEqual(len(client._vehicles_cache), 0)
+        # New token should be set
+        self.assertEqual(client.access_token, "refreshed_access_token")

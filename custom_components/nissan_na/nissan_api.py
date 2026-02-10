@@ -179,6 +179,9 @@ class SmartcarApiClient:
         self.access_token = response.access_token
         self.refresh_token = response.refresh_token
 
+        # Clear vehicle cache to ensure fresh tokens are used
+        self._vehicles_cache.clear()
+
         # Return as dict for compatibility
         return {
             "access_token": response.access_token,
@@ -211,6 +214,10 @@ class SmartcarApiClient:
         )
         self.access_token = response.access_token
         self.refresh_token = response.refresh_token
+
+        # Clear vehicle cache since tokens have changed
+        # Cached vehicles will use the old token otherwise
+        self._vehicles_cache.clear()
 
         # Return as dict for compatibility
         return {
