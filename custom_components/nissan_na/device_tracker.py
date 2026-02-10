@@ -90,5 +90,4 @@ class NissanVehicleTracker(TrackerEntity):
         """Return device information to link this entity to a device."""
         return {
             "identifiers": {(DOMAIN, self._vehicle.vin)},
-            "via_device": (DOMAIN, self._entry_id),
         }
