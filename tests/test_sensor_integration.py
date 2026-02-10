@@ -80,7 +80,7 @@ async def test_sensor_update_with_fresh_data(hass: HomeAssistant, mock_vehicle):
 
     mock_client = MagicMock()
     mock_client.get_vehicle_status = AsyncMock(
-        return_value={"batteryLevel": 90, "odometer": 10500}
+        return_value={"battery": {"percentRemaining": 0.90, "range": 250}, "odometer": {"distance": 10500}}
     )
 
     hass.data[DOMAIN] = {
@@ -90,8 +90,9 @@ async def test_sensor_update_with_fresh_data(hass: HomeAssistant, mock_vehicle):
     sensor = NissanGenericSensor(
         hass,
         mock_vehicle,
-        {"batteryLevel": 85, "odometer": 10000},
-        "batteryLevel",
+        {"battery": {"percentRemaining": 0.85, "range": 240}, "odometer": {"distance": 10000}},
+        "battery",
+        "percentRemaining",
         "Battery Level",
         "%",
         "entry_1",
@@ -104,7 +105,7 @@ async def test_sensor_update_with_fresh_data(hass: HomeAssistant, mock_vehicle):
     mock_client.get_vehicle_status.assert_called_with(mock_vehicle.id)
 
     # Status should be updated
-    assert sensor._status["batteryLevel"] == 90
+    assert sensor._status["battery"]["percentRemaining"] == 0.90
 
 
 async def test_sensor_webhook_dispatcher_subscription(hass: HomeAssistant, mock_vehicle):
@@ -116,8 +117,9 @@ async def test_sensor_webhook_dispatcher_subscription(hass: HomeAssistant, mock_
     sensor = NissanGenericSensor(
         hass,
         mock_vehicle,
-        {"batteryLevel": 85},
-        "batteryLevel",
+        {"battery": {"percentRemaining": 0.85}},
+        "battery",
+        "percentRemaining",
         "Battery Level",
         "%",
         "entry_1",
@@ -125,7 +127,7 @@ async def test_sensor_webhook_dispatcher_subscription(hass: HomeAssistant, mock_
 
     # Sensor initializes without error
     assert sensor._vehicle.id == mock_vehicle.id
-    assert sensor._key == "batteryLevel"
+    assert sensor._api_key == "battery"
     assert sensor._attr_name is not None
 
 
@@ -147,10 +149,10 @@ async def test_sensor_permission_based_creation(hass: HomeAssistant, mock_client
     mock_client.get_vehicle_list.return_value = [mock_vehicle]
     mock_client.get_permissions.return_value = ["read_battery", "read_odometer"]
     mock_client.get_vehicle_status.return_value = {
-        "batteryLevel": 85,
-        "odometer": 10000,
-        "chargingStatus": "Idle",  # Has data but no permission
-        "location": {"lat": 37.42, "lon": -122.14},  # Has data but no permission
+        "battery": {"percentRemaining": 0.85},
+        "odometer": {"distance": 10000},
+        "charge": {"state": "Idle"},  # Has data but no permission
+        "location": {"latitude": 37.42, "longitude": -122.14},  # Has data but no permission
     }
 
     hass.data[DOMAIN] = {entry.entry_id: {"client": mock_client}}
@@ -164,14 +166,16 @@ async def test_sensor_permission_based_creation(hass: HomeAssistant, mock_client
 
     await async_setup_entry(hass, entry, mock_add_entities)
 
-    # Check what sensors were created
-    created_keys = {e._key for e in entities_added}
+    # Check what api_keys were created
+    created_keys = {e._api_key for e in entities_added}
 
     # Should have battery and odometer (have permissions)
-    assert "batteryLevel" in created_keys or len(created_keys) > 0
+    assert "battery" in created_keys
+    assert "odometer" in created_keys
 
-    # Should not have charging (no permission even though data exists)
-    assert "chargingStatus" not in created_keys
+    # Should not have charge or location (no permission even though data exists)
+    assert "charge" not in created_keys
+    assert "location" not in created_keys
 
 
 async def test_sensor_dynamic_entity_creation_from_webhook(
@@ -216,15 +220,16 @@ async def test_sensor_location_formatting(hass: HomeAssistant, mock_vehicle):
     sensor = NissanGenericSensor(
         hass,
         mock_vehicle,
-        {"location": {"lat": 37.4222, "lon": -122.1413}},
+        {"location": {"latitude": 37.4222, "longitude": -122.1413}},
         "location",
-        "Location",
-        None,
+        "latitude",
+        "Location Latitude",
+        "°",
         "entry_1",
     )
 
-    # Location should be formatted as "lat,lon"
-    assert sensor.state == "37.4222,-122.1413"
+    # Location latitude should be returned correctly
+    assert sensor.native_value == 37.4222
 
 
 async def test_sensor_with_missing_permissions(hass: HomeAssistant, mock_client, mock_vehicle):

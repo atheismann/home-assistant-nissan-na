@@ -426,7 +426,8 @@ async def test_sensor_async_update(hass, mock_vehicle, mock_vehicle_status):
         hass,
         mock_vehicle,
         mock_vehicle_status,
-        "batteryLevel",
+        "battery",
+        "percentRemaining",
         "Battery Level",
         "%",
         "test_entry",
@@ -435,7 +436,7 @@ async def test_sensor_async_update(hass, mock_vehicle, mock_vehicle_status):
     # Mock the client
     mock_client = MagicMock()
     mock_client.get_vehicle_status = AsyncMock(
-        return_value={"batteryLevel": 95, "range": 260}
+        return_value={"battery": {"percentRemaining": 0.95, "range": 260}}
     )
 
     hass.data[DOMAIN] = {"test_entry": {"client": mock_client}}
@@ -447,8 +448,8 @@ async def test_sensor_async_update(hass, mock_vehicle, mock_vehicle_status):
     assert mock_client.get_vehicle_status.called
 
     # Verify status was updated
-    assert sensor._status["batteryLevel"] == 95
-    assert sensor._status["range"] == 260
+    assert sensor._status["battery"]["percentRemaining"] == 0.95
+    assert sensor._status["battery"]["range"] == 260
 
 
 async def test_sensor_async_update_error(hass, mock_vehicle, mock_vehicle_status):
@@ -474,7 +475,7 @@ async def test_sensor_async_update_error(hass, mock_vehicle, mock_vehicle_status
     await sensor.async_update()
 
     # Status should remain unchanged
-    assert sensor.state == 85
+    assert sensor.state == 0.85
 
 
 async def test_dynamic_entity_creation_with_known_keys(

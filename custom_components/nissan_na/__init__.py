@@ -10,18 +10,16 @@ from homeassistant.components import webhook as ha_webhook
 from homeassistant import config_entries
 from homeassistant.const import CONF_WEBHOOK_ID
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import config_entry_oauth2_flow, device_registry as dr
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.event import async_track_time_interval
 
-from .api import SmartcarOAuth2Implementation
 from .const import (
     CONF_ACCESS_TOKEN,
-    CONF_CLIENT_ID,
-    CONF_CLIENT_SECRET,
     CONF_REFRESH_TOKEN,
     DOMAIN,
     PLATFORMS,
 )
+
 from .nissan_api import SmartcarApiClient
 from .webhook import (
     async_generate_webhook_url,
@@ -34,20 +32,10 @@ _LOGGER = logging.getLogger(__name__)
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     """Set up the Nissan NA component."""
-    # Register OAuth2 implementation
-    config_entry_oauth2_flow.async_register_implementation(
-        hass,
-        DOMAIN,
-        SmartcarOAuth2Implementation(
-            hass,
-            DOMAIN,
-            config.get(DOMAIN, {}).get(CONF_CLIENT_ID, ""),
-            config.get(DOMAIN, {}).get(CONF_CLIENT_SECRET, ""),
-            "https://connect.smartcar.com/oauth/authorize",
-            "https://connect.smartcar.com/oauth/token",
-        ),
-    )
+    # Application Credentials are handled automatically by Home Assistant
+    # No need to manually register OAuth2 implementation
     return True
+
 
 
 async def async_setup_entry(

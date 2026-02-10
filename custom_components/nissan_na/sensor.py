@@ -142,9 +142,17 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             _LOGGER.debug("No sensor tracking for vehicle %s", vehicle_id)
             return
             
-        existing_keys = set(data["sensors"][vehicle_id].keys())
+        # Extract api_keys from existing sensor_ids
+        # sensor_id format: "{api_key}_{field_name}_{display_name}"
+        existing_api_keys = set()
+        for sensor_id in data["sensors"][vehicle_id].keys():
+            # sensor_id starts with api_key
+            parts = sensor_id.split('_', 1)
+            if parts:
+                existing_api_keys.add(parts[0])
+        
         webhook_keys = set(webhook_data.keys())
-        new_keys = webhook_keys - existing_keys
+        new_keys = webhook_keys - existing_api_keys
         
         if not new_keys:
             return  # No new sensors needed
@@ -324,7 +332,14 @@ class NissanGenericSensor(SensorEntity):
         # Webhook may contain partial updates, so merge with existing status
         if isinstance(data, dict):
             old_value = self.native_value
-            self._status.update(data)
+            # Deep merge webhook data into status
+            for key, value in data.items():
+                if key in self._status and isinstance(self._status[key], dict) and isinstance(value, dict):
+                    # Merge nested dicts (e.g., {"battery": {"range": 300}} merges into existing battery)
+                    self._status[key].update(value)
+                else:
+                    # Replace or add the value
+                    self._status[key] = value
             new_value = self.native_value
             if old_value != new_value:
                 _LOGGER.info(
