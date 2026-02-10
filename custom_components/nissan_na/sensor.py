@@ -1,6 +1,6 @@
 import logging
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import DOMAIN
@@ -12,27 +12,66 @@ SIGNAL_WEBHOOK_DATA = "nissan_na_webhook_data"
 
 
 # Sensor definitions mapping API keys to sensor info
-# Format: (api_key, field_name, sensor_name, unit, required_permission)
-# api_key: Key from get_vehicle_status() response (e.g., 'battery', 'charge')
+# Format: (signal_id, field_name, sensor_name, unit, required_permission, icon, device_class)
+# signal_id: Signal ID from Smartcar API (e.g., 'battery.percentRemaining')
 # field_name: Field within that API response object to extract
 # sensor_name: Human-readable sensor name
-# unit: Unit of measurement
-# required_permission: OAuth permission required
+# unit: Unit of measurement (None if no unit)
+# required_permission: OAuth permission required (fallback if signals API unavailable)
+# icon: MDI icon name (None to use device_class icon)
+# device_class: Home Assistant device class (None for custom entity)
 SENSOR_DEFINITIONS = [
     # Battery sensors (from battery API response)
-    ("battery", "percentRemaining", "Battery Level", "%", "read_battery"),
-    ("battery", "range", "Range", "km", "read_battery"),
+    ("battery.percentRemaining", "percentRemaining", "Battery", "%", "read_battery", None, SensorDeviceClass.BATTERY),
+    ("battery.range", "range", "Range", "km", "read_battery", "mdi:battery-high", None),
+    ("battery.capacityKwh", "capacityKwh", "Battery Capacity", "kWh", "read_battery", None, SensorDeviceClass.ENERGY_STORAGE),
+    ("battery.lowBatteryPercentRemaining", "lowBatteryPercentRemaining", "Low Voltage Battery", "%", "read_battery", None, SensorDeviceClass.BATTERY),
     
     # Charging sensors (from charge API response)
-    ("charge", "isPluggedIn", "Plug Status", None, "read_charge"),
-    ("charge", "state", "Charging Status", None, "read_charge"),
+    ("charge.isPluggedIn", "isPluggedIn", "Charging Cable Plugged In", None, "read_charge", "mdi:power-plug", None),
+    ("charge.state", "state", "Charging Status", None, "read_charge", "mdi:power-plug", None),
+    ("charge.voltage", "voltage", "Charging Voltage", "V", "read_charge", "mdi:lightning-bolt", SensorDeviceClass.VOLTAGE),
+    ("charge.amperage", "amperage", "Charging Current", "A", "read_charge", "mdi:current-ac", SensorDeviceClass.CURRENT),
+    ("charge.wattage", "wattage", "Charging Power", "kW", "read_charge", "mdi:lightning-bolt-circle", SensorDeviceClass.POWER),
+    ("charge.timeToComplete", "timeToComplete", "Charging Time Remaining", "min", "read_charge", "mdi:battery-clock", None),
+    ("charge.amperageMax", "amperageMax", "Charging Current Max", "A", "read_charge", "mdi:current-ac", SensorDeviceClass.CURRENT),
     
     # Odometer sensor
-    ("odometer", "distance", "Odometer", "km", "read_odometer"),
+    ("odometer.distance", "distance", "Odometer", "km", "read_odometer", "mdi:speedometer", None),
+    
+    # Fuel sensors
+    ("fuel.amountRemaining", "amountRemaining", "Fuel", "L", "read_fuel", "mdi:gas-cylinder", SensorDeviceClass.VOLUME),
+    ("fuel.percentRemaining", "percentRemaining", "Fuel Level", "%", "read_fuel", "mdi:gas-cylinder", None),
+    ("fuel.range", "range", "Fuel Range", "km", "read_fuel", "mdi:gas-cylinder", None),
+    
+    # Tire pressure sensors
+    ("tires.frontLeft.pressure", "pressure", "Tire Pressure Front Left", "psi", "read_tires", "mdi:tire", SensorDeviceClass.PRESSURE),
+    ("tires.frontRight.pressure", "pressure", "Tire Pressure Front Right", "psi", "read_tires", "mdi:tire", SensorDeviceClass.PRESSURE),
+    ("tires.backLeft.pressure", "pressure", "Tire Pressure Back Left", "psi", "read_tires", "mdi:tire", SensorDeviceClass.PRESSURE),
+    ("tires.backRight.pressure", "pressure", "Tire Pressure Back Right", "psi", "read_tires", "mdi:tire", SensorDeviceClass.PRESSURE),
+    
+    # Vehicle status sensors
+    ("transmission.gear", "gear", "Gear State", None, "read_drivetrain", "mdi:car-shift-pattern", None),
+    ("engine.oilLifeRemaining", "oilLifeRemaining", "Engine Oil Life", "%", "read_engine", "mdi:oil", None),
+    ("connectivity.softwareVersion", "softwareVersion", "Firmware Version", None, None, "mdi:chip", None),
     
     # Location sensors (from location API response)
-    ("location", "latitude", "Location Latitude", "°", "read_location"),
-    ("location", "longitude", "Location Longitude", "°", "read_location"),
+    ("location.latitude", "latitude", "Location Latitude", "°", "read_location", None, SensorDeviceClass.LATITUDE),
+    ("location.longitude", "longitude", "longitude", "°", "read_location", None, SensorDeviceClass.LONGITUDE),
+    
+    # Connectivity sensors (webhook only)
+    ("connectivity.isOnline", "isOnline", "Online", None, None, "mdi:wifi", None),
+    ("connectivity.isAsleep", "isAsleep", "Asleep", None, None, "mdi:sleep", None),
+    ("connectivity.isDigitalKeyPaired", "isDigitalKeyPaired", "Digital Key Paired", None, None, "mdi:key", None),
+    
+    # Surveillance sensors (webhook only)
+    ("surveillance.isEnabled", "isEnabled", "Surveillance Enabled", None, None, "mdi:cctv", None),
+    
+    # Traction battery sensors (webhook only)
+    ("tractionBattery.isHeaterActive", "isHeaterActive", "Battery Heater Active", None, None, "mdi:fire", None),
+    
+    # Charge limit sensor
+    ("charge.limit", "limit", "Charge Limit", "%", "read_charge", None, None),
 ]
 
 
@@ -40,8 +79,8 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     """
     Set up Nissan NA sensors for each vehicle and status data point.
 
-    Creates a sensor entity for each relevant vehicle status field
-    (battery, charging, odometer, etc.) that the vehicle actually supports.
+    Creates a sensor entity for each signal supported by the vehicle,
+    using the Smartcar signals API to validate availability.
     Also sets up dynamic entity creation from webhook data.
     """
     data = hass.data[DOMAIN][config_entry.entry_id]
@@ -49,19 +88,37 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     vehicles = await client.get_vehicle_list()
     entities = []
     
-    # Track created sensors per vehicle: {vehicle_id: {key: sensor}}
+    # Track created sensors per vehicle: {vehicle_id: {signal_id: sensor}}
     if "sensors" not in data:
         data["sensors"] = {}
 
     for vehicle in vehicles:
-        # Get permissions to determine what entities to create
-        permissions = None
+        _LOGGER.info("Setting up sensors for vehicle %s", vehicle.id)
+        
+        # Get available signals from Smartcar API
+        available_signals = set()
         try:
-            permissions = await client.get_permissions(vehicle.id)
-        except Exception:
-            # If we can't get permissions, we'll be conservative and create entities
-            pass
-
+            signals = await client.get_vehicle_signals(vehicle.id)
+            available_signals = set(signals)
+            _LOGGER.debug(
+                "Vehicle %s supports %d signals: %s",
+                vehicle.id,
+                len(available_signals),
+                signals,
+            )
+        except Exception as err:
+            _LOGGER.warning(
+                "Failed to get vehicle signals for %s, will use permission fallback: %s",
+                vehicle.id,
+                err,
+            )
+            # Fall back to permission-based if signals API fails
+            try:
+                permissions = await client.get_permissions(vehicle.id)
+                _LOGGER.debug("Vehicle %s permissions: %s", vehicle.id, permissions)
+            except Exception:
+                permissions = []
+        
         # Fetch initial state from API on boot
         _LOGGER.info("Fetching initial state for vehicle %s", vehicle.id)
         try:
@@ -80,46 +137,80 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         if vehicle.id not in data["sensors"]:
             data["sensors"][vehicle.id] = {}
 
-        # Create sensors based on permissions or data availability
-        # Use unique sensor IDs to avoid duplicates (e.g., battery has both percentRemaining and range)
+        # Create sensors based on available signals
         created_sensors = set()
-        for api_key, field_name, name, unit, required_permission in SENSOR_DEFINITIONS:
-            # Create unique ID for this sensor to avoid duplicates
-            sensor_id = f"{api_key}_{field_name}_{name.replace(' ', '_').lower()}"
+        for definition in SENSOR_DEFINITIONS:
+            signal_id = definition[0]
+            field_name = definition[1]
+            name = definition[2]
+            unit = definition[3]
+            required_permission = definition[4]
+            icon = definition[5]
+            device_class = definition[6]
             
-            if sensor_id in created_sensors:
+            # Avoid duplicate sensors
+            sensor_unique_id = f"{signal_id}_{field_name}"
+            if sensor_unique_id in created_sensors:
                 continue
-            created_sensors.add(sensor_id)
+            created_sensors.add(sensor_unique_id)
             
             should_create = False
 
-            # Always create if no permission required
-            if required_permission is None:
-                should_create = True
-            # If we have a valid permission list
-            elif permissions and len(permissions) > 0:
-                # Create if permission is granted
-                should_create = required_permission in permissions
-            # If permission check failed or returned empty, be conservative
+            # Check if signal is available
+            if available_signals:
+                # If we have signals, use them as source of truth
+                should_create = signal_id in available_signals
+                if not should_create:
+                    _LOGGER.debug(
+                        "Signal %s not available for vehicle %s",
+                        signal_id,
+                        vehicle.id,
+                    )
+            elif required_permission:
+                # Fall back to permission checking if signals API failed
+                try:
+                    permissions = await client.get_permissions(vehicle.id)
+                    should_create = (
+                        permissions and required_permission in permissions
+                    )
+                except Exception:
+                    # If we can't check permissions, check if data exists
+                    api_key = signal_id.split(".")[0]
+                    should_create = api_key in status and status[api_key] is not None
             else:
-                # Create if data exists in status
-                # (shows vehicle actually has this feature)
-                should_create = api_key in status and status[api_key] is not None
+                # No permission required, but signal might be webhook-only
+                # Create if signals API succeeded (meaning we got a full list)
+                # Or create if data exists in status
+                if available_signals:
+                    # Signals API worked, only create if signal is in the list
+                    should_create = signal_id in available_signals
+                else:
+                    # Signals API didn't work, try data check
+                    api_key = signal_id.split(".")[0]
+                    should_create = api_key in status and status[api_key] is not None
 
             if should_create:
+                _LOGGER.info(
+                    "Creating sensor %s for vehicle %s (signal: %s)",
+                    name,
+                    vehicle.id,
+                    signal_id,
+                )
                 sensor = NissanGenericSensor(
                     hass,
                     vehicle,
                     status,
-                    api_key,
+                    signal_id,
                     field_name,
                     name,
                     unit,
+                    icon,
+                    device_class,
                     config_entry.entry_id,
                 )
                 entities.append(sensor)
-                # Track this sensor by sensor_id
-                data["sensors"][vehicle.id][sensor_id] = sensor
+                # Track this sensor by signal_id
+                data["sensors"][vehicle.id][signal_id] = sensor
 
     async_add_entities(entities)
     
@@ -136,115 +227,31 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             )
     
     # Set up webhook handler for dynamic entity creation
+    # With signals API validation, all supported entities should be created at setup,
+    # but this handles edge cases of new signals becoming available
     async def handle_webhook_for_new_entities(vehicle_id: str, webhook_data: dict):
-        """Create new entities if webhook contains data for keys we don't have sensors for."""
+        """Log webhook data for diagnostics (dynamic creation handled at setup)."""
         if vehicle_id not in data["sensors"]:
             _LOGGER.debug("No sensor tracking for vehicle %s", vehicle_id)
             return
-            
-        # Extract api_keys from existing sensor_ids
-        # sensor_id format: "{api_key}_{field_name}_{display_name}"
-        existing_api_keys = set()
-        for sensor_id in data["sensors"][vehicle_id].keys():
-            # sensor_id starts with api_key
-            parts = sensor_id.split('_', 1)
-            if parts:
-                existing_api_keys.add(parts[0])
         
-        webhook_keys = set(webhook_data.keys())
-        new_keys = webhook_keys - existing_api_keys
-        
-        if not new_keys:
-            return  # No new sensors needed
-            
-        _LOGGER.info(
-            "Creating new sensors for vehicle %s with keys: %s",
+        # With signals API, all supported sensors are created upfront
+        # Webhook handler now just passes data to existing sensors
+        _LOGGER.debug(
+            "Webhook data for vehicle %s: %s fields updated",
             vehicle_id,
-            new_keys,
+            len(webhook_data) if isinstance(webhook_data, dict) else 0,
         )
-        
-        # Find the vehicle object
-        vehicle = None
-        for v in vehicles:
-            if v.id == vehicle_id:
-                vehicle = v
-                break
-                
-        if not vehicle:
-            _LOGGER.error("Vehicle %s not found for dynamic sensor creation", vehicle_id)
-            return
-            
-        # Get current permissions
-        permissions = None
-        try:
-            permissions = await client.get_permissions(vehicle_id)
-        except Exception:
-            pass
-            
-        new_entities = []
-        # Check each new key against sensor definitions
-        for key in new_keys:
-            # Find definition for this key
-            definition = None
-            for def_api_key, def_field, def_name, def_unit, def_perm in SENSOR_DEFINITIONS:
-                if def_api_key == key:
-                    definition = (def_api_key, def_field, def_name, def_unit, def_perm)
-                    break
-                    
-            if not definition:
-                # Create generic sensor for unknown key
-                _LOGGER.debug("Creating generic sensor for unknown key: %s", key)
-                # Convert camelCase to Title Case for name
-                import re
-                name = re.sub(r'([A-Z])', r' \1', key).strip().title()
-                definition = (key, "value", name, None, None)
-                
-            def_api_key, def_field, def_name, def_unit, def_perm = definition
-            
-            # Create unique sensor ID
-            sensor_id = f"{def_api_key}_{def_field}_{def_name.replace(' ', '_').lower()}"
-            
-            # Check permissions
-            should_create = False
-            if def_perm is None:
-                should_create = True
-            elif permissions and len(permissions) > 0:
-                should_create = def_perm in permissions
-            else:
-                # Be conservative - create if data exists
-                should_create = def_api_key in webhook_data and webhook_data[def_api_key] is not None
-                
-            if should_create:
-                sensor = NissanGenericSensor(
-                    hass,
-                    vehicle,
-                    webhook_data,  # Use webhook data as initial status
-                    def_api_key,
-                    def_field,
-                    def_name,
-                    def_unit,
-                    config_entry.entry_id,
-                )
-                new_entities.append(sensor)
-                data["sensors"][vehicle_id][sensor_id] = sensor
-                _LOGGER.info(
-                    "Created new sensor %s for vehicle %s",
-                    def_name,
-                    vehicle_id,
-                )
-                
-        if new_entities:
-            async_add_entities(new_entities)
-            
-    # Subscribe to webhook signals for each vehicle to create new entities
+    
+    # Subscribe to webhook signals for each vehicle
     # Use async callback that properly schedules the handler
     from homeassistant.core import callback
     
     for vehicle in vehicles:
         @callback
-        def handle_webhook_signal(data: dict, vehicle_id: str = vehicle.id):
-            """Callback to schedule async handler for webhook data."""
-            hass.async_create_task(handle_webhook_for_new_entities(vehicle_id, data))
+        def handle_webhook_signal(webhook_data: dict, vehicle_id: str = vehicle.id):
+            """Callback to handle webhook data updates."""
+            hass.async_create_task(handle_webhook_for_new_entities(vehicle_id, webhook_data))
             
         async_dispatcher_connect(
             hass,
@@ -260,20 +267,25 @@ class NissanGenericSensor(SensorEntity):
     Args:
         vehicle: Vehicle object.
         status: Status dictionary for the vehicle.
-        api_key: Key in the status dict (e.g., 'battery', 'charge', 'odometer').
-        field_name: Field within the API response to extract (e.g., 'percentRemaining', 'isCharging').
+        signal_id: Signal ID from Smartcar (e.g., 'battery.percentRemaining').
+        field_name: Field within the API response to extract (e.g., 'percentRemaining').
         name: Human-readable name for the sensor.
         unit: Unit of measurement (if any).
+        icon: MDI icon name (None to use device_class icon).
+        device_class: Home Assistant sensor device class.
         entry_id: Config entry ID for device linking.
     """
 
-    def __init__(self, hass, vehicle, status, api_key, field_name, name, unit, entry_id):
+    def __init__(self, hass, vehicle, status, signal_id, field_name, name, unit, icon, device_class, entry_id):
         self.hass = hass
         self._vehicle = vehicle
         self._status = status
-        self._api_key = api_key
+        self._signal_id = signal_id  # Smartcar signal ID (e.g., 'battery.percentRemaining')
+        self._api_key = signal_id.split(".")[0]  # Extract API key (e.g., 'battery')
         self._field_name = field_name
         self._entry_id = entry_id
+        self._icon = icon
+        self._device_class = device_class
         nickname = getattr(vehicle, "nickname", None)
         if nickname:
             display_name = nickname
@@ -434,12 +446,22 @@ class NissanGenericSensor(SensorEntity):
     @property
     def unique_id(self):
         """Return a unique ID for the sensor entity."""
-        return f"{self._vehicle.vin}_{self._api_key}_{self._field_name}"
+        return f"{self._vehicle.vin}_{self._signal_id}"
 
     @property
     def native_unit_of_measurement(self):
         """Return the unit of measurement for the sensor, if any."""
         return self._unit
+
+    @property
+    def icon(self):
+        """Return the icon to use in the frontend."""
+        return self._icon
+
+    @property
+    def device_class(self):
+        """Return the device class of the sensor."""
+        return self._device_class
 
     @property
     def device_info(self):

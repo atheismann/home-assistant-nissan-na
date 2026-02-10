@@ -68,36 +68,60 @@ All features depend on your vehicle model and Smartcar's support for your specif
 
 ---
 
-## Recent Updates & Improvements
+## What's New
 
-### v0.13.1+ (Latest)
+### 🚀 Comprehensive Entity Coverage
 
-✨ **Entity State Management**
-- Sensors now use `SensorEntity` for proper state exposure in Home Assistant
-- Device tracker now supports webhook updates for real-time location changes
-- Improved handling of nested API responses (automatic extraction of numeric values)
+**58 Total Entities** (up from 10) with intelligent signal validation:
 
-🔧 **Webhook Enhancements**
-- Device tracker entity now subscribes to webhook updates
-- Better sensor state consistency with webhook data
-- Added comprehensive logging for webhook lifecycle
+- **31 Sensors**: Battery, charging, fuel, tires, vehicle status, location, and more
+- **25 Binary Sensors**: Doors, windows, trunks, connectivity status
+- **1 Switch**: Charging control (start/stop)
+- **1 Number**: Charge limit setting (0-100%)
+- Plus existing: Lock, Device Tracker, Climate
 
-📊 **Debug Logging**
-- Added detailed debug logging throughout the integration
-- Webhook signal dispatching and entity updates now logged
-- Troubleshooting information for webhook configuration issues
-- Log all webhook events, signature verification, and dispatch operations
+### 🎯 Smart Entity Discovery
 
-🔐 **Stability Improvements**
-- Vehicle object cache cleared on token refresh to ensure fresh credentials
-- Better handling of authentication failures
-- Improved error messages for debugging
+- **Dynamic entity creation** - Only shows entities your vehicle actually supports
+- **Three-level validation** - Uses Smartcar signals API, OAuth permissions, and data checks
+- **No unavailable entities** - Respects your vehicle's specific capabilities
+- **Automatic detection** - Discovers available features at setup and reload
 
-### Known Limitations
+### 🔄 Enhanced Features
 
-- Some sensors may show unavailable during initial setup (normal, waits for first API response)
-- Device tracker location only updates when vehicle data is available
-- Tire pressure and door/window sensors depend on vehicle model support
+- **Entity Reload Option** - Discover new sensors after upgrades
+- **Diagnostics Support** - View webhook URL and integration status
+- **Real-time Webhooks** - Instant updates for all entity types
+- **Comprehensive Logging** - Detailed debug information for troubleshooting
+
+### ⚡ What You Can Monitor & Control
+
+**Battery & Charging** (EVs):
+- Battery percentage, range, and capacity
+- Charging state, voltage, current, and power
+- Time to full charge and max current
+- Charge limit control (set target %)
+- Charging switch (start/stop)
+
+**Doors & Security**:
+- All 4 doors (open status + lock status)
+- All 4 windows (open status)
+- Front and rear trunks (open + lock)
+- Engine cover and sunroof
+
+**Vehicle Status**:
+- Tire pressure (all 4 wheels)
+- Current gear, oil life, software version
+- GPS location (latitude/longitude)
+- Odometer and fuel level
+
+**Connectivity**:
+- Vehicle online/offline status
+- Sleep mode status
+- Digital key pairing
+- Surveillance system
+
+See the [CHANGELOG](CHANGELOG.md) for complete details.
 
 ---
 
@@ -166,9 +190,23 @@ You can adjust settings after setup:
 
 1. Go to **Settings > Devices & Services** in Home Assistant
 2. Find the Nissan North America integration and click **Configure**
-3. A menu will appear with two options:
+3. A menu will appear with these options:
 
 ### Menu Options
+
+#### Refresh All Sensors
+
+- Manually fetch the latest vehicle data from the Smartcar API
+- Updates all sensors with fresh data immediately
+- Useful when you want current values without waiting for webhooks
+- Shows count of successfully refreshed sensors
+
+#### Re-load Entities
+
+- Discover and load any new sensors not available in the previous integration version
+- Perfect when upgrading the integration or when your vehicle gains new capabilities
+- Shows initial sensor count, final count, and newly discovered sensors
+- Re-scans vehicle status and available data from Smartcar API
 
 #### Configure Webhooks
 
@@ -183,6 +221,19 @@ You can adjust settings after setup:
 - Update permissions when new features are added
 - Typically not needed as tokens refresh automatically
 - Only use when automatic token refresh fails or new permissions are required
+
+### Viewing Integration Diagnostics
+
+To view your webhook URL and integration status:
+
+1. Go to **Settings > Devices & Services**
+2. Click on the Nissan (Smartcar) integration
+3. Click the three dots menu (⋮) and select **Download diagnostics** or **View diagnostics**
+4. You'll see:
+   - **Webhook ID** - Unique identifier for your webhook
+   - **Webhook URL** - Full URL to provide to Smartcar Dashboard
+   - **Vehicle Count** - Number of connected vehicles
+   - **Sensor Count** - Number of active sensors
 
 ---
 
@@ -207,6 +258,7 @@ The integration supports Smartcar webhooks for real-time vehicle updates instead
 2. **Smartcar Application Management Token**
    - Available in your Smartcar Dashboard
    - Required for webhook signature verification
+
 
 ### Setup Steps
 
@@ -457,71 +509,171 @@ Advanced remote control capabilities:
 
 ## Available Entities
 
-The integration creates multiple entities for your vehicle. **Entity availability depends on your vehicle's year, model, and capabilities.** Not all vehicles support all features.
+The integration creates up to **58 entities** for your vehicle. **Entity availability depends on your vehicle's capabilities.** The integration uses Smartcar's signals API to intelligently detect which features your specific vehicle supports - only relevant entities will appear.
 
 ### Lock Entity
 
-| Entity         | Description               | Requirements               |
-| -------------- | ------------------------- | -------------------------- |
-| **Door Lock** | Lock/unlock vehicle doors | `control_security` permission |
+| Entity | Description | Requirements |
+|--------|-------------|--------------|
+| **Door Lock** | Lock/unlock vehicle doors | `control_security` |
 
 ### Device Tracker
 
-| Entity               | Description                    | Requirements           |
-| -------------------- | ------------------------------ | ---------------------- |
-| **Vehicle Location** | GPS location of your vehicle | `read_location` permission |
+| Entity | Description | Requirements |
+|--------|-------------|--------------|
+| **Vehicle Location** | GPS location on Home Assistant map | `read_location` |
 
 ### Climate Entity
 
-| Entity              | Description                         | Requirements               |
-| ------------------- | ----------------------------------- | -------------------------- |
-| **Climate Control** | Start/stop climate system (HVAC) | `control_climate` permission |
+| Entity | Description | Requirements |
+|--------|-------------|--------------|
+| **Climate Control** | Start/stop climate system (HVAC) | `control_climate` |
 
-**Note**: Uses direct Smartcar API calls. Climate control may not be available on all vehicle models. HVAC modes (HEAT/COOL/AUTO) all start the climate system; only OFF stops it.
+**Note**: Climate control availability varies by model. HVAC modes (HEAT/COOL/AUTO) all start the climate system; only OFF stops it.
 
-### Sensors
+### Sensors (31 Total)
 
-#### Electric Vehicle Sensors
+#### Battery Sensors (EVs)
 
-| Sensor             | Description                          | Unit   | Requirements   |
-| ------------------ | ------------------------------------ | ------ | -------------- |
-| **Battery Level** | Current battery charge percentage | % | `read_battery` |
-| **Battery Capacity** | Total battery capacity | kWh | `read_battery` |
-| **Charging Status** | Whether vehicle is charging | - | `read_charge` |
-| **Plug Status** | Whether charger is plugged in | - | `read_charge` |
-| **Range** | Estimated remaining range | km/mi | `read_battery` |
+| Sensor | Description | Unit | Signal ID |
+|--------|-------------|------|-----------|
+| **Battery Percentage** | Current charge level | % | `battery.percentRemaining` |
+| **Battery Range** | Estimated driving range | km/mi | `battery.range` |
+| **Battery Capacity** | Total battery capacity | kWh | `battery.capacityKwh` |
+| **Low Voltage Battery** | 12V auxiliary battery | % | `battery.lowBatteryPercentRemaining` |
 
-#### General Vehicle Sensors
+#### Charging Sensors (EVs)
 
-| Sensor            | Description                       | Unit   | Requirements      |
-| ----------------- | --------------------------------- | ------ | ----------------- |
-| **Odometer** | Total vehicle mileage | km/mi | `read_odometer` |
-| **Fuel Level** | Fuel tank level (gas vehicles) | % | `read_fuel` |
-| **Tire Pressure** | Individual tire pressures | kPa/PSI | `read_tires` |
-| **Engine Oil Life** | Remaining engine oil life | % | `read_engine_oil` |
-| **Door Status** | Status of all doors | - | `read_security` |
-| **Window Status** | Status of all windows | - | `read_security` |
-| **Interior Temperature** | Cabin temperature | °C/°F | `read_thermometer` |
-| **Exterior Temperature** | Outside temperature | °C/°F | `read_thermometer` |
-| **Last Update** | Timestamp of last vehicle data update | - | All vehicles |
+| Sensor | Description | Unit | Signal ID |
+|--------|-------------|------|-----------|
+| **Charging Status** | Current charging state | - | `charge.state` |
+| **Charge Voltage** | Charging voltage | V | `charge.voltage` |
+| **Charge Current** | Charging amperage | A | `charge.amperage` |
+| **Charge Power** | Charging wattage | W | `charge.wattage` |
+| **Time to Full** | Estimated charge time | min | `charge.timeToComplete` |
+| **Max Current** | Maximum charge current | A | `charge.amperageMax` |
+| **Charge Limit** | Target charge percentage | % | `charge.limit` |
+
+#### Fuel Sensors (Gas Vehicles)
+
+| Sensor | Description | Unit | Signal ID |
+|--------|-------------|------|-----------|
+| **Fuel Amount** | Fuel remaining | L | `fuel.amountRemaining` |
+| **Fuel Percentage** | Fuel tank level | % | `fuel.percentRemaining` |
+| **Fuel Range** | Estimated range | km/mi | `fuel.range` |
+
+#### Tire Sensors
+
+| Sensor | Description | Unit | Signal ID |
+|--------|-------------|------|-----------|
+| **Front Left Tire** | Tire pressure | PSI/kPa | `tires.frontLeft.pressure` |
+| **Front Right Tire** | Tire pressure | PSI/kPa | `tires.frontRight.pressure` |
+| **Rear Left Tire** | Tire pressure | PSI/kPa | `tires.backLeft.pressure` |
+| **Rear Right Tire** | Tire pressure | PSI/kPa | `tires.backRight.pressure` |
+
+#### Vehicle Status Sensors
+
+| Sensor | Description | Unit | Signal ID |
+|--------|-------------|------|-----------|
+| **Current Gear** | Transmission gear | - | `drivetrain.currentGear` |
+| **Oil Life** | Remaining oil life | % | `engine.oilLifeRemaining` |
+| **Software Version** | Vehicle firmware | - | `vehicle.softwareVersion` |
+| **Odometer** | Total distance | km/mi | `odometer.value` |
+
+#### Location Sensors
+
+| Sensor | Description | Unit | Signal ID |
+|--------|-------------|------|-----------|
+| **Latitude** | GPS latitude | ° | `location.latitude` |
+| **Longitude** | GPS longitude | ° | `location.longitude` |
+
+#### Connectivity Sensors
+
+| Sensor | Description | Signal ID |
+|--------|-------------|-----------|
+| **Vehicle Online** | Connection status | `connectivity.isOnline` |
+| **Vehicle Asleep** | Sleep mode status | `connectivity.isAsleep` |
+| **Digital Key Paired** | Digital key status | `connectivity.isDigitalKeyPaired` |
+
+#### Other Sensors
+
+| Sensor | Description | Signal ID |
+|--------|-------------|-----------|
+| **Surveillance Enabled** | Surveillance system | `surveillance.isEnabled` |
+| **Battery Heater Active** | Battery heater status | `batteryHeater.isHeaterActive` |
+
+### Binary Sensors (25 Total)
+
+#### Door Sensors
+
+| Sensor | Description | Signal ID |
+|--------|-------------|-----------|
+| **Front Left Door** | Door open status | `doors.frontLeft.isOpen` |
+| **Front Left Door Lock** | Door lock status | `doors.frontLeft.isLocked` |
+| **Front Right Door** | Door open status | `doors.frontRight.isOpen` |
+| **Front Right Door Lock** | Door lock status | `doors.frontRight.isLocked` |
+| **Rear Left Door** | Door open status | `doors.rearLeft.isOpen` |
+| **Rear Left Door Lock** | Door lock status | `doors.rearLeft.isLocked` |
+| **Rear Right Door** | Door open status | `doors.rearRight.isOpen` |
+| **Rear Right Door Lock** | Door lock status | `doors.rearRight.isLocked` |
+
+#### Window Sensors
+
+| Sensor | Description | Signal ID |
+|--------|-------------|-----------|
+| **Front Left Window** | Window open status | `windows.frontLeft.isOpen` |
+| **Front Right Window** | Window open status | `windows.frontRight.isOpen` |
+| **Rear Left Window** | Window open status | `windows.rearLeft.isOpen` |
+| **Rear Right Window** | Window open status | `windows.rearRight.isOpen` |
+
+#### Trunk Sensors
+
+| Sensor | Description | Signal ID |
+|--------|-------------|-----------|
+| **Front Trunk** | Front trunk/hood open | `trunks.front.isOpen` |
+| **Front Trunk Lock** | Front trunk lock | `trunks.front.isLocked` |
+| **Rear Trunk** | Rear trunk open | `trunks.rear.isOpen` |
+| **Rear Trunk Lock** | Rear trunk lock | `trunks.rear.isLocked` |
+
+#### Other Binary Sensors
+
+| Sensor | Description | Signal ID |
+|--------|-------------|-----------|
+| **Engine Cover** | Engine cover open | `engineCover.isOpen` |
+| **Sunroof** | Sunroof open status | `sunroof.isOpen` |
+| **Charging Cable** | Cable plugged in | `chargingCable.isPluggedIn` |
+| **Fast Charger** | DC fast charger | `fastCharger.isConnected` |
+| **Battery Heater** | Heater active | `batteryHeater.isHeaterActive` |
+| **Online Status** | Vehicle online | `connectivity.isOnline` |
+| **Sleep Status** | Vehicle asleep | `connectivity.isAsleep` |
+| **Digital Key** | Digital key paired | `connectivity.isDigitalKeyPaired` |
+| **Surveillance** | Surveillance enabled | `surveillance.isEnabled` |
+
+### Control Entities
+
+#### Switch
+
+| Entity | Description | Requirements |
+|--------|-------------|--------------|
+| **Charging** | Start/stop charging | `control_charge` |
+
+#### Number
+
+| Entity | Description | Range | Requirements |
+|--------|-------------|-------|--------------|
+| **Charge Limit** | Set target charge % | 0-100% | `control_charge` |
 
 ### Important Notes
 
-⚠️ **Vehicle Compatibility**: The actual entities and sensors that appear depend on:
+⚠️ **Smart Entity Discovery**: The integration automatically detects which entities your vehicle supports using Smartcar's signals API. Only compatible entities will appear - you won't see unavailable entities for features your vehicle doesn't have.
 
-- Your vehicle's year and model
-- Whether your vehicle is electric (EV/PHEV) or gas-powered
-- What data your vehicle manufacturer makes available through Smartcar
-- The Smartcar API compatibility for your specific vehicle
-
-🔍 **Missing Entities?** If expected sensors don't appear:
-
+🔍 **Missing Expected Entities?**
 - Check [Smartcar's compatibility page](https://smartcar.com/docs/api-reference/compatibility/) for your vehicle
-- Verify your vehicle supports the feature (e.g., only EVs have battery sensors)
-- Some features may require specific trim levels or packages
-- Older vehicle models may have limited connectivity features
+- EV-specific sensors only appear on electric vehicles
+- Door/window sensors require your vehicle to support those signals
+- Some features may require specific trim levels or model years
 
-📊 **Checking Compatibility**: Visit the [Smartcar Compatibility Dashboard](https://smartcar.com/docs/api-reference/compatibility/) and search for your vehicle's year, make, and model to see which features are supported.
+📊 **Checking Compatibility**: Visit the [Smartcar Compatibility Dashboard](https://smartcar.com/docs/api-reference/compatibility/) and search for your vehicle to see which features are supported.
 
 ---
 

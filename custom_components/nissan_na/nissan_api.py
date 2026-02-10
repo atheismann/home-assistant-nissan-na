@@ -588,6 +588,40 @@ class SmartcarApiClient:
         permissions_dict = _namedtuple_to_dict(response)
         return permissions_dict.get("permissions", [])
 
+    async def get_vehicle_signals(self, vehicle_id: str) -> List[str]:
+        """
+        Get the list of available signals for a vehicle.
+
+        This queries the Smartcar API to determine which signals/sensors
+        are actually supported by the vehicle, enabling dynamic entity creation
+        based on actual vehicle capabilities.
+
+        Args:
+            vehicle_id: Smartcar vehicle ID.
+
+        Returns:
+            List[str]: List of available signal names (e.g., 'battery.percentRemaining').
+        """
+        url = f"{self._api_base_url}/vehicles/{vehicle_id}/signals"
+        headers = {"Authorization": f"Bearer {self.access_token}"}
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        # Smartcar returns signals in format:
+                        # {"signals": [{"id": "battery.percentRemaining", ...}, ...]}
+                        if "signals" in data:
+                            return [s.get("id") for s in data["signals"] if s.get("id")]
+                        return []
+                    else:
+                        # If signal API not available, return empty (will fall back to permission-based)
+                        return []
+        except Exception:
+            # If API call fails, return empty list (will fall back to permission-based)
+            return []
+
     async def get_vehicle_status(self, vehicle_id: str) -> Dict[str, Any]:
         """
         Get comprehensive vehicle status.

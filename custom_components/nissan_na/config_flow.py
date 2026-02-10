@@ -145,11 +145,13 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
             step_id="init",
             menu_options={
                 "refresh_sensors": "Refresh All Sensors",
+                "reload_entities": "Re-load Entities",
                 "webhook_config": "Configure Webhooks",
                 "reauth": "Re-authorize Integration",
             },
             description_placeholders={
                 "refresh_info": "Manually fetch current vehicle data from Smartcar",
+                "reload_info": "Discover and load any new entities not in previous version",
                 "webhook_info": "Configure real-time vehicle updates via webhooks",
                 "reauth_info": "Update OAuth permissions when new features are added",
             },
@@ -211,6 +213,87 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> dict:
         """Show refresh completion and return to menu."""
+        # Return to main menu
+        return await self.async_step_init()
+
+    async def async_step_reload_entities(
+        self, user_input: dict[str, Any] | None = None
+    ) -> dict:
+        """Reload entities and discover new sensors."""
+        try:
+            # Reload the sensor platform to discover new entities
+            from .sensor import async_setup_entry as sensor_setup
+            
+            data = self.hass.data[DOMAIN].get(self.config_entry.entry_id)
+            if not data:
+                return self.async_abort(reason="integration_not_loaded")
+
+            # Validate available signals for all vehicles
+            client = data.get("client")
+            if client:
+                try:
+                    vehicles = await client.get_vehicle_list()
+                    for vehicle in vehicles:
+                        signals = await client.get_vehicle_signals(vehicle.id)
+                        _LOGGER.info(
+                            "Discovered %d available signals for vehicle %s",
+                            len(signals),
+                            vehicle.id,
+                        )
+                except Exception as err:
+                    _LOGGER.warning(
+                        "Failed to validate vehicle signals during reload: %s",
+                        err,
+                    )
+
+            # Get current sensor tracking
+            current_sensors = data.get("sensors", {})
+            initial_count = sum(len(v) for v in current_sensors.values())
+            
+            # Create entity registry lookup
+            from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
+            entity_registry = async_get_entity_registry(self.hass)
+            
+            # Track new entities
+            new_entities = []
+            
+            async def async_add_entities(entities):
+                """Callback to track added entities."""
+                new_entities.extend(entities)
+            
+            # Re-run sensor setup to discover new entities
+            await sensor_setup(self.hass, self.config_entry, async_add_entities)
+            
+            # Count sensors after reload
+            current_sensors = data.get("sensors", {})
+            final_count = sum(len(v) for v in current_sensors.values())
+            
+            new_count = final_count - initial_count
+            
+            _LOGGER.info(
+                "Entity reload completed: %d new sensors discovered, %d total sensors",
+                new_count,
+                final_count,
+            )
+            
+            # Show completion form and return to menu
+            return self.async_show_form(
+                step_id="reload_complete",
+                description_placeholders={
+                    "initial": str(initial_count),
+                    "final": str(final_count),
+                    "new": str(new_count),
+                },
+            )
+
+        except Exception as err:
+            _LOGGER.error("Error reloading entities: %s", err, exc_info=True)
+            return self.async_abort(reason="reload_failed")
+
+    async def async_step_reload_complete(
+        self, user_input: dict[str, Any] | None = None
+    ) -> dict:
+        """Show reload completion and return to menu."""
         # Return to main menu
         return await self.async_step_init()
 

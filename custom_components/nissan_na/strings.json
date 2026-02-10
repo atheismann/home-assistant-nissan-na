@@ -21,17 +21,256 @@
       "reauth_triggered": "Reauthorization started. Please complete the OAuth flow in the notifications.",
       "integration_not_loaded": "Integration data not found. Please reload the integration.",
       "no_sensors_found": "No sensors found to refresh.",
-      "refresh_failed": "Failed to refresh sensors. Please check the logs for details."
+      "refresh_failed": "Failed to refresh sensors. Please check the logs for details.",
+      "reload_failed": "Failed to reload entities. Please check the logs for details."
     }
   },
   "application_credentials": {
     "description": "Follow these steps to create a Smartcar application and obtain your credentials:\n\n1. Visit [Smartcar Dashboard](https://dashboard.smartcar.com)\n2. Create a new application\n3. Set redirect URI to: `https://my.home-assistant.io/redirect/oauth`\n4. Copy your Client ID and Client Secret\n\nFor detailed instructions, see [setup guide]({more_info_url})"
   },
+  "entity": {
+    "sensor": {
+      "battery_percent_remaining": {
+        "name": "Battery Percentage",
+        "description": "Battery charge percentage"
+      },
+      "battery_range": {
+        "name": "Battery Range",
+        "description": "Estimated driving range on battery charge"
+      },
+      "battery_capacity_kwh": {
+        "name": "Battery Capacity",
+        "description": "Total battery capacity in kilowatt-hours"
+      },
+      "battery_low_voltage_percent": {
+        "name": "Low Voltage Battery Level",
+        "description": "12V auxiliary battery charge percentage"
+      },
+      "charge_is_plugged_in": {
+        "name": "Charger Plugged In",
+        "description": "Whether the charging cable is connected"
+      },
+      "charge_state": {
+        "name": "Charging Status",
+        "description": "Current charging state (CHARGING, FULLY_CHARGED, etc)"
+      },
+      "charge_voltage": {
+        "name": "Charge Voltage",
+        "description": "Voltage during charging"
+      },
+      "charge_amperage": {
+        "name": "Charge Current",
+        "description": "Current (amperage) during charging"
+      },
+      "charge_wattage": {
+        "name": "Charge Power",
+        "description": "Power (wattage) during charging"
+      },
+      "charge_time_to_complete": {
+        "name": "Time to Full Charge",
+        "description": "Estimated time to complete charging"
+      },
+      "charge_amperage_max": {
+        "name": "Max Charge Current",
+        "description": "Maximum charging current available"
+      },
+      "fuel_amount_remaining": {
+        "name": "Fuel Amount",
+        "description": "Amount of fuel remaining in liters"
+      },
+      "fuel_percent_remaining": {
+        "name": "Fuel Percentage",
+        "description": "Fuel tank percentage"
+      },
+      "fuel_range": {
+        "name": "Fuel Range",
+        "description": "Estimated driving range on remaining fuel"
+      },
+      "tire_pressure_front_left": {
+        "name": "Front Left Tire Pressure",
+        "description": "Tire pressure for front left wheel"
+      },
+      "tire_pressure_front_right": {
+        "name": "Front Right Tire Pressure",
+        "description": "Tire pressure for front right wheel"
+      },
+      "tire_pressure_back_left": {
+        "name": "Rear Left Tire Pressure",
+        "description": "Tire pressure for rear left wheel"
+      },
+      "tire_pressure_back_right": {
+        "name": "Rear Right Tire Pressure",
+        "description": "Tire pressure for rear right wheel"
+      },
+      "odometer": {
+        "name": "Odometer",
+        "description": "Total miles/kilometers driven"
+      },
+      "engine_oil_life_remaining": {
+        "name": "Oil Life Remaining",
+        "description": "Percentage of oil life remaining"
+      },
+      "vehicle_software_version": {
+        "name": "Software Version",
+        "description": "Vehicle firmware/software version"
+      },
+      "location_latitude": {
+        "name": "Latitude",
+        "description": "Vehicle GPS latitude coordinate"
+      },
+      "location_longitude": {
+        "name": "Longitude",
+        "description": "Vehicle GPS longitude coordinate"
+      },
+      "connectivity_is_online": {
+        "name": "Vehicle Online",
+        "description": "Whether the vehicle is connected to the network"
+      },
+      "connectivity_is_asleep": {
+        "name": "Vehicle Sleeping",
+        "description": "Whether the vehicle is in sleep mode"
+      },
+      "connectivity_digital_key_paired": {
+        "name": "Digital Key Paired",
+        "description": "Whether a digital key is paired"
+      },
+      "surveillance_enabled": {
+        "name": "Surveillance Enabled",
+        "description": "Whether vehicle surveillance is enabled"
+      },
+      "battery_heater_active": {
+        "name": "Battery Heater Active",
+        "description": "Whether the battery heater is running"
+      },
+      "charge_limit": {
+        "name": "Charge Limit",
+        "description": "Target battery charge percentage"
+      },
+      "vehicle_current_gear": {
+        "name": "Current Gear",
+        "description": "Current transmission gear (P, R, N, D, etc)"
+      }
+    },
+    "binary_sensor": {
+      "door_front_left_open": {
+        "name": "Front Left Door",
+        "description": "Front left door open status"
+      },
+      "door_front_left_locked": {
+        "name": "Front Left Door Lock",
+        "description": "Front left door lock status"
+      },
+      "door_front_right_open": {
+        "name": "Front Right Door",
+        "description": "Front right door open status"
+      },
+      "door_front_right_locked": {
+        "name": "Front Right Door Lock",
+        "description": "Front right door lock status"
+      },
+      "door_rear_left_open": {
+        "name": "Rear Left Door",
+        "description": "Rear left door open status"
+      },
+      "door_rear_left_locked": {
+        "name": "Rear Left Door Lock",
+        "description": "Rear left door lock status"
+      },
+      "door_rear_right_open": {
+        "name": "Rear Right Door",
+        "description": "Rear right door open status"
+      },
+      "door_rear_right_locked": {
+        "name": "Rear Right Door Lock",
+        "description": "Rear right door lock status"
+      },
+      "window_front_left_open": {
+        "name": "Front Left Window",
+        "description": "Front left window open status"
+      },
+      "window_front_right_open": {
+        "name": "Front Right Window",
+        "description": "Front right window open status"
+      },
+      "window_rear_left_open": {
+        "name": "Rear Left Window",
+        "description": "Rear left window open status"
+      },
+      "window_rear_right_open": {
+        "name": "Rear Right Window",
+        "description": "Rear right window open status"
+      },
+      "trunk_front_open": {
+        "name": "Front Trunk/Hood",
+        "description": "Front trunk (hood) open status"
+      },
+      "trunk_front_locked": {
+        "name": "Front Trunk/Hood Lock",
+        "description": "Front trunk (hood) lock status"
+      },
+      "trunk_rear_open": {
+        "name": "Rear Trunk",
+        "description": "Rear trunk open status"
+      },
+      "trunk_rear_locked": {
+        "name": "Rear Trunk Lock",
+        "description": "Rear trunk lock status"
+      },
+      "engine_cover_open": {
+        "name": "Engine Cover",
+        "description": "Engine cover open status"
+      },
+      "sunroof_open": {
+        "name": "Sunroof",
+        "description": "Sunroof open status"
+      },
+      "battery_heater_active": {
+        "name": "Battery Heater Running",
+        "description": "Battery heater active status"
+      },
+      "vehicle_online": {
+        "name": "Online",
+        "description": "Vehicle connected to network"
+      },
+      "vehicle_asleep": {
+        "name": "Sleeping",
+        "description": "Vehicle in sleep mode"
+      },
+      "digital_key_paired": {
+        "name": "Digital Key",
+        "description": "Digital key pairing status"
+      },
+      "surveillance_enabled": {
+        "name": "Surveillance",
+        "description": "Surveillance system status"
+      },
+      "fast_charger_connected": {
+        "name": "Fast Charger Connected",
+        "description": "DC fast charger connection status"
+      },
+      "charging_cable_plugged_in": {
+        "name": "Charging Cable",
+        "description": "Charging cable connection status"
+      }
+    },
+    "switch": {
+      "charging": {
+        "name": "Charging",
+        "description": "Start or stop vehicle charging"
+      }
+    },
+    "number": {
+      "charge_limit": {
+        "name": "Charge Limit",
+        "description": "Set target battery charge percentage (0-100%)"
+      }
+    }
+  },
   "options": {
     "step": {
       "init": {
         "title": "Nissan NA Configuration",
-        "description": "Choose a configuration option:\n\nRefresh All Sensors: {refresh_info}\n\nConfigure Webhooks: {webhook_info}\n\nRe-authorize Integration: {reauth_info}"
+        "description": "Choose a configuration option:\n\nRefresh All Sensors: {refresh_info}\n\nRe-load Entities: {reload_info}\n\nConfigure Webhooks: {webhook_info}\n\nRe-authorize Integration: {reauth_info}"
       },
       "refresh_sensors": {
         "title": "Refresh All Sensors",
@@ -40,6 +279,14 @@
       "refresh_complete": {
         "title": "Refresh Complete",
         "description": "Sensor refresh completed:\n\n✓ {refreshed} sensors updated successfully\n✗ {failed} sensors failed\n\nTotal sensors: {total}\n\nClick Submit to return to the menu."
+      },
+      "reload_entities": {
+        "title": "Re-load Entities",
+        "description": "Discover and load any new entities that were not available in the previous integration version."
+      },
+      "reload_complete": {
+        "title": "Entity Re-load Complete",
+        "description": "Entity re-load completed:\n\nInitial sensors: {initial}\nFinal sensors: {final}\nNew sensors discovered: {new}\n\nClick Submit to return to the menu."
       },
       "webhook_config": {
         "title": "Webhook Configuration",

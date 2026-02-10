@@ -6,48 +6,75 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
-- **Entity state management improvements**
-  - Sensors now properly use `SensorEntity` base class for correct state exposure
-  - Device tracker now supports real-time webhook updates
-  - Improved handling of nested API responses with automatic value extraction
-- **Comprehensive debug logging**
-  - Added detailed debug logging throughout webhook lifecycle
-  - Webhook signal dispatching now logged for troubleshooting
-  - Entity state changes tracked in logs (old value → new value)
-  - Management token and config entry validation logged
-  - Webhook event reception and processing logged at all stages
-- **Device tracker enhancements**
-  - Device tracker now subscribes to webhook signals for location updates
-  - Proper handling of location data with metadata
-  - Adds context around location updates (latitude/longitude) in logs
-- **Automatic token refresh** - Access tokens now automatically renew when expired
-  - Tokens are refreshed and persisted to config entry
-  - Vehicle object cache cleared on token operations to ensure fresh credentials
-  - Eliminates most manual re-authorization needs
-  - Falls back to re-auth flow only if refresh token expires
-- **Re-authorization capability** - Users can now manually re-authorize the integration from the options menu
-  - Menu-based configuration UI with clear options
-  - "Configure Webhooks" option for webhook setup
-  - "Re-authorize Integration" option to grant updated permissions
-  - Webhook URL now displayed directly in the configuration UI (no need to check logs)
-- **Webhook support for real-time updates**
-  - Integration now supports Smartcar webhooks for instant vehicle state updates
-  - Eliminates need for constant polling when webhooks are configured
-  - Handles VERIFY, VEHICLE_STATE, and VEHICLE_ERROR webhook events
-  - HMAC-SHA256 signature verification for webhook security
-  - Configuration option to add Application Management Token
-  - Automatic webhook registration and URL generation
-- Support for additional vehicle sensors:
-  - Tire pressure monitoring
-  - Engine oil life
-  - Interior/exterior temperature
-- **Expanded OAuth permissions for comprehensive Nissan compatibility**
-  - Added read_alerts, read_diagnostics for vehicle alerts and maintenance notifications
-  - Added read_climate, control_climate for climate system monitoring and control
-  - Added read_speedometer, read_compass for real-time driving data
-  - Added read_extended_vehicle_info for additional vehicle configuration details
-  - Added read_service_history for dealership service records
-  - Added read_user_profile for connected account information
+#### Comprehensive Sensor Coverage
+- **31 Sensors** (expanded from 7) covering:
+  - **Battery**: Percentage, Range, Capacity, Low Voltage Battery
+  - **Charging**: State, Voltage, Current, Power, Time to Complete, Max Current, Plugged In Status
+  - **Fuel**: Amount, Percentage, Range
+  - **Tires**: Pressure for all 4 wheels (FL, FR, RL, RR)
+  - **Vehicle Status**: Current Gear, Oil Life, Software Version
+  - **Location**: Latitude, Longitude
+  - **Connectivity**: Online, Asleep, Digital Key Paired
+  - **Other**: Surveillance, Battery Heater, Charge Limit, Odometer
+
+#### Binary Sensors (NEW)
+- **25 Binary Sensors** covering:
+  - **Doors**: All 4 doors (open + lock status)
+  - **Windows**: All 4 windows (open status)
+  - **Trunks**: Front/Rear trunks (open + lock status)
+  - **Connectivity**: Online, Asleep, Digital Key Paired
+  - **Charging**: Cable plugged, Fast charger connected
+  - **Other**: Sunroof, Engine cover, Battery heater, Surveillance
+
+#### Vehicle Control (NEW)
+- **Charging Switch**: Start/stop charging remotely
+- **Charge Limit Number**: Set target charge percentage (0-100%)
+
+#### Intelligent Signal Validation
+- **Dynamic entity creation** based on vehicle capabilities using Smartcar signals API
+- **Three-level validation fallback**:
+  1. Primary: Smartcar signals API
+  2. Secondary: OAuth permission validation
+  3. Tertiary: Data existence check
+- Entities only appear if supported by your specific vehicle
+- Prevents "unavailable" entities for unsupported features
+
+#### Enhanced Configuration
+- **Entity Reload Option**: Discover and load new sensors after upgrades
+- **Signal Discovery**: Automatic detection of available vehicle features
+- **Diagnostics Support**: View webhook URL and integration status
+- **Entity Descriptions**: Comprehensive strings.json with all entity descriptions
+
+#### Webhook Enhancements
+- Real-time state updates for all entity types
+- Nested data structure parsing for complex signals
+- Async dispatcher pattern for efficient updates
+- Comprehensive webhook logging for troubleshooting
+
+#### Developer Features
+- Complete Home Assistant device classes and icons
+- Unique ID persistence for all entities
+- Device registry integration
+- Backward compatibility maintained
+- Zero breaking changes
+
+### Improved
+
+- **Sensor state management** using proper `SensorEntity` base class
+- **Device tracker** now supports real-time webhook location updates
+- **Automatic token refresh** - eliminates most manual re-authorization needs
+- **Comprehensive debug logging** throughout webhook lifecycle
+- **Error handling** with graceful fallbacks at all levels
+- **OAuth permissions** expanded to 32 comprehensive permissions
+
+### Technical
+
+- Total entity count: **58** (from 10, +480% increase)
+- Signal coverage: **31/51** Smartcar signals (61%)
+- Code additions: ~1,200 lines
+- New platforms: binary_sensor, switch, number
+- Python requirement: 3.12+
+- Home Assistant: 2024.1+
   - Added read_charge_locations, read_charge_records for EV charging history
   - Added control_navigation for sending destinations to vehicle
   - Added control_trunk for remote trunk/frunk control
