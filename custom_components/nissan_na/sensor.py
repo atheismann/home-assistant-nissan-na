@@ -212,6 +212,10 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                 # Track this sensor by signal_id
                 data["sensors"][vehicle.id][signal_id] = sensor
 
+    # Add webhook URL sensor for configuration reference
+    webhook_sensor = WebhookUrlSensor(hass, config_entry)
+    entities.append(webhook_sensor)
+
     async_add_entities(entities)
     
     # Fetch fresh initial state for all sensors after adding them
@@ -468,4 +472,33 @@ class NissanGenericSensor(SensorEntity):
         """Return device information to link this entity to a device."""
         return {
             "identifiers": {(DOMAIN, self._vehicle.vin)},
+        }
+
+class WebhookUrlSensor(SensorEntity):
+    """Sensor for displaying the webhook URL for configuration."""
+
+    def __init__(self, hass, config_entry):
+        """Initialize webhook URL sensor."""
+        self.hass = hass
+        self._config_entry = config_entry
+        self._attr_unique_id = f"{config_entry.entry_id}_webhook_url"
+        self._attr_name = "Webhook URL"
+        self._attr_icon = "mdi:webhook"
+        
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to config entry updates."""
+        await super().async_added_to_hass()
+    
+    @property
+    def native_value(self):
+        """Return the webhook URL."""
+        return self._config_entry.data.get("webhook_url", "Not configured")
+    
+    @property
+    def device_info(self):
+        """Return device information."""
+        return {
+            "identifiers": {(DOMAIN, "webhook")},
+            "name": "Webhook Configuration",
+            "manufacturer": "Smartcar",
         }
