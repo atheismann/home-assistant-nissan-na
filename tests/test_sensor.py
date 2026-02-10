@@ -9,6 +9,46 @@ from custom_components.nissan_na.const import DOMAIN
 from custom_components.nissan_na.sensor import NissanGenericSensor, async_setup_entry
 
 
+def create_sensor(hass, vehicle, status, api_key, field_name, sensor_name, unit, entry_id):
+    """Helper to create a sensor with the new API."""
+    return NissanGenericSensor(
+        hass, vehicle, status, api_key, field_name, sensor_name, unit, entry_id
+    )
+
+
+# Mapping of old test keys to new (api_key, field_name) pairs for backward compatibility
+OLD_KEY_MAP = {
+    "batteryLevel": ("battery", "percentRemaining"),
+    "chargingStatus": ("charge", "state"),
+    "plugStatus": ("charge", "isPluggedIn"),
+    "odometer": ("odometer", "distance"),
+    "range": ("battery", "range"),
+    "location": ("location", "latitude"),  # Default, tests can override
+    "tirePressure": None,  # Not in new API
+    "doorStatus": None,  # Not in new API
+    "windowStatus": None,  # Not in new API
+    "lastUpdate": None,  # Not in new API
+    "climateStatus": None,  # Not in new API
+}
+
+
+def create_sensor_legacy(hass, vehicle, status, old_key, sensor_name, unit, entry_id):
+    """Helper for backward compatibility with old test code.
+    
+    Maps old key names to new (api_key, field_name) pairs.
+    """
+    if old_key not in OLD_KEY_MAP or OLD_KEY_MAP[old_key] is None:
+        # For unmapped keys, assume they exist as direct dict keys
+        return NissanGenericSensor(
+            hass, vehicle, status, old_key, "value", sensor_name, unit, entry_id
+        )
+    
+    api_key, field_name = OLD_KEY_MAP[old_key]
+    return NissanGenericSensor(
+        hass, vehicle, status, api_key, field_name, sensor_name, unit, entry_id
+    )
+
+
 @pytest.fixture
 def mock_vehicle():
     """Create a mock vehicle."""
@@ -24,19 +64,23 @@ def mock_vehicle():
 
 @pytest.fixture
 def mock_vehicle_status():
-    """Create mock vehicle status."""
+    """Create mock vehicle status matching actual API structure."""
     return {
-        "batteryLevel": 85,
-        "chargingStatus": "Charging",
-        "plugStatus": "Connected",
-        "odometer": 15000,
-        "range": 240,
-        "tirePressure": 35,
-        "doorStatus": "Closed",
-        "windowStatus": "Closed",
-        "lastUpdate": "2026-01-29T10:00:00Z",
-        "climateStatus": "Off",
-        "location": {"lat": 37.7749, "lon": -122.4194},
+        "battery": {
+            "percentRemaining": 0.85,
+            "range": 240,
+        },
+        "charge": {
+            "isPluggedIn": True,
+            "state": "CHARGING",
+        },
+        "odometer": {
+            "distance": 15000,
+        },
+        "location": {
+            "latitude": 37.7749,
+            "longitude": -122.4194,
+        },
     }
 
 
@@ -72,7 +116,7 @@ async def test_async_setup_entry(hass: HomeAssistant, mock_client, mock_vehicle)
 
     await async_setup_entry(hass, config_entry, async_add_entities)
 
-    assert len(entities) == 11
+    assert len(entities) == 7  # 2 battery sensors + 2 charge sensors + 1 odometer + 2 location sensors
     assert mock_client.get_vehicle_list.called
     assert mock_client.get_vehicle_status.called
 
@@ -83,15 +127,16 @@ def test_sensor_battery_level(hass, mock_vehicle, mock_vehicle_status):
         hass,
         mock_vehicle,
         mock_vehicle_status,
-        "batteryLevel",
+        "battery",  # api_key
+        "percentRemaining",  # field_name
         "Battery Level",
         "%",
         "test_entry",
     )
 
-    assert sensor.state == 85
-    assert sensor.unique_id == "TEST123VIN_batteryLevel"
-    assert sensor.unit_of_measurement == "%"
+    assert sensor.native_value == 0.85
+    assert sensor.unique_id == "TEST123VIN_battery_percentRemaining"
+    assert sensor.native_unit_of_measurement == "%"
     assert "My Nissan" in sensor.name
 
 
@@ -101,65 +146,101 @@ def test_sensor_charging_status(hass, mock_vehicle, mock_vehicle_status):
         hass,
         mock_vehicle,
         mock_vehicle_status,
-        "chargingStatus",
+        "charge",  # api_key
+        "state",  # field_name
         "Charging Status",
         None,
         "test_entry",
     )
 
-    assert sensor.state == "Charging"
-    assert sensor.unique_id == "TEST123VIN_chargingStatus"
-    assert sensor.unit_of_measurement is None
+    assert sensor.native_value == "CHARGING"
+    assert sensor.unique_id == "TEST123VIN_charge_state"
+    assert sensor.native_unit_of_measurement is None
 
 
 def test_sensor_location(hass, mock_vehicle, mock_vehicle_status):
-    """Test location sensor."""
+    """Test location latitude sensor."""
     sensor = NissanGenericSensor(
-        hass, mock_vehicle, mock_vehicle_status, "location", "Location", None, "test_entry"
+        hass,
+        mock_vehicle,
+        mock_vehicle_status,
+        "location",  # api_key
+        "latitude",  # field_name
+        "Location Latitude",
+        "°",
+        "test_entry",
     )
 
-    assert sensor.state == "37.7749,-122.4194"
-    assert sensor.unique_id == "TEST123VIN_location"
+    assert sensor.native_value == 37.7749
+    assert sensor.unique_id == "TEST123VIN_location_latitude"
 
 
 def test_sensor_location_missing(hass, mock_vehicle):
     """Test location sensor with missing location data."""
     status = {"location": None}
     sensor = NissanGenericSensor(
-        hass, mock_vehicle, status, "location", "Location", None, "test_entry"
+        hass,
+        mock_vehicle,
+        status,
+        "location",
+        "latitude",
+        "Location Latitude",
+        "°",
+        "test_entry",
     )
 
-    assert sensor.state is None
+    assert sensor.native_value is None
 
 
 def test_sensor_location_incomplete(hass, mock_vehicle):
     """Test location sensor with incomplete location data."""
-    status = {"location": {"lat": 37.7749}}
+    status = {"location": {"latitude": 37.7749}}
     sensor = NissanGenericSensor(
-        hass, mock_vehicle, status, "location", "Location", None, "test_entry"
+        hass,
+        mock_vehicle,
+        status,
+        "location",
+        "latitude",
+        "Location Latitude",
+        "°",
+        "test_entry",
     )
 
-    assert sensor.state is None
+    assert sensor.native_value == 37.7749
 
 
 def test_sensor_odometer(hass, mock_vehicle, mock_vehicle_status):
     """Test odometer sensor."""
     sensor = NissanGenericSensor(
-        hass, mock_vehicle, mock_vehicle_status, "odometer", "Odometer", "km", "test_entry"
+        hass,
+        mock_vehicle,
+        mock_vehicle_status,
+        "odometer",  # api_key
+        "distance",  # field_name
+        "Odometer",
+        "km",
+        "test_entry",
     )
 
-    assert sensor.state == 15000
-    assert sensor.unit_of_measurement == "km"
+    assert sensor.native_value == 15000
+    assert sensor.native_unit_of_measurement == "km"
 
 
 def test_sensor_missing_key(hass, mock_vehicle):
     """Test sensor with missing data key."""
     status = {}
     sensor = NissanGenericSensor(
-        hass, mock_vehicle, status, "batteryLevel", "Battery Level", "%", "test_entry"
+        hass,
+        mock_vehicle,
+        status,
+        "battery",
+        "percentRemaining",
+        "Battery Level",
+        "%",
+        "test_entry",
     )
 
-    assert sensor.state is None
+    assert sensor.native_value is None
 
 
 def test_sensor_no_nickname(hass, mock_vehicle, mock_vehicle_status):
@@ -169,7 +250,8 @@ def test_sensor_no_nickname(hass, mock_vehicle, mock_vehicle_status):
         hass,
         mock_vehicle,
         mock_vehicle_status,
-        "batteryLevel",
+        "battery",
+        "percentRemaining",
         "Battery Level",
         "%",
         "test_entry",
@@ -186,27 +268,30 @@ def test_sensor_webhook_update(hass, mock_vehicle, mock_vehicle_status):
         hass,
         mock_vehicle,
         mock_vehicle_status,
-        "batteryLevel",
+        "battery",
+        "percentRemaining",
         "Battery Level",
         "%",
         "test_entry",
     )
 
     # Initial state
-    assert sensor.state == 85
+    assert sensor.native_value == 0.85
 
     # Simulate webhook data update with mocked async_write_ha_state
     with patch.object(sensor, 'async_write_ha_state'):
-        webhook_data = {"batteryLevel": 90, "range": 250}
+        webhook_data = {
+            "battery": {"percentRemaining": 0.90, "range": 250},
+        }
         sensor._handle_webhook_data(webhook_data)
 
     # Verify state updated
-    assert sensor.state == 90
+    assert sensor.native_value == 0.90
     # Verify status dict was updated with webhook data
-    assert sensor._status["batteryLevel"] == 90
-    assert sensor._status["range"] == 250
+    assert sensor._status["battery"]["percentRemaining"] == 0.90
+    assert sensor._status["battery"]["range"] == 250
     # Verify other data was preserved
-    assert sensor._status["chargingStatus"] == "Charging"
+    assert sensor._status["charge"]["state"] == "CHARGING"
 
 
 async def test_dynamic_entity_creation_from_webhook(
@@ -234,15 +319,15 @@ async def test_dynamic_entity_creation_from_webhook(
     await async_setup_entry(hass, config_entry, async_add_entities)
     initial_entity_count = len(entities)
     
-    assert initial_entity_count == 11  # Standard sensors
+    assert initial_entity_count == 7  # Updated to match new SENSOR_DEFINITIONS (7 sensors)
     assert len(add_entities_calls) == 1  # First call during setup
     
-    # Simulate webhook with new data key not in initial setup
+    # Simulate webhook with new data keys
     from homeassistant.helpers.dispatcher import async_dispatcher_send
     
-    # Add a new key that wasn't in the initial status
+    # Add new keys that weren't in the initial status
     webhook_data = {
-        "batteryLevel": 92,
+        "battery": {"percentRemaining": 0.92, "range": 250},
         "fuelLevel": 45,  # New key not in SENSOR_DEFINITIONS
         "engineStatus": "running",  # New key not in SENSOR_DEFINITIONS
     }
@@ -266,7 +351,7 @@ async def test_dynamic_entity_creation_from_webhook(
     assert len(new_entities) == 2  # fuelLevel and engineStatus
     
     # Verify the new entities have the correct keys
-    new_keys = {entity._key for entity in new_entities}
+    new_keys = {entity._api_key for entity in new_entities}
     assert "fuelLevel" in new_keys
     assert "engineStatus" in new_keys
 
@@ -277,7 +362,8 @@ def test_sensor_polling_disabled(hass, mock_vehicle, mock_vehicle_status):
         hass,
         mock_vehicle,
         mock_vehicle_status,
-        "batteryLevel",
+        "battery",
+        "percentRemaining",
         "Battery Level",
         "%",
         "test_entry",
@@ -302,7 +388,7 @@ async def test_async_setup_entry_api_error(hass: HomeAssistant, mock_client, moc
     await async_setup_entry(hass, config_entry, async_add_entities)
 
     # Should still create entities with empty status
-    assert len(entities) == 11
+    assert len(entities) == 7  # Updated to match new SENSOR_DEFINITIONS
     assert mock_client.get_vehicle_list.called
 
 
@@ -371,7 +457,8 @@ async def test_sensor_async_update_error(hass, mock_vehicle, mock_vehicle_status
         hass,
         mock_vehicle,
         mock_vehicle_status,
-        "batteryLevel",
+        "battery",
+        "percentRemaining",
         "Battery Level",
         "%",
         "test_entry",
@@ -444,6 +531,7 @@ async def test_sensor_webhook_partial_update(hass, mock_vehicle, mock_vehicle_st
         hass,
         mock_vehicle,
         mock_vehicle_status,
+        "battery",
         "range",
         "Range",
         "km",
@@ -451,24 +539,24 @@ async def test_sensor_webhook_partial_update(hass, mock_vehicle, mock_vehicle_st
     )
 
     # Initial state
-    assert sensor.state == 240
-    initial_battery = sensor._status.get("batteryLevel")
+    assert sensor.native_value == 240
+    initial_battery = sensor._status.get("battery", {}).get("percentRemaining")
 
     # Simulate partial webhook update (only range changes)
     with patch.object(sensor, 'async_write_ha_state'):
-        sensor._handle_webhook_data({"range": 300})
+        sensor._handle_webhook_data({"battery": {"range": 300}})
 
     # Verify range updated
-    assert sensor.state == 300
+    assert sensor.native_value == 300
     # Verify other data preserved
-    assert sensor._status.get("batteryLevel") == initial_battery
+    assert sensor._status.get("battery", {}).get("percentRemaining") == initial_battery
 
 
 async def test_sensor_location_formatting(hass, mock_vehicle):
     """Test location sensor formats lat/lon correctly."""
     location_data = {
-        "location": {"lat": 37.7749, "lon": -122.4194},
-        "batteryLevel": 85,
+        "location": {"latitude": 37.7749, "longitude": -122.4194},
+        "battery": {"percentRemaining": 0.85},
     }
     
     sensor = NissanGenericSensor(
@@ -476,12 +564,13 @@ async def test_sensor_location_formatting(hass, mock_vehicle):
         mock_vehicle,
         location_data,
         "location",
-        "Location",
-        None,
+        "latitude",
+        "Location Latitude",
+        "°",
         "test_entry",
     )
 
-    assert sensor.state == "37.7749,-122.4194"
+    assert sensor.native_value == 37.7749
 
 
 async def test_sensor_device_info(hass, mock_vehicle):
@@ -489,8 +578,9 @@ async def test_sensor_device_info(hass, mock_vehicle):
     sensor = NissanGenericSensor(
         hass,
         mock_vehicle,
-        {"batteryLevel": 85},
-        "batteryLevel",
+        {"battery": {"percentRemaining": 0.85}},
+        "battery",
+        "percentRemaining",
         "Battery Level",
         "%",
         "test_entry",
@@ -498,7 +588,7 @@ async def test_sensor_device_info(hass, mock_vehicle):
 
     device_info = sensor.device_info
     assert (DOMAIN, mock_vehicle.vin) in device_info["identifiers"]
-    assert device_info["via_device"] == (DOMAIN, "test_entry")
+    # Note: via_device was removed as part of device registry fix
 
 
 async def test_sensor_unique_id(hass, mock_vehicle):
@@ -506,14 +596,15 @@ async def test_sensor_unique_id(hass, mock_vehicle):
     sensor = NissanGenericSensor(
         hass,
         mock_vehicle,
-        {"batteryLevel": 85},
-        "batteryLevel",
+        {"battery": {"percentRemaining": 0.85}},
+        "battery",
+        "percentRemaining",
         "Battery Level",
         "%",
         "test_entry",
     )
 
-    assert sensor.unique_id == f"{mock_vehicle.vin}_batteryLevel"
+    assert sensor.unique_id == f"{mock_vehicle.vin}_battery_percentRemaining"
 
 
 async def test_sensor_unit_of_measurement(hass, mock_vehicle):
@@ -521,24 +612,26 @@ async def test_sensor_unit_of_measurement(hass, mock_vehicle):
     sensor_with_unit = NissanGenericSensor(
         hass,
         mock_vehicle,
-        {"batteryLevel": 85},
-        "batteryLevel",
+        {"battery": {"percentRemaining": 0.85}},
+        "battery",
+        "percentRemaining",
         "Battery Level",
         "%",
         "test_entry",
     )
-    assert sensor_with_unit.unit_of_measurement == "%"
+    assert sensor_with_unit.native_unit_of_measurement == "%"
 
     sensor_without_unit = NissanGenericSensor(
         hass,
         mock_vehicle,
-        {"chargingStatus": "Charging"},
-        "chargingStatus",
+        {"charge": {"state": "CHARGING"}},
+        "charge",
+        "state",
         "Charging Status",
         None,
         "test_entry",
     )
-    assert sensor_without_unit.unit_of_measurement is None
+    assert sensor_without_unit.native_unit_of_measurement is None
 
 
 async def test_async_setup_entry_permission_check_fail(
@@ -563,7 +656,10 @@ async def test_async_setup_entry_permission_check_fail(
     mock_client.get_permissions = AsyncMock(side_effect=Exception("API Error"))
     # But vehicle has status data
     mock_client.get_vehicle_status = AsyncMock(
-        return_value={"batteryLevel": 85, "odometer": 10000}
+        return_value={
+            "battery": {"percentRemaining": 0.85},
+            "odometer": {"distance": 10000},
+        }
     )
 
     entities = []
@@ -573,10 +669,10 @@ async def test_async_setup_entry_permission_check_fail(
 
     # Should create sensors for data that exists
     assert len(entities) > 0
-    created_keys = {e._key for e in entities}
+    created_api_keys = {e._api_key for e in entities}
     # Since permission check failed, should only create sensors with data
-    assert "batteryLevel" in created_keys
-    assert "odometer" in created_keys
+    assert "battery" in created_api_keys
+    assert "odometer" in created_api_keys
 
 
 async def test_async_setup_entry_no_status_data(hass: HomeAssistant, mock_client, mock_vehicle):
@@ -603,10 +699,12 @@ async def test_async_setup_entry_no_status_data(hass: HomeAssistant, mock_client
 
     await async_setup_entry(hass, config_entry, async_add_entities)
 
-    # Should only create sensors with no permission requirement (always-available sensors)
-    # like "lastUpdate"
-    created_keys = {e._key for e in entities}
-    assert "lastUpdate" in created_keys  # Has no required_permission
+    # Should only create sensors with no permission requirement or available data
+    # With no data and no permissions, only sensors that are always available would be created
+    # But since all current sensors require permissions and there's no data, no sensors created
+    created_api_keys = {e._api_key for e in entities}
+    # With empty status and no permissions, no sensors should be created
+    assert len(entities) == 0
 
 
 async def test_sensor_async_update_missing_client(hass, mock_vehicle):
@@ -617,8 +715,9 @@ async def test_sensor_async_update_missing_client(hass, mock_vehicle):
     sensor = NissanGenericSensor(
         hass,
         mock_vehicle,
-        {"batteryLevel": 85},
-        "batteryLevel",
+        {"battery": {"percentRemaining": 0.85}},
+        "battery",
+        "percentRemaining",
         "Battery Level",
         "%",
         "test_entry",
@@ -627,7 +726,7 @@ async def test_sensor_async_update_missing_client(hass, mock_vehicle):
     # Should handle missing client gracefully
     await sensor.async_update()
     # Status should remain unchanged or have logged error
-    assert sensor._status.get("batteryLevel") == 85
+    assert sensor._status.get("battery", {}).get("percentRemaining") == 0.85
 
 
 def test_sensor_display_name_year_make_model(hass, mock_vehicle):
@@ -644,8 +743,9 @@ def test_sensor_display_name_year_make_model(hass, mock_vehicle):
     sensor = NissanGenericSensor(
         hass,
         vehicle,
-        {"batteryLevel": 85},
-        "batteryLevel",
+        {"battery": {"percentRemaining": 0.85}},
+        "battery",
+        "percentRemaining",
         "Battery Level",
         "%",
         "test_entry",
@@ -668,8 +768,9 @@ def test_sensor_display_name_vin_fallback(hass, mock_vehicle):
     sensor = NissanGenericSensor(
         hass,
         vehicle,
-        {"batteryLevel": 85},
-        "batteryLevel",
+        {"battery": {"percentRemaining": 0.85}},
+        "battery",
+        "percentRemaining",
         "Battery Level",
         "%",
         "test_entry",
@@ -748,28 +849,30 @@ def test_sensor_state_location_with_null_values(hass, mock_vehicle):
     sensor = NissanGenericSensor(
         hass,
         mock_vehicle,
-        {"location": {"lat": None, "lon": -122.14}},
+        {"location": {"latitude": None, "longitude": -122.14}},
         "location",
-        "Location",
-        None,
+        "latitude",
+        "Location Latitude",
+        "°",
         "test_entry",
     )
     
-    # Should return None when lat is missing
-    assert sensor.state is None
+    # Should return None when latitude is missing
+    assert sensor.native_value is None
     
-    # Test with lon missing
+    # Test with longitude missing
     sensor2 = NissanGenericSensor(
         hass,
         mock_vehicle,
-        {"location": {"lat": 37.42, "lon": None}},
+        {"location": {"latitude": 37.42, "longitude": None}},
         "location",
-        "Location",
-        None,
+        "longitude",
+        "Location Longitude",
+        "°",
         "test_entry",
     )
     
-    assert sensor2.state is None
+    assert sensor2.native_value is None
 
 
 def test_sensor_state_nonlocation_None_value(hass, mock_vehicle):
@@ -778,14 +881,15 @@ def test_sensor_state_nonlocation_None_value(hass, mock_vehicle):
         hass,
         mock_vehicle,
         {},
-        "batteryLevel",
+        "battery",
+        "percentRemaining",
         "Battery Level",
         "%",
         "test_entry",
     )
     
     # Status doesn't have the key
-    assert sensor.state is None
+    assert sensor.native_value is None
 
 
 def test_sensor_webhook_data_not_dict(hass, mock_vehicle):
@@ -793,8 +897,9 @@ def test_sensor_webhook_data_not_dict(hass, mock_vehicle):
     sensor = NissanGenericSensor(
         hass,
         mock_vehicle,
-        {"batteryLevel": 50},
-        "batteryLevel",
+        {"battery": {"percentRemaining": 0.50}},
+        "battery",
+        "percentRemaining",
         "Battery Level",
         "%",
         "test_entry",
@@ -804,7 +909,7 @@ def test_sensor_webhook_data_not_dict(hass, mock_vehicle):
     sensor._handle_webhook_data("not a dict")
     
     # Status should remain unchanged
-    assert sensor._status["batteryLevel"] == 50
+    assert sensor._status["battery"]["percentRemaining"] == 0.50
 
 
 async def test_async_setup_entry_all_permission_types(hass: HomeAssistant, mock_client, mock_vehicle):
@@ -826,10 +931,14 @@ async def test_async_setup_entry_all_permission_types(hass: HomeAssistant, mock_
     mock_client.get_permissions = AsyncMock(return_value=[
         "read_battery",
         "read_odometer",
-        # Missing read_charge, read_tires, etc.
+        # Missing read_charge, read_location, etc.
     ])
     mock_client.get_vehicle_status = AsyncMock(
-        return_value={"batteryLevel": 85, "odometer": 10000, "chargingStatus": "Idle"}
+        return_value={
+            "battery": {"percentRemaining": 0.85},
+            "odometer": {"distance": 10000},
+            "charge": {"state": "IDLE"},
+        }
     )
 
     entities = []
@@ -837,12 +946,13 @@ async def test_async_setup_entry_all_permission_types(hass: HomeAssistant, mock_
 
     await async_setup_entry(hass, config_entry, async_add_entities)
 
-    created_keys = {e._key for e in entities}
+    created_api_keys = {e._api_key for e in entities}
     # Should create battery and odometer (have permissions)
-    assert "batteryLevel" in created_keys
-    assert "odometer" in created_keys
+    assert "battery" in created_api_keys
+    assert "odometer" in created_api_keys
     # Charging requires read_charge permission which we don't have
-    assert "chargingStatus" not in created_keys
+    assert not any(e._api_key == "charge" for e in entities)
+
 
 
 

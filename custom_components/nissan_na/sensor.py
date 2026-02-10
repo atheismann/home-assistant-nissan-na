@@ -11,19 +11,28 @@ _LOGGER = logging.getLogger(__name__)
 SIGNAL_WEBHOOK_DATA = "nissan_na_webhook_data"
 
 
-# Sensor definitions with metadata: (key, name, unit, required_permission)
+# Sensor definitions mapping API keys to sensor info
+# Format: (api_key, field_name, sensor_name, unit, required_permission)
+# api_key: Key from get_vehicle_status() response (e.g., 'battery', 'charge')
+# field_name: Field within that API response object to extract
+# sensor_name: Human-readable sensor name
+# unit: Unit of measurement
+# required_permission: OAuth permission required
 SENSOR_DEFINITIONS = [
-    ("batteryLevel", "Battery Level", "%", "read_battery"),
-    ("chargingStatus", "Charging Status", None, "read_charge"),
-    ("plugStatus", "Plug Status", None, "read_charge"),
-    ("odometer", "Odometer", "km", "read_odometer"),
-    ("range", "Range", "km", "read_battery"),
-    ("tirePressure", "Tire Pressure", "kPa", "read_tires"),
-    ("doorStatus", "Door Status", None, "read_security"),
-    ("windowStatus", "Window Status", None, "read_security"),
-    ("lastUpdate", "Last Update", None, None),  # Always available
-    ("climateStatus", "Climate Status", None, "read_climate"),
-    ("location", "Location", None, "read_location"),
+    # Battery sensors (from battery API response)
+    ("battery", "percentRemaining", "Battery Level", "%", "read_battery"),
+    ("battery", "range", "Range", "km", "read_battery"),
+    
+    # Charging sensors (from charge API response)
+    ("charge", "isPluggedIn", "Plug Status", None, "read_charge"),
+    ("charge", "state", "Charging Status", None, "read_charge"),
+    
+    # Odometer sensor
+    ("odometer", "distance", "Odometer", "km", "read_odometer"),
+    
+    # Location sensors (from location API response)
+    ("location", "latitude", "Location Latitude", "°", "read_location"),
+    ("location", "longitude", "Location Longitude", "°", "read_location"),
 ]
 
 
@@ -72,7 +81,16 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             data["sensors"][vehicle.id] = {}
 
         # Create sensors based on permissions or data availability
-        for key, name, unit, required_permission in SENSOR_DEFINITIONS:
+        # Use unique sensor IDs to avoid duplicates (e.g., battery has both percentRemaining and range)
+        created_sensors = set()
+        for api_key, field_name, name, unit, required_permission in SENSOR_DEFINITIONS:
+            # Create unique ID for this sensor to avoid duplicates
+            sensor_id = f"{api_key}_{field_name}_{name.replace(' ', '_').lower()}"
+            
+            if sensor_id in created_sensors:
+                continue
+            created_sensors.add(sensor_id)
+            
             should_create = False
 
             # Always create if no permission required
@@ -86,21 +104,22 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             else:
                 # Create if data exists in status
                 # (shows vehicle actually has this feature)
-                should_create = key in status and status[key] is not None
+                should_create = api_key in status and status[api_key] is not None
 
             if should_create:
                 sensor = NissanGenericSensor(
                     hass,
                     vehicle,
                     status,
-                    key,
+                    api_key,
+                    field_name,
                     name,
                     unit,
                     config_entry.entry_id,
                 )
                 entities.append(sensor)
-                # Track this sensor
-                data["sensors"][vehicle.id][key] = sensor
+                # Track this sensor by sensor_id
+                data["sensors"][vehicle.id][sensor_id] = sensor
 
     async_add_entities(entities)
     
@@ -159,9 +178,9 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
         for key in new_keys:
             # Find definition for this key
             definition = None
-            for def_key, def_name, def_unit, def_perm in SENSOR_DEFINITIONS:
-                if def_key == key:
-                    definition = (def_key, def_name, def_unit, def_perm)
+            for def_api_key, def_field, def_name, def_unit, def_perm in SENSOR_DEFINITIONS:
+                if def_api_key == key:
+                    definition = (def_api_key, def_field, def_name, def_unit, def_perm)
                     break
                     
             if not definition:
@@ -170,9 +189,12 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                 # Convert camelCase to Title Case for name
                 import re
                 name = re.sub(r'([A-Z])', r' \1', key).strip().title()
-                definition = (key, name, None, None)
+                definition = (key, "value", name, None, None)
                 
-            def_key, def_name, def_unit, def_perm = definition
+            def_api_key, def_field, def_name, def_unit, def_perm = definition
+            
+            # Create unique sensor ID
+            sensor_id = f"{def_api_key}_{def_field}_{def_name.replace(' ', '_').lower()}"
             
             # Check permissions
             should_create = False
@@ -182,20 +204,21 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                 should_create = def_perm in permissions
             else:
                 # Be conservative - create if data exists
-                should_create = key in webhook_data and webhook_data[key] is not None
+                should_create = def_api_key in webhook_data and webhook_data[def_api_key] is not None
                 
             if should_create:
                 sensor = NissanGenericSensor(
                     hass,
                     vehicle,
                     webhook_data,  # Use webhook data as initial status
-                    def_key,
+                    def_api_key,
+                    def_field,
                     def_name,
                     def_unit,
                     config_entry.entry_id,
                 )
                 new_entities.append(sensor)
-                data["sensors"][vehicle_id][def_key] = sensor
+                data["sensors"][vehicle_id][sensor_id] = sensor
                 _LOGGER.info(
                     "Created new sensor %s for vehicle %s",
                     def_name,
@@ -229,17 +252,19 @@ class NissanGenericSensor(SensorEntity):
     Args:
         vehicle: Vehicle object.
         status: Status dictionary for the vehicle.
-        key: Key in the status dict to expose as a sensor.
+        api_key: Key in the status dict (e.g., 'battery', 'charge', 'odometer').
+        field_name: Field within the API response to extract (e.g., 'percentRemaining', 'isCharging').
         name: Human-readable name for the sensor.
         unit: Unit of measurement (if any).
         entry_id: Config entry ID for device linking.
     """
 
-    def __init__(self, hass, vehicle, status, key, name, unit, entry_id):
+    def __init__(self, hass, vehicle, status, api_key, field_name, name, unit, entry_id):
         self.hass = hass
         self._vehicle = vehicle
         self._status = status
-        self._key = key
+        self._api_key = api_key
+        self._field_name = field_name
         self._entry_id = entry_id
         nickname = getattr(vehicle, "nickname", None)
         if nickname:
@@ -298,9 +323,9 @@ class NissanGenericSensor(SensorEntity):
         # Update the status dict with webhook data
         # Webhook may contain partial updates, so merge with existing status
         if isinstance(data, dict):
-            old_value = self._status.get(self._key)
+            old_value = self.native_value
             self._status.update(data)
-            new_value = self._status.get(self._key)
+            new_value = self.native_value
             if old_value != new_value:
                 _LOGGER.info(
                     "Sensor %s updated via webhook: %s -> %s",
@@ -346,36 +371,55 @@ class NissanGenericSensor(SensorEntity):
     def native_value(self):
         """
         Return the current value of the sensor.
-        Extracts numeric values from nested API responses.
-        For location, returns a "lat,lon" string if available.
+        Extracts the specified field from the API response object.
         """
-        value = self._status.get(self._key)
-        if not value:
-            return None
-            
-        # Handle location specially - return formatted lat,lon
-        if self._key == "location" and isinstance(value, dict):
-            lat = value.get("lat")
-            lon = value.get("lon")
-            return f"{lat},{lon}" if lat and lon else None
+        # Get the API response object (e.g., battery, charge, odometer, location)
+        api_response = self._status.get(self._api_key)
         
-        # For dict values with numeric data, extract the main value
-        # API returns nested structures like: {'distance': 6218.5, 'meta': {...}}
-        if isinstance(value, dict):
-            # Try common numeric value keys
-            for key in ["distance", "value", "amount"]:
-                if key in value and isinstance(value[key], (int, float)):
-                    return value[key]
-            # If no standard key found, return None for dict values
+        if not api_response:
+            _LOGGER.debug(
+                "No data for sensor %s (api_key=%s)",
+                self._attr_name,
+                self._api_key,
+            )
             return None
         
-        # Return the value as-is if it's already a scalar (string, number, bool)
-        return value
+        # If it's a dict (API response object), extract the field
+        if isinstance(api_response, dict):
+            value = api_response.get(self._field_name)
+            _LOGGER.debug(
+                "Sensor %s: extracted %s from %s = %s",
+                self._attr_name,
+                self._field_name,
+                self._api_key,
+                value,
+            )
+            return value
+        
+        # If it's a namedtuple or object, try to get the attribute
+        try:
+            value = getattr(api_response, self._field_name, None)
+            _LOGGER.debug(
+                "Sensor %s: extracted attribute %s from %s = %s",
+                self._attr_name,
+                self._field_name,
+                self._api_key,
+                value,
+            )
+            return value
+        except AttributeError:
+            _LOGGER.debug(
+                "Attribute %s not found on %s for sensor %s",
+                self._field_name,
+                self._api_key,
+                self._attr_name,
+            )
+            return None
 
     @property
     def unique_id(self):
         """Return a unique ID for the sensor entity."""
-        return f"{self._vehicle.vin}_{self._key}"
+        return f"{self._vehicle.vin}_{self._api_key}_{self._field_name}"
 
     @property
     def native_unit_of_measurement(self):
