@@ -8,6 +8,7 @@ from homeassistant import config_entries
 from homeassistant.helpers import config_entry_oauth2_flow
 
 from .const import CONF_MANAGEMENT_TOKEN, CONF_UNIT_SYSTEM, DOMAIN, UNIT_SYSTEM_IMPERIAL, UNIT_SYSTEM_METRIC
+from .nissan_api import SmartcarApiClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -70,7 +71,6 @@ class OAuth2FlowHandler(
     async def async_oauth_create_entry(self, data: dict) -> dict:
         """Create an entry for Nissan NA after OAuth is complete."""
         # Test connection by getting vehicle list
-        from .nissan_api import SmartcarApiClient
 
         # Validate OAuth implementation has credentials
         if not self.flow_impl.client_id or not self.flow_impl.client_secret:
