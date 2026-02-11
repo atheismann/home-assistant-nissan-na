@@ -22,7 +22,8 @@ class TestAsyncSetupEntry:
         mock_hass.data = {DOMAIN: {mock_config_entry.entry_id: {"client": mock_client, "numbers": {}}}}
         
         entities = []
-        async def async_add_entities(new_entities):
+        def async_add_entities(new_entities):
+            """Sync callback for adding entities."""
             entities.extend(new_entities)
         
         await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
@@ -39,7 +40,8 @@ class TestAsyncSetupEntry:
         mock_hass.data = {DOMAIN: {mock_config_entry.entry_id: {"client": mock_client, "numbers": {}}}}
         
         entities = []
-        async def async_add_entities(new_entities):
+        def async_add_entities(new_entities):
+            """Sync callback for adding entities."""
             entities.extend(new_entities)
         
         await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
@@ -55,7 +57,8 @@ class TestAsyncSetupEntry:
         mock_hass.data = {DOMAIN: {mock_config_entry.entry_id: {"client": mock_client, "numbers": {}}}}
         
         entities = []
-        async def async_add_entities(new_entities):
+        def async_add_entities(new_entities):
+            """Sync callback for adding entities."""
             entities.extend(new_entities)
         
         await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
@@ -75,8 +78,8 @@ class TestNissanChargeLimitNumber:
             "test_entry",
         )
         
-        assert number._attr_name == "My Nissan Charge Limit"
-        assert number.unique_id == "TEST1234567890123_charge_limit"
+        assert number._attr_name == "Test Vehicle Charge Limit"
+        assert number._attr_unique_id == "VIN123ABC_charge_limit"
         assert number._value == 80  # Default value
 
     def test_number_initialization_without_nickname(self, mock_hass, mock_vehicle_no_nickname, mock_client):
@@ -158,6 +161,9 @@ class TestNissanChargeLimitNumber:
             "test_entry",
         )
         
+        # Mock async_write_ha_state to avoid entity_id validation
+        number.async_write_ha_state = MagicMock()
+        
         # Initial value
         assert number._value == 80
         
@@ -166,6 +172,8 @@ class TestNissanChargeLimitNumber:
         number._handle_webhook_data(webhook_data)
         
         assert number._value == 90.0
+        # Verify state update was called
+        number.async_write_ha_state.assert_called_once()
 
     def test_handle_webhook_data_invalid(self, mock_hass, mock_vehicle, mock_client):
         """Test handling invalid webhook data."""
@@ -198,17 +206,26 @@ class TestNissanChargeLimitNumber:
             "test_entry",
         )
         
+        # Mock async_write_ha_state
+        number.async_write_ha_state = MagicMock()
+        # Mock the access token
+        mock_client.access_token = "test_token"
+        
         mock_response = MagicMock()
         mock_response.status = 200
-        mock_session = MagicMock()
-        mock_session.post = AsyncMock(return_value=mock_response)
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
+        
+        mock_session = AsyncMock()
+        mock_session.post = MagicMock(return_value=mock_response)
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_session.__aexit__ = AsyncMock()
+        mock_session.__aexit__ = AsyncMock(return_value=False)
         
         with patch("aiohttp.ClientSession", return_value=mock_session):
             await number.async_set_value(85.0)
         
         assert number._value == 85
+        number.async_write_ha_state.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_async_set_value_clamps_to_range(self, mock_hass, mock_vehicle, mock_client):
@@ -220,12 +237,20 @@ class TestNissanChargeLimitNumber:
             "test_entry",
         )
         
+        # Mock async_write_ha_state
+        number.async_write_ha_state = MagicMock()
+        # Mock the access token
+        mock_client.access_token = "test_token"
+        
         mock_response = MagicMock()
         mock_response.status = 200
-        mock_session = MagicMock()
-        mock_session.post = AsyncMock(return_value=mock_response)
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
+        
+        mock_session = AsyncMock()
+        mock_session.post = MagicMock(return_value=mock_response)
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_session.__aexit__ = AsyncMock()
+        mock_session.__aexit__ = AsyncMock(return_value=False)
         
         with patch("aiohttp.ClientSession", return_value=mock_session):
             # Test upper bound
@@ -246,12 +271,20 @@ class TestNissanChargeLimitNumber:
             "test_entry",
         )
         
+        # Mock async_write_ha_state
+        number.async_write_ha_state = MagicMock()
+        # Mock the access token
+        mock_client.access_token = "test_token"
+        
         mock_response = MagicMock()
         mock_response.status = 500
-        mock_session = MagicMock()
-        mock_session.post = AsyncMock(return_value=mock_response)
+        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_response.__aexit__ = AsyncMock(return_value=False)
+        
+        mock_session = AsyncMock()
+        mock_session.post = MagicMock(return_value=mock_response)
         mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_session.__aexit__ = AsyncMock()
+        mock_session.__aexit__ = AsyncMock(return_value=False)
         
         with patch("aiohttp.ClientSession", return_value=mock_session):
             await number.async_set_value(90.0)
@@ -267,6 +300,9 @@ class TestNissanChargeLimitNumber:
             mock_client,
             "test_entry",
         )
+        
+        # Mock async_write_ha_state
+        number.async_write_ha_state = MagicMock()
         
         with patch("aiohttp.ClientSession", side_effect=Exception("Connection error")):
             await number.async_set_value(90.0)

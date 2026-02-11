@@ -76,13 +76,17 @@ SENSOR_DEFINITIONS = [
 ]
 
 
-async def async_setup_entry(hass, config_entry, async_add_entities):
+async def async_setup_entry(hass, config_entry, async_add_entities, rebuild_mode=False):
     """
     Set up Nissan NA sensors for each vehicle and status data point.
 
     Creates a sensor entity for each signal supported by the vehicle,
     using the Smartcar signals API to validate availability.
     Also sets up dynamic entity creation from webhook data.
+    
+    Args:
+        rebuild_mode: If True, validates and removes unsupported sensors.
+                     If False (default), only adds new sensors without removing existing.
     """
     data = hass.data[DOMAIN][config_entry.entry_id]
     client = data["client"]
@@ -96,54 +100,90 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     for vehicle in vehicles:
         _LOGGER.info("Setting up sensors for vehicle %s", vehicle.id)
         
-        # Get available signals from Smartcar API
+        # Get available signals from Smartcar API (mandatory validation)
         available_signals = set()
-        permissions = []
         try:
             signals = await client.get_vehicle_signals(vehicle.id)
             available_signals = set(signals)
-            _LOGGER.debug(
-                "Vehicle %s supports %d signals: %s",
+            _LOGGER.info(
+                "Vehicle %s has %d available signals",
                 vehicle.id,
                 len(available_signals),
-                signals,
             )
-        except Exception as err:
-            _LOGGER.warning(
-                "Failed to get vehicle signals for %s, will use permission fallback: %s",
+            _LOGGER.debug(
+                "Available signals for %s: %s",
                 vehicle.id,
-                err,
+                sorted(available_signals),
             )
-        
-        # Get permissions once per vehicle (not per sensor)
-        if not available_signals:
-            # Fall back to permission-based if signals API fails
-            try:
-                permissions = await client.get_permissions(vehicle.id)
-                _LOGGER.debug("Vehicle %s permissions: %s", vehicle.id, permissions)
-            except Exception:
-                permissions = []
-        
-        # Fetch initial state from API on boot
-        _LOGGER.info("Fetching initial state for vehicle %s", vehicle.id)
-        try:
-            status = await client.get_vehicle_status(vehicle.vin)
-            _LOGGER.debug("Initial state for vehicle %s: %s", vehicle.id, status)
         except Exception as err:
             _LOGGER.error(
-                "Failed to fetch initial state for vehicle %s: %s",
+                "Failed to get vehicle signals for %s, skipping sensor setup: %s",
                 vehicle.id,
                 err,
             )
-            # Use empty status if fetch fails, sensors will update via webhook
-            status = {}
+            # Skip this vehicle if we can't get signals
+            continue
+        
+        # Fetch initial state from API on boot (non-blocking, continues after timeout)
+        # Use empty status initially, will be populated via webhook
+        status = {}
+        async def fetch_status():
+            """Fetch vehicle status in background."""
+            try:
+                fetched_status = await client.get_vehicle_status(vehicle.vin)
+                _LOGGER.debug("Initial state for vehicle %s: %s", vehicle.id, fetched_status)
+                # Update status in data for future reference
+                if vehicle.id in data["sensors"]:
+                    for sensor in data["sensors"][vehicle.id].values():
+                        sensor._status = fetched_status
+            except Exception as err:
+                _LOGGER.debug(
+                    "Failed to fetch initial state for vehicle %s (will use webhook): %s",
+                    vehicle.id,
+                    err,
+                )
+        
+        # Schedule status fetch as background task (don't wait for it)
+        hass.async_create_task(fetch_status())
         
         # Initialize tracking dict for this vehicle
         if vehicle.id not in data["sensors"]:
             data["sensors"][vehicle.id] = {}
+        
+        # In rebuild mode, remove sensors that are no longer available
+        if rebuild_mode:
+            from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
+            entity_registry = async_get_entity_registry(hass)
+            
+            # Find and remove entities for signals that are no longer available
+            removed_count = 0
+            for signal_id in list(data["sensors"][vehicle.id].keys()):
+                if signal_id not in available_signals:
+                    # Remove from tracking
+                    sensor = data["sensors"][vehicle.id].pop(signal_id)
+                    # Remove from entity registry
+                    if sensor.entity_id:
+                        entity_entry = entity_registry.async_get(sensor.entity_id)
+                        if entity_entry:
+                            entity_registry.async_remove(sensor.entity_id)
+                            removed_count += 1
+                            _LOGGER.info(
+                                "Removed unavailable sensor %s for vehicle %s",
+                                signal_id,
+                                vehicle.id,
+                            )
+            
+            if removed_count > 0:
+                _LOGGER.info(
+                    "Vehicle %s: removed %d unsupported sensors",
+                    vehicle.id,
+                    removed_count,
+                )
 
         # Create sensors based on available signals
         created_sensors = set()
+        skipped_count = 0
+        added_count = 0
         for definition in SENSOR_DEFINITIONS:
             signal_id = definition[0]
             field_name = definition[1]
@@ -159,62 +199,67 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                 continue
             created_sensors.add(sensor_unique_id)
             
-            should_create = False
-
-            # Check if signal is available
-            if available_signals:
-                # If we have signals, use them as source of truth
-                should_create = signal_id in available_signals
-                if not should_create:
-                    _LOGGER.debug(
-                        "Signal %s not available for vehicle %s",
-                        signal_id,
-                        vehicle.id,
-                    )
-            elif required_permission:
-                # Fall back to permission checking if signals API failed
-                # Use cached permissions from earlier
-                should_create = (
-                    permissions and required_permission in permissions
-                )
-                if not should_create:
-                    # If we can't check permissions, check if data exists
-                    api_key = signal_id.split(".")[0]
-                    should_create = api_key in status and status[api_key] is not None
-            else:
-                # No permission required, but signal might be webhook-only
-                # Create if signals API succeeded (meaning we got a full list)
-                # Or create if data exists in status
-                if available_signals:
-                    # Signals API worked, only create if signal is in the list
-                    should_create = signal_id in available_signals
-                else:
-                    # Signals API didn't work, try data check
-                    api_key = signal_id.split(".")[0]
-                    should_create = api_key in status and status[api_key] is not None
-
-            if should_create:
-                _LOGGER.info(
-                    "Creating sensor %s for vehicle %s (signal: %s)",
-                    name,
+            # Only create sensors for signals that are actually available
+            if signal_id not in available_signals:
+                _LOGGER.debug(
+                    "Signal %s not available for vehicle %s, skipping sensor creation",
+                    signal_id,
                     vehicle.id,
-                    signal_id,
                 )
-                sensor = NissanGenericSensor(
-                    hass,
-                    vehicle,
-                    status,
+                skipped_count += 1
+                continue
+            
+            # Skip if sensor already exists (unless in rebuild mode)
+            if signal_id in data["sensors"][vehicle.id] and not rebuild_mode:
+                _LOGGER.debug(
+                    "Sensor %s already exists for vehicle %s, skipping",
                     signal_id,
-                    field_name,
-                    name,
-                    unit,
-                    icon,
-                    device_class,
-                    config_entry.entry_id,
+                    vehicle.id,
                 )
-                entities.append(sensor)
-                # Track this sensor by signal_id
-                data["sensors"][vehicle.id][signal_id] = sensor
+                continue
+
+            _LOGGER.info(
+                "Creating sensor %s for vehicle %s (signal: %s)",
+                name,
+                vehicle.id,
+                signal_id,
+            )
+            sensor = NissanGenericSensor(
+                hass,
+                vehicle,
+                status,
+                signal_id,
+                field_name,
+                name,
+                unit,
+                icon,
+                device_class,
+                config_entry.entry_id,
+            )
+            entities.append(sensor)
+            # Track this sensor by signal_id
+            data["sensors"][vehicle.id][signal_id] = sensor
+            added_count += 1
+        
+        # Log sensor creation summary for this vehicle
+        total_sensors = len(data["sensors"][vehicle.id])
+        total_possible = len(SENSOR_DEFINITIONS)
+        if rebuild_mode:
+            _LOGGER.info(
+                "Vehicle %s: %d total sensors, %d added this rebuild, %d skipped (not available)",
+                vehicle.id,
+                total_sensors,
+                added_count,
+                skipped_count,
+            )
+        else:
+            _LOGGER.info(
+                "Vehicle %s: %d total sensors, %d new sensors added, %d skipped (not available)",
+                vehicle.id,
+                total_sensors,
+                added_count,
+                skipped_count,
+            )
 
     # Add webhook URL sensor for configuration reference
     webhook_sensor = WebhookUrlSensor(hass, config_entry)

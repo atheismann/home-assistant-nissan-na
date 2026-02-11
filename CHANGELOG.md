@@ -32,12 +32,14 @@ All notable changes to this project will be documented in this file.
 
 #### Intelligent Signal Validation
 - **Dynamic entity creation** based on vehicle capabilities using Smartcar signals API
-- **Three-level validation fallback**:
-  1. Primary: Smartcar signals API
-  2. Secondary: OAuth permission validation
-  3. Tertiary: Data existence check
-- Entities only appear if supported by your specific vehicle
-- Prevents "unavailable" entities for unsupported features
+- **Boot behavior**: Only adds new sensors, never removes existing ones for stability
+- **Rebuild Sensors option**: Manual validation and cleanup via configuration menu
+  - Removes sensors no longer supported by vehicle
+  - Adds newly available sensors
+  - Validates all sensors against current vehicle capabilities
+  - Shows summary of changes (added/removed/total)
+- Entities validated at setup using signals API
+- Clean sensor management without breaking existing automations
 
 #### Enhanced Configuration
 - **Entity Reload Option**: Discover and load new sensors after upgrades

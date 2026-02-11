@@ -146,6 +146,7 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
             menu_options={
                 "unit_system": "Configure Units (Metric/Imperial)",
                 "refresh_sensors": "Refresh All Sensors",
+                "rebuild_sensors": "Rebuild Sensors",
                 "reload_entities": "Re-load Entities",
                 "webhook_config": "Configure Webhooks",
                 "reauth": "Re-authorize Integration",
@@ -153,6 +154,7 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
             description_placeholders={
                 "unit_info": "Configure measurement units (kilometers/miles, liters/gallons, etc.)",
                 "refresh_info": "Manually fetch current vehicle data from Smartcar",
+                "rebuild_info": "Validate and rebuild all sensors - removes unsupported sensors and adds new ones",
                 "reload_info": "Discover and load any new entities not in previous version",
                 "webhook_info": "Configure real-time vehicle updates via webhooks",
                 "reauth_info": "Update OAuth permissions when new features are added",
@@ -256,6 +258,83 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> dict:
         """Show refresh completion and return to menu."""
+        # Return to main menu
+        return await self.async_step_init()
+    
+    async def async_step_rebuild_sensors(
+        self, user_input: dict[str, Any] | None = None
+    ) -> dict:
+        """Rebuild sensors - remove unsupported and add new sensors."""
+        try:
+            # Get integration data
+            data = self.hass.data[DOMAIN].get(self.config_entry.entry_id)
+            if not data:
+                return self.async_abort(reason="integration_not_loaded")
+
+            client = data.get("client")
+            if not client:
+                return self.async_abort(reason="client_not_found")
+            
+            # Get current sensor counts
+            initial_sensors = data.get("sensors", {})
+            initial_count = sum(len(vehicle_sensors) for vehicle_sensors in initial_sensors.values())
+            
+            _LOGGER.info("Starting sensor rebuild, current sensors: %d", initial_count)
+            
+            # Import and call sensor setup in rebuild mode
+            from .sensor import async_setup_entry as sensor_setup
+            
+            # Track new entities
+            new_entities = []
+            
+            async def async_add_entities(entities, update_before_add=True):
+                """Callback to track and add entities."""
+                new_entities.extend(entities)
+                # Add to Home Assistant
+                from homeassistant.helpers.entity_platform import AddEntitiesCallback
+                # We need to manually add these to the platform
+                platform = self.hass.data.get("entity_platform", {}).get("sensor", [])
+                for p in platform:
+                    if p.config_entry == self.config_entry:
+                        await p.async_add_entities(entities, update_before_add)
+                        break
+            
+            # Re-run sensor setup in rebuild mode
+            await sensor_setup(self.hass, self.config_entry, async_add_entities, rebuild_mode=True)
+            
+            # Count sensors after rebuild
+            final_sensors = data.get("sensors", {})
+            final_count = sum(len(vehicle_sensors) for vehicle_sensors in final_sensors.values())
+            
+            added = len(new_entities)
+            removed = initial_count - final_count + added
+            
+            _LOGGER.info(
+                "Sensor rebuild completed: %d total sensors, %d added, %d removed",
+                final_count,
+                added,
+                removed,
+            )
+            
+            # Show completion
+            return self.async_show_form(
+                step_id="rebuild_complete",
+                description_placeholders={
+                    "initial": str(initial_count),
+                    "final": str(final_count),
+                    "added": str(added),
+                    "removed": str(removed),
+                },
+            )
+
+        except Exception as err:
+            _LOGGER.error("Error rebuilding sensors: %s", err, exc_info=True)
+            return self.async_abort(reason="rebuild_failed")
+    
+    async def async_step_rebuild_complete(
+        self, user_input: dict[str, Any] | None = None
+    ) -> dict:
+        """Show rebuild completion and return to menu."""
         # Return to main menu
         return await self.async_step_init()
 

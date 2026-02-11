@@ -106,6 +106,7 @@ class NissanChargeLimitNumber(NumberEntity):
         self._entry_id = entry_id
         self._value = 80  # Default charge limit
         self._available = True
+        self._unsub_dispatcher = None
         
         # Build device name
         nickname = getattr(vehicle, "nickname", None)
@@ -121,7 +122,15 @@ class NissanChargeLimitNumber(NumberEntity):
                 display_name = vehicle.vin
         
         self._attr_name = f"{display_name} Charge Limit"
-        self._unsub_dispatcher = None
+        self._attr_unique_id = f"{self._vehicle.vin}_charge_limit"
+        self._attr_native_min_value = 0
+        self._attr_native_max_value = 100
+        self._attr_native_step = 1
+        self._attr_native_unit_of_measurement = "%"
+        self._attr_icon = "mdi:battery-charging-100"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, self._vehicle.vin)},
+        }
 
     async def async_added_to_hass(self):
         """Subscribe to webhook updates."""
@@ -200,48 +209,11 @@ class NissanChargeLimitNumber(NumberEntity):
             self.async_write_ha_state()
 
     @property
-    def unique_id(self):
-        """Return unique ID for the entity."""
-        return f"{self._vehicle.vin}_charge_limit"
-
-    @property
-    def native_value(self):
-        """Return the current charge limit."""
-        return self._value
-
-    @property
-    def native_min_value(self):
-        """Return the minimum charge limit."""
-        return 0
-
-    @property
-    def native_max_value(self):
-        """Return the maximum charge limit."""
-        return 100
-
-    @property
-    def native_step(self):
-        """Return the step size for the charge limit."""
-        return 1
-
-    @property
-    def native_unit_of_measurement(self):
-        """Return the unit of measurement."""
-        return "%"
-
-    @property
-    def icon(self):
-        """Return the icon."""
-        return "mdi:battery-charging-100"
-
-    @property
     def available(self):
         """Return True if entity is available."""
         return self._available
 
     @property
-    def device_info(self):
-        """Return device information."""
-        return {
-            "identifiers": {(DOMAIN, self._vehicle.vin)},
-        }
+    def native_value(self):
+        """Return the current charge limit."""
+        return self._value

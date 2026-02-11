@@ -22,7 +22,9 @@
       "integration_not_loaded": "Integration data not found. Please reload the integration.",
       "no_sensors_found": "No sensors found to refresh.",
       "refresh_failed": "Failed to refresh sensors. Please check the logs for details.",
-      "reload_failed": "Failed to reload entities. Please check the logs for details."
+      "reload_failed": "Failed to reload entities. Please check the logs for details.",
+      "rebuild_failed": "Failed to rebuild sensors. Please check the logs for details.",
+      "client_not_found": "API client not found. Please reload the integration."
     }
   },
   "options": {
@@ -31,6 +33,7 @@
         "menu_options": {
           "unit_system": "Configure Units (Metric/Imperial)",
           "refresh_sensors": "Refresh All Sensors",
+          "rebuild_sensors": "Rebuild Sensors",
           "reload_entities": "Re-load Entities",
           "webhook_config": "Configure Webhooks",
           "reauth": "Re-authorize Integration"
@@ -293,7 +296,7 @@
     "step": {
       "init": {
         "title": "Nissan NA Configuration",
-        "description": "Choose a configuration option:\n\nRefresh All Sensors: {refresh_info}\n\nRe-load Entities: {reload_info}\n\nConfigure Webhooks: {webhook_info}\n\nRe-authorize Integration: {reauth_info}"
+        "description": "Choose a configuration option:\n\nRefresh All Sensors: {refresh_info}\n\nRebuild Sensors: {rebuild_info}\n\nRe-load Entities: {reload_info}\n\nConfigure Webhooks: {webhook_info}\n\nRe-authorize Integration: {reauth_info}"
       },
       "refresh_sensors": {
         "title": "Refresh All Sensors",
@@ -302,6 +305,14 @@
       "refresh_complete": {
         "title": "Refresh Complete",
         "description": "Sensor refresh completed:\n\n✓ {refreshed} sensors updated successfully\n✗ {failed} sensors failed\n\nTotal sensors: {total}\n\nClick Submit to return to the menu."
+      },
+      "rebuild_sensors": {
+        "title": "Rebuild All Sensors",
+        "description": "This will validate all sensors against the vehicle's available signals API and:\n\n• Remove any sensors that are no longer supported by your vehicle\n• Add any new sensors that are now available\n\nThis is useful after vehicle software updates or when signals become available/unavailable.\n\nClick Submit to rebuild sensors."
+      },
+      "rebuild_complete": {
+        "title": "Sensor Rebuild Complete",
+        "description": "Sensor rebuild completed:\n\nInitial sensors: {initial}\nFinal sensors: {final}\n✓ {added} sensors added\n✗ {removed} sensors removed\n\nClick Submit to return to the menu."
       },
       "reload_entities": {
         "title": "Re-load Entities",

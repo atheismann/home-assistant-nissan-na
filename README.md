@@ -83,9 +83,10 @@ All features depend on your vehicle model and Smartcar's support for your specif
 ### 🎯 Smart Entity Discovery
 
 - **Dynamic entity creation** - Only shows entities your vehicle actually supports
-- **Three-level validation** - Uses Smartcar signals API, OAuth permissions, and data checks
-- **No unavailable entities** - Respects your vehicle's specific capabilities
-- **Automatic detection** - Discovers available features at setup and reload
+- **Signal validation** - Uses Smartcar signals API to detect available features
+- **Boot behavior** - Only adds new sensors, never removes existing ones
+- **Rebuild option** - Manually validate and clean up sensors via configuration menu
+- **Automatic detection** - Discovers available features at setup
 
 ### 🔄 Enhanced Features
 
@@ -193,6 +194,15 @@ You can adjust settings after setup:
 2. Find the Nissan North America integration and click **Configure**
 3. A menu will appear with these options:
 
+### Sensor Management Philosophy
+
+**At Boot**: The integration only **adds new sensors** - existing sensors are never automatically removed. This ensures:
+- ✅ Your automations continue working
+- ✅ No unexpected sensor disappearances
+- ✅ Stable entity IDs across restarts
+
+**Manual Control**: You decide when to clean up sensors using the **Rebuild Sensors** option.
+
 ### Menu Options
 
 #### Configure Units (Metric/Imperial)
@@ -211,12 +221,43 @@ You can adjust settings after setup:
 - Useful when you want current values without waiting for webhooks
 - Shows count of successfully refreshed sensors
 
+#### Rebuild Sensors (Recommended)
+
+- **Validates and rebuilds all sensors** based on your vehicle's current capabilities
+- **Removes unsupported sensors** that are no longer available (e.g., after vehicle software updates)
+- **Adds new sensors** that have become available
+- Uses Smartcar signals API to determine which features your vehicle currently supports
+- Shows summary: initial count, final count, sensors added, and sensors removed
+- **Use this when:**
+  - After vehicle software updates that may change available features
+  - If you see unavailable sensors that should be removed
+  - To ensure your sensor list matches your vehicle's current capabilities
+
 #### Re-load Entities
 
 - Discover and load any new sensors not available in the previous integration version
-- Perfect when upgrading the integration or when your vehicle gains new capabilities
+- Only **adds** new sensors without removing existing ones
+- Perfect when upgrading the integration
 - Shows initial sensor count, final count, and newly discovered sensors
-- Re-scans vehicle status and available data from Smartcar API
+- **Use this for:**
+  - Normal integration upgrades
+  - Adding new sensors without validation
+  - Quick discovery of new features
+
+#### 🆚 Rebuild vs. Re-load: When to Use Each
+
+| Scenario | Use Rebuild Sensors | Use Re-load Entities |
+|----------|-------------------|---------------------|
+| Vehicle software update changed features | ✅ Yes | ❌ No |
+| Want to remove unavailable sensors | ✅ Yes | ❌ No |
+| Integration upgrade with new features | Optional | ✅ Yes |
+| See "unavailable" sensors to clean up | ✅ Yes | ❌ No |
+| Just want to add new sensors safely | ❌ No | ✅ Yes |
+| First time setup | N/A | N/A |
+
+**Quick Rule**: 
+- Use **Rebuild** when you need to clean up sensors
+- Use **Re-load** when you just want to add new sensors
 
 #### Configure Webhooks
 
@@ -845,6 +886,40 @@ Log in to your Smartcar Dashboard at https://dashboard.smartcar.com to see which
 - **Common Issue**: Using VIN instead of vehicle_id
 - **Solution**: Get vehicle_id from entity attributes and use it in service calls
 
+### Sensors Not Updating or Showing as Unavailable
+
+#### Scenario 1: Many Unavailable Sensors
+If you have multiple unavailable sensors that shouldn't exist:
+
+1. Go to **Settings > Devices & Services**
+2. Click **Configure** on Nissan North America
+3. Select **Rebuild Sensors**
+4. This will validate all sensors against your vehicle's current capabilities
+
+#### Scenario 2: Missing New Sensors After Upgrade
+If you upgraded and don't see new sensors:
+
+1. Go to **Settings > Devices & Services**
+2. Click **Configure** on Nissan North America
+3. Select **Re-load Entities**
+4. New sensors will be discovered and added
+
+#### Scenario 3: Sensors Stopped Updating
+If sensors exist but aren't updating:
+
+1. Try **Refresh All Sensors** in the configuration menu
+2. Check webhooks are configured properly (if using)
+3. Enable debug logging to see API responses
+4. Check Smartcar dashboard for API issues
+
+### After Vehicle Software Update
+
+When your vehicle receives a software update:
+
+1. Features may be added or removed
+2. Use **Rebuild Sensors** to sync sensors with new capabilities
+3. This removes unsupported sensors and adds new ones
+
 ---
 
 ## Debugging & Logging
@@ -972,6 +1047,19 @@ By default, the integration polls every 15 minutes. You can adjust this in the i
 ### Can I control multiple vehicles?
 
 Yes! Each vehicle connected to your Nissan/Smartcar account will automatically appear as a separate device in Home Assistant with its own set of entities.
+
+### Why do I have "unavailable" sensors?
+
+The integration only creates sensors for features your vehicle supports. If you see unavailable sensors:
+
+1. **After a vehicle software update**: Your vehicle may have lost or gained features
+   - Solution: Use **Rebuild Sensors** in configuration menu to validate and clean up
+2. **After integration upgrade**: The integration may have changed how it detects sensors
+   - Solution: Use **Re-load Entities** to discover new sensors
+3. **Temporary API issue**: Smartcar API may be temporarily unavailable
+   - Solution: Wait and check again later, or use **Refresh All Sensors**
+
+**Best Practice**: Use **Rebuild Sensors** periodically to keep your sensor list clean and accurate.
 
 ### Does this work with Infiniti vehicles?
 

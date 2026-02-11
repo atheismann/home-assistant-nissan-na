@@ -62,7 +62,7 @@ class TestSensorSignalHandling:
 class TestAsyncSetupEntry:
     """Test async_setup_entry function."""
 
-    @pytest.mark.xfail(reason="Integration test requiring complex entity registration mocking")
+    @pytest.mark.asyncio
     async def test_setup_with_vehicles_and_signals(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
         """Test setup creates sensors when signals are available."""
         mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
@@ -72,7 +72,8 @@ class TestAsyncSetupEntry:
         mock_hass.data = {DOMAIN: {mock_config_entry.entry_id: {"client": mock_client}}}
         
         entities = []
-        async def async_add_entities(new_entities):
+        def async_add_entities(new_entities):
+            """Sync callback for adding entities."""
             entities.extend(new_entities)
         
         await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
@@ -81,25 +82,26 @@ class TestAsyncSetupEntry:
         assert len(entities) > 0
         assert any(isinstance(e, WebhookUrlSensor) for e in entities)
 
-    @pytest.mark.xfail(reason="Integration test requiring complex entity registration mocking")
-    async def test_setup_without_signals_uses_permissions(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
-        """Test setup falls back to permissions when signals API fails."""
+    @pytest.mark.asyncio
+    async def test_setup_without_signals_skips_vehicle(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
+        """Test setup skips vehicle when signals API fails."""
         mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
         mock_client.get_vehicle_signals = AsyncMock(side_effect=Exception("API error"))
-        mock_client.get_permissions = AsyncMock(return_value=["read_battery", "read_charge"])
         mock_client.get_vehicle_status = AsyncMock(return_value={"battery": {"percentRemaining": 0.85}})
         
         mock_hass.data = {DOMAIN: {mock_config_entry.entry_id: {"client": mock_client}}}
         
         entities = []
-        async def async_add_entities(new_entities):
+        def async_add_entities(new_entities):
+            """Sync callback for adding entities."""
             entities.extend(new_entities)
         
         await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
         
-        assert len(entities) > 0
+        # Should only have webhook sensor (no vehicle sensors since signals API failed)
+        assert any(isinstance(e, WebhookUrlSensor) for e in entities)
 
-    @pytest.mark.xfail(reason="Integration test requiring complex entity registration mocking")
+    @pytest.mark.asyncio
     async def test_setup_with_failed_status_fetch(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
         """Test setup continues when status fetch fails."""
         mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
@@ -109,13 +111,389 @@ class TestAsyncSetupEntry:
         mock_hass.data = {DOMAIN: {mock_config_entry.entry_id: {"client": mock_client}}}
         
         entities = []
-        async def async_add_entities(new_entities):
+        def async_add_entities(new_entities):
+            """Sync callback for adding entities."""
             entities.extend(new_entities)
         
         await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
         
         # Should still create entities with empty status
         assert len(entities) > 0
+
+    @pytest.mark.asyncio
+    async def test_setup_filters_sensors_by_available_signals(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
+        """Test setup only creates sensors for available signals."""
+        # Only battery and charge signals available, not others
+        available_signals = [
+            "battery.percentRemaining",
+            "battery.range",
+            "charge.state",
+        ]
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_vehicle_signals = AsyncMock(return_value=available_signals)
+        mock_client.get_vehicle_status = AsyncMock(return_value={"battery": {"percentRemaining": 0.85, "range": 250}})
+        
+        mock_hass.data = {DOMAIN: {mock_config_entry.entry_id: {"client": mock_client}}}
+        
+        entities = []
+        def async_add_entities(new_entities):
+            """Sync callback for adding entities."""
+            entities.extend(new_entities)
+        
+        await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
+        
+        # Count non-webhook sensors
+        sensor_entities = [e for e in entities if not isinstance(e, WebhookUrlSensor)]
+        
+        # Should create sensors only for the 3 available signals
+        assert len(sensor_entities) == 3
+        
+        # All created sensors should be for available signals
+        for sensor in sensor_entities:
+            assert sensor._signal_id in available_signals
+    
+    @pytest.mark.asyncio
+    async def test_setup_only_adds_new_sensors(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
+        """Test that boot only adds new sensors, doesn't remove existing ones."""
+        available_signals = [
+            "battery.percentRemaining",
+            "battery.range",
+            "charge.state",
+        ]
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_vehicle_signals = AsyncMock(return_value=available_signals)
+        mock_client.get_vehicle_status = AsyncMock(return_value={})
+        
+        # Simulate existing sensors in data (one that's available, one that's not)
+        existing_sensor = MagicMock()
+        existing_sensor._signal_id = "battery.percentRemaining"
+        unavailable_sensor = MagicMock()
+        unavailable_sensor._signal_id = "fuel.percentRemaining"  # Not in available_signals
+        
+        mock_hass.data = {
+            DOMAIN: {
+                mock_config_entry.entry_id: {
+                    "client": mock_client,
+                    "sensors": {
+                        mock_vehicle.id: {
+                            "battery.percentRemaining": existing_sensor,
+                            "fuel.percentRemaining": unavailable_sensor,  # Not available but should NOT be removed
+                        }
+                    }
+                }
+            }
+        }
+        
+        entities = []
+        def async_add_entities(new_entities):
+            """Sync callback for adding entities."""
+            entities.extend(new_entities)
+        
+        await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
+        
+        # Should only add 2 NEW sensors (battery.range and charge.state), not battery.percentRemaining (already exists)
+        sensor_entities = [e for e in entities if not isinstance(e, WebhookUrlSensor)]
+        assert len(sensor_entities) == 2
+        
+        # Existing unavailable sensor should still be in tracking (not removed at boot)
+        assert "fuel.percentRemaining" in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
+    
+    @pytest.mark.asyncio
+    async def test_rebuild_mode_removes_unavailable_sensors(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
+        """Test that rebuild mode removes sensors that are no longer available."""
+        from homeassistant.helpers import entity_registry
+        
+        available_signals = [
+            "battery.percentRemaining",
+            "battery.range",
+        ]
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_vehicle_signals = AsyncMock(return_value=available_signals)
+        mock_client.get_vehicle_status = AsyncMock(return_value={})
+        
+        # Mock entity registry
+        mock_registry = MagicMock(spec=entity_registry.EntityRegistry)
+        mock_registry.async_get = MagicMock(return_value=MagicMock())
+        mock_registry.async_remove = MagicMock()
+        
+        # Mock the entity registry retrieval
+        with patch.object(entity_registry, 'async_get', return_value=mock_registry):
+            # Simulate existing sensors (one available, one not)
+            existing_sensor = MagicMock()
+            existing_sensor._signal_id = "battery.percentRemaining"
+            existing_sensor.entity_id = "sensor.test_battery"
+            
+            unavailable_sensor = MagicMock()
+            unavailable_sensor._signal_id = "fuel.percentRemaining"
+            unavailable_sensor.entity_id = "sensor.test_fuel"
+            
+            mock_hass.data = {
+                DOMAIN: {
+                    mock_config_entry.entry_id: {
+                        "client": mock_client,
+                        "sensors": {
+                            mock_vehicle.id: {
+                                "battery.percentRemaining": existing_sensor,
+                                "fuel.percentRemaining": unavailable_sensor,
+                            }
+                        }
+                    }
+                }
+            }
+            
+            entities = []
+            def async_add_entities(new_entities):
+                """Sync callback for adding entities."""
+                entities.extend(new_entities)
+            
+            # Call with rebuild_mode=True
+            await async_setup_entry(mock_hass, mock_config_entry, async_add_entities, rebuild_mode=True)
+            
+            # Should remove unavailable sensor
+            assert "fuel.percentRemaining" not in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
+            
+            # Should keep available sensor
+            assert "battery.percentRemaining" in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
+            
+            # Should add the new sensor (battery.range)
+            sensor_entities = [e for e in entities if not isinstance(e, WebhookUrlSensor)]
+            assert any(s._signal_id == "battery.range" for s in sensor_entities)
+    
+    @pytest.mark.asyncio
+    async def test_rebuild_mode_with_no_removals_needed(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
+        """Test rebuild mode when all existing sensors are still available."""
+        available_signals = [
+            "battery.percentRemaining",
+            "battery.range",
+            "charge.state",
+        ]
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_vehicle_signals = AsyncMock(return_value=available_signals)
+        mock_client.get_vehicle_status = AsyncMock(return_value={})
+        
+        from homeassistant.helpers import entity_registry
+        mock_registry = MagicMock(spec=entity_registry.EntityRegistry)
+        mock_registry.async_get = MagicMock(return_value=MagicMock())
+        mock_registry.async_remove = MagicMock()
+        
+        with patch.object(entity_registry, 'async_get', return_value=mock_registry):
+            # Simulate existing sensors that are all still available
+            existing_sensor1 = MagicMock()
+            existing_sensor1._signal_id = "battery.percentRemaining"
+            existing_sensor1.entity_id = "sensor.test_battery"
+            
+            existing_sensor2 = MagicMock()
+            existing_sensor2._signal_id = "battery.range"
+            existing_sensor2.entity_id = "sensor.test_range"
+            
+            mock_hass.data = {
+                DOMAIN: {
+                    mock_config_entry.entry_id: {
+                        "client": mock_client,
+                        "sensors": {
+                            mock_vehicle.id: {
+                                "battery.percentRemaining": existing_sensor1,
+                                "battery.range": existing_sensor2,
+                            }
+                        }
+                    }
+                }
+            }
+            
+            entities = []
+            def async_add_entities(new_entities):
+                """Sync callback for adding entities."""
+                entities.extend(new_entities)
+            
+            await async_setup_entry(mock_hass, mock_config_entry, async_add_entities, rebuild_mode=True)
+            
+            # Should not remove any sensors
+            assert "battery.percentRemaining" in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
+            assert "battery.range" in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
+            
+            # Should add the new sensor (charge.state)
+            sensor_entities = [e for e in entities if not isinstance(e, WebhookUrlSensor)]
+            assert any(s._signal_id == "charge.state" for s in sensor_entities)
+            
+            # Verify no removals were attempted
+            mock_registry.async_remove.assert_not_called()
+    
+    @pytest.mark.asyncio
+    async def test_rebuild_mode_with_multiple_vehicles(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
+        """Test rebuild mode handles multiple vehicles correctly."""
+        from homeassistant.helpers import entity_registry
+        
+        # Create second vehicle
+        mock_vehicle2 = MagicMock()
+        mock_vehicle2.id = "vehicle_456"
+        mock_vehicle2.make = "NISSAN"
+        mock_vehicle2.model = "ARIYA"
+        mock_vehicle2.year = 2024
+        
+        # Different available signals per vehicle
+        available_signals_v1 = ["battery.percentRemaining", "battery.range"]
+        available_signals_v2 = ["battery.percentRemaining", "charge.state"]
+        
+        async def get_signals(vehicle_id):
+            if vehicle_id == mock_vehicle.id:
+                return available_signals_v1
+            return available_signals_v2
+        
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle, mock_vehicle2])
+        mock_client.get_vehicle_signals = AsyncMock(side_effect=get_signals)
+        mock_client.get_vehicle_status = AsyncMock(return_value={})
+        
+        mock_registry = MagicMock(spec=entity_registry.EntityRegistry)
+        mock_registry.async_get = MagicMock(return_value=MagicMock())
+        mock_registry.async_remove = MagicMock()
+        
+        with patch.object(entity_registry, 'async_get', return_value=mock_registry):
+            # Existing sensors for both vehicles
+            sensor_v1_battery = MagicMock()
+            sensor_v1_battery._signal_id = "battery.percentRemaining"
+            sensor_v1_battery.entity_id = "sensor.leaf_battery"
+            
+            sensor_v1_fuel = MagicMock()
+            sensor_v1_fuel._signal_id = "fuel.percentRemaining"  # Not available
+            sensor_v1_fuel.entity_id = "sensor.leaf_fuel"
+            
+            sensor_v2_battery = MagicMock()
+            sensor_v2_battery._signal_id = "battery.percentRemaining"
+            sensor_v2_battery.entity_id = "sensor.ariya_battery"
+            
+            sensor_v2_range = MagicMock()
+            sensor_v2_range._signal_id = "battery.range"  # Not available for v2
+            sensor_v2_range.entity_id = "sensor.ariya_range"
+            
+            mock_hass.data = {
+                DOMAIN: {
+                    mock_config_entry.entry_id: {
+                        "client": mock_client,
+                        "sensors": {
+                            mock_vehicle.id: {
+                                "battery.percentRemaining": sensor_v1_battery,
+                                "fuel.percentRemaining": sensor_v1_fuel,
+                            },
+                            mock_vehicle2.id: {
+                                "battery.percentRemaining": sensor_v2_battery,
+                                "battery.range": sensor_v2_range,
+                            }
+                        }
+                    }
+                }
+            }
+            
+            entities = []
+            def async_add_entities(new_entities):
+                """Sync callback for adding entities."""
+                entities.extend(new_entities)
+            
+            await async_setup_entry(mock_hass, mock_config_entry, async_add_entities, rebuild_mode=True)
+            
+            # Vehicle 1: should remove fuel, keep battery, add range
+            assert "fuel.percentRemaining" not in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
+            assert "battery.percentRemaining" in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
+            
+            # Vehicle 2: should remove range, keep battery, add charge.state
+            assert "battery.range" not in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle2.id]
+            assert "battery.percentRemaining" in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle2.id]
+            
+            # Verify correct number of removals
+            assert mock_registry.async_remove.call_count == 2
+    
+    @pytest.mark.asyncio
+    async def test_rebuild_mode_handles_sensor_without_entity_id(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
+        """Test rebuild mode handles sensors that don't have entity_id yet."""
+        from homeassistant.helpers import entity_registry
+        
+        available_signals = ["battery.percentRemaining"]
+        
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_vehicle_signals = AsyncMock(return_value=available_signals)
+        mock_client.get_vehicle_status = AsyncMock(return_value={})
+        
+        mock_registry = MagicMock(spec=entity_registry.EntityRegistry)
+        mock_registry.async_get = MagicMock(return_value=MagicMock())
+        mock_registry.async_remove = MagicMock()
+        
+        with patch.object(entity_registry, 'async_get', return_value=mock_registry):
+            # Sensor without entity_id (not yet registered)
+            unavailable_sensor = MagicMock()
+            unavailable_sensor._signal_id = "fuel.percentRemaining"
+            unavailable_sensor.entity_id = None
+            
+            mock_hass.data = {
+                DOMAIN: {
+                    mock_config_entry.entry_id: {
+                        "client": mock_client,
+                        "sensors": {
+                            mock_vehicle.id: {
+                                "fuel.percentRemaining": unavailable_sensor,
+                            }
+                        }
+                    }
+                }
+            }
+            
+            entities = []
+            def async_add_entities(new_entities):
+                """Sync callback for adding entities."""
+                entities.extend(new_entities)
+            
+            # Should not crash when sensor has no entity_id
+            await async_setup_entry(mock_hass, mock_config_entry, async_add_entities, rebuild_mode=True)
+            
+            # Should still remove from tracking even without entity_id
+            assert "fuel.percentRemaining" not in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
+            
+            # Should not attempt to remove from registry
+            mock_registry.async_remove.assert_not_called()
+    
+    @pytest.mark.asyncio
+    async def test_boot_preserves_all_existing_sensors(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
+        """Test that normal boot preserves all existing sensors regardless of availability."""
+        available_signals = ["battery.percentRemaining"]
+        
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_vehicle_signals = AsyncMock(return_value=available_signals)
+        mock_client.get_vehicle_status = AsyncMock(return_value={})
+        
+        # Many existing sensors, only one available
+        existing_sensors = {}
+        for signal in ["battery.percentRemaining", "fuel.percentRemaining", "charge.state", "odometer.distance"]:
+            sensor = MagicMock()
+            sensor._signal_id = signal
+            sensor.entity_id = f"sensor.test_{signal.replace('.', '_')}"
+            existing_sensors[signal] = sensor
+        
+        mock_hass.data = {
+            DOMAIN: {
+                mock_config_entry.entry_id: {
+                    "client": mock_client,
+                    "sensors": {
+                        mock_vehicle.id: existing_sensors
+                    }
+                }
+            }
+        }
+        
+        entities = []
+        def async_add_entities(new_entities):
+            """Sync callback for adding entities."""
+            entities.extend(new_entities)
+        
+        # Normal boot (rebuild_mode=False, the default)
+        await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
+        
+        # All existing sensors should still be in tracking
+        assert len(mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]) == 4
+        assert "fuel.percentRemaining" in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
+        assert "charge.state" in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
+        assert "odometer.distance" in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
+        
+        # Should not add new entities for already existing sensors
+        sensor_entities = [e for e in entities if not isinstance(e, WebhookUrlSensor)]
+        assert len(sensor_entities) == 0
 
 
 class TestNissanGenericSensor:
