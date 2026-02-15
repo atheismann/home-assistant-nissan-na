@@ -197,7 +197,7 @@ class TestNissanChargeLimitNumber:
         assert number._attr_native_value == initial_value
 
     @pytest.mark.asyncio
-    async def test_async_set_value_success(self, mock_hass, mock_vehicle, mock_client):
+    async def test_async_set_native_value_success(self, mock_hass, mock_vehicle, mock_client):
         """Test setting charge limit successfully."""
         number = NissanChargeLimitNumber(
             mock_hass,
@@ -222,13 +222,13 @@ class TestNissanChargeLimitNumber:
         mock_session.__aexit__ = AsyncMock(return_value=False)
         
         with patch("aiohttp.ClientSession", return_value=mock_session):
-            await number.async_set_value(85.0)
+            await number.async_set_native_value(85.0)
         
         assert number._attr_native_value == 85
         number.async_write_ha_state.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_async_set_value_clamps_to_range(self, mock_hass, mock_vehicle, mock_client):
+    async def test_async_set_native_value_clamps_to_range(self, mock_hass, mock_vehicle, mock_client):
         """Test setting charge limit clamps to valid range."""
         number = NissanChargeLimitNumber(
             mock_hass,
@@ -254,15 +254,15 @@ class TestNissanChargeLimitNumber:
         
         with patch("aiohttp.ClientSession", return_value=mock_session):
             # Test upper bound
-            await number.async_set_value(150.0)
+            await number.async_set_native_value(150.0)
             assert number._attr_native_value == 100
             
             # Test lower bound
-            await number.async_set_value(-10.0)
+            await number.async_set_native_value(-10.0)
             assert number._attr_native_value == 0
 
     @pytest.mark.asyncio
-    async def test_async_set_value_failure(self, mock_hass, mock_vehicle, mock_client):
+    async def test_async_set_native_value_failure(self, mock_hass, mock_vehicle, mock_client):
         """Test setting charge limit handles failure."""
         number = NissanChargeLimitNumber(
             mock_hass,
@@ -287,12 +287,12 @@ class TestNissanChargeLimitNumber:
         mock_session.__aexit__ = AsyncMock(return_value=False)
         
         with patch("aiohttp.ClientSession", return_value=mock_session):
-            await number.async_set_value(90.0)
+            await number.async_set_native_value(90.0)
         
         assert number._attr_available is False
 
     @pytest.mark.asyncio
-    async def test_async_set_value_exception(self, mock_hass, mock_vehicle, mock_client):
+    async def test_async_set_native_value_exception(self, mock_hass, mock_vehicle, mock_client):
         """Test setting charge limit handles exceptions."""
         number = NissanChargeLimitNumber(
             mock_hass,
@@ -305,7 +305,7 @@ class TestNissanChargeLimitNumber:
         number.async_write_ha_state = MagicMock()
         
         with patch("aiohttp.ClientSession", side_effect=Exception("Connection error")):
-            await number.async_set_value(90.0)
+            await number.async_set_native_value(90.0)
         
         assert number._attr_available is False
 
@@ -539,8 +539,8 @@ class TestNumberPropertiesAndAttributes:
         assert number._attr_available is False
 
     @pytest.mark.asyncio
-    async def test_async_set_value_with_204_response(self, mock_hass, mock_vehicle, mock_client):
-        """Test async_set_value handles 204 (No Content) response."""
+    async def test_async_set_native_value_with_204_response(self, mock_hass, mock_vehicle, mock_client):
+        """Test async_set_native_value handles 204 (No Content) response."""
         number = NissanChargeLimitNumber(
             mock_hass,
             mock_vehicle,
@@ -562,7 +562,7 @@ class TestNumberPropertiesAndAttributes:
         mock_session.__aexit__ = AsyncMock(return_value=False)
         
         with patch("aiohttp.ClientSession", return_value=mock_session):
-            await number.async_set_value(75.0)
+            await number.async_set_native_value(75.0)
         
         assert number._attr_native_value == 75
         assert number._attr_available is True

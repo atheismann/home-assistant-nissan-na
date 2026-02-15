@@ -173,7 +173,7 @@ class NissanChargeLimitNumber(NumberEntity):
         except (KeyError, TypeError, ValueError):
             pass
 
-    async def async_set_value(self, value: float) -> None:
+    async def async_set_native_value(self, value: float) -> None:
         """Set the charge limit."""
         try:
             # Smartcar API expects integer 0-100

@@ -250,7 +250,10 @@ class SmartcarApiClient:
         if not self.access_token:
             raise ValueError("Not authenticated. Call authenticate() first.")
 
-        _LOGGER.debug("Fetching vehicle list from Smartcar API")
+        _LOGGER.debug("API Call: get_vehicle_list")
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
+        _LOGGER.debug("SDK Method: smartcar.get_vehicles")
         # Get vehicle IDs - v6 returns a Vehicles NamedTuple
         response = await asyncio.to_thread(smartcar.get_vehicles, self.access_token)
         vehicle_ids = response.vehicles
@@ -307,7 +310,10 @@ class SmartcarApiClient:
         Returns:
             dict: Vehicle information.
         """
-        _LOGGER.debug("Fetching vehicle info for %s", vehicle_id)
+        _LOGGER.debug("API Call: get_vehicle_info | Vehicle ID: %s", vehicle_id)
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
+        _LOGGER.debug("SDK Methods: vehicle.attributes, vehicle.vin")
         vehicle = self._get_vehicle(vehicle_id)
         attrs = await asyncio.to_thread(vehicle.attributes)
         vin_response = await asyncio.to_thread(vehicle.vin)
@@ -339,7 +345,10 @@ class SmartcarApiClient:
         Returns:
             dict: Location data with latitude and longitude.
         """
-        _LOGGER.debug("Fetching vehicle location for %s", vehicle_id)
+        _LOGGER.debug("API Call: get_vehicle_location | Vehicle ID: %s", vehicle_id)
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
+        _LOGGER.debug("SDK Method: vehicle.location")
         vehicle = self._get_vehicle(vehicle_id)
         location = await asyncio.to_thread(vehicle.location)
         return _namedtuple_to_dict(location)
@@ -354,7 +363,10 @@ class SmartcarApiClient:
         Returns:
             dict: Battery level percentage.
         """
-        _LOGGER.debug("Fetching battery level for %s", vehicle_id)
+        _LOGGER.debug("API Call: get_battery_level | Vehicle ID: %s", vehicle_id)
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
+        _LOGGER.debug("SDK Method: vehicle.battery")
         vehicle = self._get_vehicle(vehicle_id)
         battery = await asyncio.to_thread(vehicle.battery)
         return _namedtuple_to_dict(battery)
@@ -369,7 +381,10 @@ class SmartcarApiClient:
         Returns:
             dict: Battery capacity in kWh.
         """
-        _LOGGER.debug("Fetching battery capacity for %s", vehicle_id)
+        _LOGGER.debug("API Call: get_battery_capacity | Vehicle ID: %s", vehicle_id)
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
+        _LOGGER.debug("SDK Method: vehicle.battery_capacity")
         vehicle = self._get_vehicle(vehicle_id)
         capacity = await asyncio.to_thread(vehicle.battery_capacity)
         return _namedtuple_to_dict(capacity)
@@ -384,7 +399,10 @@ class SmartcarApiClient:
         Returns:
             dict: Charging status information.
         """
-        _LOGGER.debug("Fetching charge status for %s", vehicle_id)
+        _LOGGER.debug("API Call: get_charge_status | Vehicle ID: %s", vehicle_id)
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
+        _LOGGER.debug("SDK Method: vehicle.charge")
         vehicle = self._get_vehicle(vehicle_id)
         charge = await asyncio.to_thread(vehicle.charge)
         return _namedtuple_to_dict(charge)
@@ -399,7 +417,10 @@ class SmartcarApiClient:
         Returns:
             dict: Odometer distance.
         """
-        _LOGGER.debug("Fetching odometer reading for %s", vehicle_id)
+        _LOGGER.debug("API Call: get_odometer | Vehicle ID: %s", vehicle_id)
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
+        _LOGGER.debug("SDK Method: vehicle.odometer")
         vehicle = self._get_vehicle(vehicle_id)
         odometer = await asyncio.to_thread(vehicle.odometer)
         return _namedtuple_to_dict(odometer)
@@ -414,7 +435,10 @@ class SmartcarApiClient:
         Returns:
             dict: Fuel level information.
         """
-        _LOGGER.debug("Fetching fuel level for %s", vehicle_id)
+        _LOGGER.debug("API Call: get_fuel_level | Vehicle ID: %s", vehicle_id)
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
+        _LOGGER.debug("SDK Method: vehicle.fuel")
         vehicle = self._get_vehicle(vehicle_id)
         fuel = await asyncio.to_thread(vehicle.fuel)
         return _namedtuple_to_dict(fuel)
@@ -428,7 +452,10 @@ class SmartcarApiClient:
         Returns:
             dict: Lock status information for doors, windows, etc.
         """
-        _LOGGER.debug("Fetching lock status for %s", vehicle_id)
+        _LOGGER.debug("API Call: get_lock_status | Vehicle ID: %s", vehicle_id)
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
+        _LOGGER.debug("SDK Method: vehicle.lock_status")
         vehicle = self._get_vehicle(vehicle_id)
         security = await asyncio.to_thread(vehicle.lock_status)
         return _namedtuple_to_dict(security)
@@ -442,7 +469,10 @@ class SmartcarApiClient:
         Returns:
             dict: Tire pressure information for all tires.
         """
-        _LOGGER.debug("Fetching tire pressure for %s", vehicle_id)
+        _LOGGER.debug("API Call: get_tire_pressure | Vehicle ID: %s", vehicle_id)
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
+        _LOGGER.debug("SDK Method: vehicle.tires")
         vehicle = self._get_vehicle(vehicle_id)
         tires = await asyncio.to_thread(vehicle.tires)
         return _namedtuple_to_dict(tires)
@@ -456,7 +486,10 @@ class SmartcarApiClient:
         Returns:
             dict: Engine oil life percentage and status.
         """
-        _LOGGER.debug("Fetching engine oil info for %s", vehicle_id)
+        _LOGGER.debug("API Call: get_engine_oil | Vehicle ID: %s", vehicle_id)
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
+        _LOGGER.debug("SDK Method: vehicle.engine_oil")
         vehicle = self._get_vehicle(vehicle_id)
         oil = await asyncio.to_thread(vehicle.engine_oil)
         return _namedtuple_to_dict(oil)
@@ -471,7 +504,10 @@ class SmartcarApiClient:
         Returns:
             dict: API response with action status.
         """
-        _LOGGER.debug("Locking doors for vehicle %s", vehicle_id)
+        _LOGGER.debug("API Call: lock_doors | Vehicle ID: %s", vehicle_id)
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
+        _LOGGER.debug("SDK Method: vehicle.lock")
         vehicle = self._get_vehicle(vehicle_id)
         result = await asyncio.to_thread(vehicle.lock)
         _LOGGER.debug("Lock doors command sent for vehicle %s", vehicle_id)
@@ -487,7 +523,10 @@ class SmartcarApiClient:
         Returns:
             dict: API response with action status.
         """
-        _LOGGER.debug("Unlocking doors for vehicle %s", vehicle_id)
+        _LOGGER.debug("API Call: unlock_doors | Vehicle ID: %s", vehicle_id)
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
+        _LOGGER.debug("SDK Method: vehicle.unlock")
         vehicle = self._get_vehicle(vehicle_id)
         result = await asyncio.to_thread(vehicle.unlock)
         _LOGGER.debug("Unlock doors command sent for vehicle %s", vehicle_id)
@@ -503,7 +542,10 @@ class SmartcarApiClient:
         Returns:
             dict: API response with action status.
         """
-        _LOGGER.debug("Starting charge for vehicle %s", vehicle_id)
+        _LOGGER.debug("API Call: start_charge | Vehicle ID: %s", vehicle_id)
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
+        _LOGGER.debug("SDK Method: vehicle.start_charge")
         vehicle = self._get_vehicle(vehicle_id)
         result = await asyncio.to_thread(vehicle.start_charge)
         _LOGGER.debug("Start charge command sent for vehicle %s", vehicle_id)
@@ -519,7 +561,10 @@ class SmartcarApiClient:
         Returns:
             dict: API response with action status.
         """
-        _LOGGER.debug("Stopping charge for vehicle %s", vehicle_id)
+        _LOGGER.debug("API Call: stop_charge | Vehicle ID: %s", vehicle_id)
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
+        _LOGGER.debug("SDK Method: vehicle.stop_charge")
         vehicle = self._get_vehicle(vehicle_id)
         result = await asyncio.to_thread(vehicle.stop_charge)
         _LOGGER.debug("Stop charge command sent for vehicle %s", vehicle_id)
@@ -537,16 +582,24 @@ class SmartcarApiClient:
         Returns:
             dict: API response with action status.
         """
-        _LOGGER.debug("Starting climate control for vehicle %s", vehicle_id)
+        _LOGGER.debug("API Call: start_climate | Vehicle ID: %s", vehicle_id)
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
         url = f"{self._api_base_url}/vehicles/{vehicle_id}/climate"
         headers = {"Authorization": f"Bearer {self.access_token}"}
+        _LOGGER.debug("HTTP Method: POST | URL: %s", url)
+        _LOGGER.debug("Request Headers: %s", headers)
         data = {"action": "START"}
+        _LOGGER.debug("Request Body: %s", data)
 
         async with aiohttp.ClientSession() as session:
             async with session.post(url, headers=headers, json=data) as response:
                 response.raise_for_status()
+                _LOGGER.debug("HTTP Response Status: %d", response.status)
+                result = await response.json()
+                _LOGGER.debug("Response Body: %s", result)
                 _LOGGER.debug("Start climate command sent for vehicle %s", vehicle_id)
-                return await response.json()
+                return result
 
     async def stop_climate(self, vehicle_id: str) -> Dict[str, Any]:
         """
@@ -560,16 +613,24 @@ class SmartcarApiClient:
         Returns:
             dict: API response with action status.
         """
-        _LOGGER.debug("Stopping climate control for vehicle %s", vehicle_id)
+        _LOGGER.debug("API Call: stop_climate | Vehicle ID: %s", vehicle_id)
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
         url = f"{self._api_base_url}/vehicles/{vehicle_id}/climate"
         headers = {"Authorization": f"Bearer {self.access_token}"}
+        _LOGGER.debug("HTTP Method: POST | URL: %s", url)
+        _LOGGER.debug("Request Headers: %s", headers)
         data = {"action": "STOP"}
+        _LOGGER.debug("Request Body: %s", data)
 
         async with aiohttp.ClientSession() as session:
             async with session.post(url, headers=headers, json=data) as response:
                 response.raise_for_status()
+                _LOGGER.debug("HTTP Response Status: %d", response.status)
+                result = await response.json()
+                _LOGGER.debug("Response Body: %s", result)
                 _LOGGER.debug("Stop climate command sent for vehicle %s", vehicle_id)
-                return await response.json()
+                return result
 
     async def get_climate_status(self, vehicle_id: str) -> Dict[str, Any]:
         """
@@ -583,14 +644,21 @@ class SmartcarApiClient:
         Returns:
             dict: Climate status information.
         """
-        _LOGGER.debug("Fetching climate status for vehicle %s", vehicle_id)
+        _LOGGER.debug("API Call: get_climate_status | Vehicle ID: %s", vehicle_id)
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
         url = f"{self._api_base_url}/vehicles/{vehicle_id}/climate"
         headers = {"Authorization": f"Bearer {self.access_token}"}
+        _LOGGER.debug("HTTP Method: GET | URL: %s", url)
+        _LOGGER.debug("Request Headers: %s", headers)
 
         async with aiohttp.ClientSession() as session:
             async with session.get(url, headers=headers) as response:
                 response.raise_for_status()
-                return await response.json()
+                _LOGGER.debug("HTTP Response Status: %d", response.status)
+                result = await response.json()
+                _LOGGER.debug("Response Body: %s", result)
+                return result
 
     async def disconnect(self, vehicle_id: str) -> bool:
         """
@@ -602,7 +670,10 @@ class SmartcarApiClient:
         Returns:
             bool: True if successful.
         """
-        _LOGGER.debug("Disconnecting vehicle %s from Smartcar", vehicle_id)
+        _LOGGER.debug("API Call: disconnect | Vehicle ID: %s", vehicle_id)
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
+        _LOGGER.debug("SDK Method: vehicle.disconnect")
         vehicle = self._get_vehicle(vehicle_id)
         await asyncio.to_thread(vehicle.disconnect)
         if vehicle_id in self._vehicles_cache:
@@ -621,7 +692,10 @@ class SmartcarApiClient:
             List[str]: List of permission strings
                 (e.g., 'read_battery', 'control_security').
         """
-        _LOGGER.debug("Fetching permissions for vehicle %s", vehicle_id)
+        _LOGGER.debug("API Call: get_permissions | Vehicle ID: %s", vehicle_id)
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
+        _LOGGER.debug("SDK Method: vehicle.permissions")
         vehicle = self._get_vehicle(vehicle_id)
         response = await asyncio.to_thread(vehicle.permissions)
         permissions_dict = _namedtuple_to_dict(response)
@@ -643,15 +717,21 @@ class SmartcarApiClient:
         Returns:
             List[str]: List of available signal names (e.g., 'battery.percentRemaining').
         """
-        _LOGGER.debug("Fetching available signals for vehicle %s", vehicle_id)
+        _LOGGER.debug("API Call: get_vehicle_signals | Vehicle ID: %s", vehicle_id)
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
         url = f"{self._api_base_url}/vehicles/{vehicle_id}/signals"
         headers = {"Authorization": f"Bearer {self.access_token}"}
+        _LOGGER.debug("HTTP Method: GET | URL: %s", url)
+        _LOGGER.debug("Request Headers: %s", headers)
 
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(url, headers=headers) as response:
                     if response.status == 200:
+                        _LOGGER.debug("HTTP Response Status: %d", response.status)
                         data = await response.json()
+                        _LOGGER.debug("Response Body: %s", data)
                         # Smartcar returns signals in format:
                         # {"signals": [{"id": "battery.percentRemaining", ...}, ...]}
                         if "signals" in data:
@@ -661,7 +741,7 @@ class SmartcarApiClient:
                         return []
                     else:
                         # If signal API not available, return empty (will fall back to permission-based)
-                        _LOGGER.debug("Signal API returned status %d for vehicle %s", response.status, vehicle_id)
+                        _LOGGER.debug("HTTP Response Status: %d (Signal API not available)", response.status)
                         return []
         except Exception as err:
             # If API call fails, return empty list (will fall back to permission-based)
