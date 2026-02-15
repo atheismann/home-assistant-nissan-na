@@ -256,11 +256,11 @@ async def async_setup_entry(
         else:
             return False
 
-    # Periodic update interval (default 15 minutes, can be changed in options)
-    update_minutes = config_entry.options.get("update_interval", 15)
+    # Periodic update interval (default 60 minutes / 1 hour, can be changed in options)
+    update_minutes = config_entry.options.get("update_interval", 60)
 
     async def async_update_all_vehicles(now):
-        """Update all vehicles periodically."""
+        """Update all vehicles periodically from API and refresh sensor entities."""
         try:
             # Get client from hass.data
             data = hass.data[DOMAIN].get(config_entry.entry_id)
@@ -279,7 +279,15 @@ async def async_setup_entry(
             for vehicle in vehicles:
                 try:
                     await client.get_vehicle_status(vehicle.id)
-                    _LOGGER.debug("Updated vehicle %s", vehicle.vin)
+                    _LOGGER.debug("Updated vehicle %s from API", vehicle.vin)
+                    
+                    # Refresh all sensor entities for this vehicle
+                    if "sensors" in data and vehicle.id in data["sensors"]:
+                        for sensor in data["sensors"][vehicle.id].values():
+                            try:
+                                await sensor.async_update()
+                            except Exception as err:
+                                _LOGGER.debug("Failed to update sensor %s: %s", sensor._attr_name, err)
                 except Exception as err:
                     error_msg = str(err)
                     _LOGGER.error(

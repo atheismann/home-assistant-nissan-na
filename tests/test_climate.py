@@ -1,10 +1,10 @@
 """Unit tests for climate.py - climate control entity"""
 import pytest
-from unittest.mock import Mock, AsyncMock
+from unittest.mock import Mock, AsyncMock, patch
 
 from homeassistant.components.climate.const import HVACMode
 from homeassistant.const import UnitOfTemperature
-from custom_components.nissan_na.climate import NissanClimateEntity
+from custom_components.nissan_na.climate import NissanClimateEntity, async_setup_entry
 from custom_components.nissan_na.const import DOMAIN
 
 
@@ -360,3 +360,186 @@ class TestNissanClimateEntityMultipleVehicles:
         
         assert climate1.hvac_mode == HVACMode.HEAT
         assert climate2.hvac_mode == HVACMode.COOL
+
+
+@pytest.mark.asyncio
+class TestAsyncSetupEntry:
+    """Tests for async_setup_entry function"""
+    
+    async def test_async_setup_entry_creates_climate_entity(self):
+        """Test that async_setup_entry creates a climate entity"""
+        mock_hass = Mock()
+        mock_hass.data = {DOMAIN: {"test_entry": {}}}
+        
+        mock_vehicle = Mock()
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test Vehicle"
+        mock_vehicle.vin = "TEST123VIN"
+        
+        mock_client = Mock()
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_permissions = AsyncMock(return_value=["control_climate", "other_permission"])
+        
+        mock_hass.data[DOMAIN]["test_entry"]["client"] = mock_client
+        
+        async_add_entities = AsyncMock()
+        
+        await async_setup_entry(mock_hass, Mock(entry_id="test_entry"), async_add_entities)
+        
+        assert async_add_entities.called
+        entities = async_add_entities.call_args[0][0]
+        assert len(entities) == 1
+        assert isinstance(entities[0], NissanClimateEntity)
+    
+    async def test_async_setup_entry_skips_vehicle_without_permission(self):
+        """Test that async_setup_entry skips vehicles without control_climate permission"""
+        mock_hass = Mock()
+        mock_hass.data = {DOMAIN: {"test_entry": {}}}
+        
+        mock_vehicle = Mock()
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test Vehicle"
+        mock_vehicle.vin = "TEST123VIN"
+        
+        mock_client = Mock()
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_permissions = AsyncMock(return_value=["other_permission"])  # No control_climate
+        
+        mock_hass.data[DOMAIN]["test_entry"]["client"] = mock_client
+        
+        async_add_entities = AsyncMock()
+        
+        await async_setup_entry(mock_hass, Mock(entry_id="test_entry"), async_add_entities)
+        
+        entities = async_add_entities.call_args[0][0]
+        assert len(entities) == 0
+
+    async def test_async_setup_entry_handles_empty_permissions(self):
+        """Test that async_setup_entry handles empty permission list"""
+        mock_hass = Mock()
+        mock_hass.data = {DOMAIN: {"test_entry": {}}}
+        
+        mock_vehicle = Mock()
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test Vehicle"
+        mock_vehicle.vin = "TEST123VIN"
+        
+        mock_client = Mock()
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_permissions = AsyncMock(return_value=[])  # Empty list
+        
+        mock_hass.data[DOMAIN]["test_entry"]["client"] = mock_client
+        
+        async_add_entities = AsyncMock()
+        
+        await async_setup_entry(mock_hass, Mock(entry_id="test_entry"), async_add_entities)
+        
+        # Empty list means no permissions verified, so entity is created (conservative approach)
+        entities = async_add_entities.call_args[0][0]
+        assert len(entities) == 1
+
+    async def test_async_setup_entry_handles_permission_fetch_failure(self):
+        """Test that async_setup_entry creates entity when permission fetch fails"""
+        mock_hass = Mock()
+        mock_hass.data = {DOMAIN: {"test_entry": {}}}
+        
+        mock_vehicle = Mock()
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test Vehicle"
+        mock_vehicle.vin = "TEST123VIN"
+        
+        mock_client = Mock()
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_permissions = AsyncMock(side_effect=Exception("API Error"))
+        
+        mock_hass.data[DOMAIN]["test_entry"]["client"] = mock_client
+        
+        async_add_entities = AsyncMock()
+        
+        await async_setup_entry(mock_hass, Mock(entry_id="test_entry"), async_add_entities)
+        
+        # On error, create entity (conservative approach)
+        entities = async_add_entities.call_args[0][0]
+        assert len(entities) == 1
+
+    async def test_async_setup_entry_multiple_vehicles(self):
+        """Test setup with multiple vehicles"""
+        mock_hass = Mock()
+        mock_hass.data = {DOMAIN: {"test_entry": {}}}
+        
+        mock_vehicle1 = Mock()
+        mock_vehicle1.id = "vehicle_1"
+        mock_vehicle1.nickname = "Vehicle 1"
+        mock_vehicle1.vin = "VIN1"
+        
+        mock_vehicle2 = Mock()
+        mock_vehicle2.id = "vehicle_2"
+        mock_vehicle2.nickname = "Vehicle 2"
+        mock_vehicle2.vin = "VIN2"
+        
+        mock_client = Mock()
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle1, mock_vehicle2])
+        mock_client.get_permissions = AsyncMock(return_value=["control_climate"])
+        
+        mock_hass.data[DOMAIN]["test_entry"]["client"] = mock_client
+        
+        async_add_entities = AsyncMock()
+        
+        await async_setup_entry(mock_hass, Mock(entry_id="test_entry"), async_add_entities)
+        
+        entities = async_add_entities.call_args[0][0]
+        assert len(entities) == 2
+
+    async def test_async_setup_entry_mixed_permissions(self):
+        """Test setup with mixed permissions across multiple vehicles"""
+        mock_hass = Mock()
+        mock_hass.data = {DOMAIN: {"test_entry": {}}}
+        
+        mock_vehicle1 = Mock()
+        mock_vehicle1.id = "vehicle_1"
+        mock_vehicle1.nickname = "Vehicle 1"
+        mock_vehicle1.vin = "VIN1"
+        
+        mock_vehicle2 = Mock()
+        mock_vehicle2.id = "vehicle_2"
+        mock_vehicle2.nickname = "Vehicle 2"
+        mock_vehicle2.vin = "VIN2"
+        
+        mock_client = Mock()
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle1, mock_vehicle2])
+        
+        # Vehicle 1 has permission, Vehicle 2 doesn't
+        def get_permissions_side_effect(vehicle_id):
+            if vehicle_id == "vehicle_1":
+                return ["control_climate"]
+            else:
+                return ["other_permission"]
+        
+        mock_client.get_permissions = AsyncMock(side_effect=get_permissions_side_effect)
+        
+        mock_hass.data[DOMAIN]["test_entry"]["client"] = mock_client
+        
+        async_add_entities = AsyncMock()
+        
+        await async_setup_entry(mock_hass, Mock(entry_id="test_entry"), async_add_entities)
+        
+        entities = async_add_entities.call_args[0][0]
+        assert len(entities) == 1
+        assert entities[0]._vehicle.id == "vehicle_1"
+
+    async def test_async_setup_entry_no_vehicles(self):
+        """Test setup when no vehicles are available"""
+        mock_hass = Mock()
+        mock_hass.data = {DOMAIN: {"test_entry": {}}}
+        
+        mock_client = Mock()
+        mock_client.get_vehicle_list = AsyncMock(return_value=[])
+        
+        mock_hass.data[DOMAIN]["test_entry"]["client"] = mock_client
+        
+        async_add_entities = AsyncMock()
+        
+        await async_setup_entry(mock_hass, Mock(entry_id="test_entry"), async_add_entities)
+        
+        entities = async_add_entities.call_args[0][0]
+        assert len(entities) == 0

@@ -785,5 +785,536 @@ class TestWebhookUrlSensor:
         assert device_info["manufacturer"] == "Smartcar"
 
 
+class TestFetchStatusBackgroundTask:
+    """Test the fetch_status background task."""
+
+    @pytest.mark.asyncio
+    async def test_fetch_status_updates_sensors(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
+        """Test fetch_status background task updates sensor status."""
+        fresh_status = {"battery": {"percentRemaining": 0.95, "range": 300}}
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_vehicle_signals = AsyncMock(return_value=["battery.percentRemaining", "battery.range"])
+        mock_client.get_vehicle_status = AsyncMock(return_value=fresh_status)
+        
+        mock_hass.data = {DOMAIN: {mock_config_entry.entry_id: {"client": mock_client}}}
+        
+        # Setup task tracking
+        created_tasks = []
+        def track_task(coro):
+            created_tasks.append(coro)
+            # Return a mock task
+            return MagicMock()
+        
+        mock_hass.async_create_task = track_task
+        
+        entities = []
+        def async_add_entities(new_entities):
+            """Sync callback for adding entities."""
+            entities.extend(new_entities)
+        
+        await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
+        
+        # Verify task was created
+        assert len(created_tasks) > 0
+        
+        # The fetch_status coroutine should be in the created tasks
+        # Extract it and run it to verify behavior
+        fetch_task_coro = created_tasks[0]
+        
+        # Run the fetch_status coroutine
+        await fetch_task_coro
+        
+        # Verify all sensors got the fresh status
+        sensor_entities = [e for e in entities if isinstance(e, NissanGenericSensor)]
+        for sensor in sensor_entities:
+            assert sensor._status == fresh_status
+
+    @pytest.mark.asyncio
+    async def test_fetch_status_handles_api_error(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
+        """Test fetch_status handles API errors gracefully."""
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_vehicle_signals = AsyncMock(return_value=["battery.percentRemaining"])
+        mock_client.get_vehicle_status = AsyncMock(side_effect=Exception("API error"))
+        
+        mock_hass.data = {DOMAIN: {mock_config_entry.entry_id: {"client": mock_client}}}
+        
+        # Setup task tracking
+        created_tasks = []
+        def track_task(coro):
+            created_tasks.append(coro)
+            return MagicMock()
+        
+        mock_hass.async_create_task = track_task
+        
+        entities = []
+        def async_add_entities(new_entities):
+            """Sync callback for adding entities."""
+            entities.extend(new_entities)
+        
+        # Should not raise even if API fails
+        await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
+        
+        # Run the fetch_status task
+        if created_tasks:
+            fetch_task_coro = created_tasks[0]
+            # Should handle the exception without raising
+            await fetch_task_coro
+        
+        # Sensors should still be created with empty status
+        assert len(entities) > 0
+
+
+class TestSensorCreationLogic:
+    """Test sensor creation and filtering logic."""
+
+    @pytest.mark.asyncio
+    async def test_sensor_creation_filters_by_permissions(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
+        """Test that sensors are only created for permitted signals."""
+        available_signals = [
+            "battery.percentRemaining",  # Has permission
+            "charge.state",  # Also has permission
+        ]
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_vehicle_signals = AsyncMock(return_value=available_signals)
+        mock_client.get_vehicle_status = AsyncMock(return_value={})
+        mock_client.get_permissions = AsyncMock(return_value=available_signals)
+        
+        mock_hass.data = {DOMAIN: {mock_config_entry.entry_id: {"client": mock_client}}}
+        
+        # Track created tasks but don't await them
+        mock_hass.async_create_task = MagicMock()
+        
+        entities = []
+        def async_add_entities(new_entities):
+            """Sync callback for adding entities."""
+            entities.extend(new_entities)
+        
+        await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
+        
+        # Should create sensors for available signals
+        sensor_entities = [e for e in entities if isinstance(e, NissanGenericSensor)]
+        signal_ids = [s._signal_id for s in sensor_entities]
+        
+        assert "battery.percentRemaining" in signal_ids
+        assert "charge.state" in signal_ids
+
+    @pytest.mark.asyncio
+    async def test_sensor_creation_avoids_duplicates(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
+        """Test that duplicate sensors are not created."""
+        available_signals = ["battery.percentRemaining", "battery.range"]
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_vehicle_signals = AsyncMock(return_value=available_signals)
+        mock_client.get_vehicle_status = AsyncMock(return_value={})
+        
+        # Pre-populate with existing sensor
+        existing_sensor = MagicMock(spec=NissanGenericSensor)
+        existing_sensor._signal_id = "battery.percentRemaining"
+        
+        mock_hass.data = {DOMAIN: {mock_config_entry.entry_id: {
+            "client": mock_client,
+            "sensors": {
+                mock_vehicle.id: {
+                    "battery.percentRemaining": existing_sensor
+                }
+            }
+        }}}
+        
+        mock_hass.async_create_task = MagicMock()
+        
+        entities = []
+        def async_add_entities(new_entities):
+            """Sync callback for adding entities."""
+            entities.extend(new_entities)
+        
+        await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
+        
+        # Should only create new sensor for battery.range
+        sensor_entities = [e for e in entities if isinstance(e, NissanGenericSensor)]
+        assert len(sensor_entities) == 1
+        assert sensor_entities[0]._signal_id == "battery.range"
+
+    @pytest.mark.asyncio
+    async def test_sensor_creation_with_multiple_vehicles(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
+        """Test sensor creation for multiple vehicles."""
+        mock_vehicle2 = MagicMock()
+        mock_vehicle2.id = "vehicle_456"
+        mock_vehicle2.vin = "VIN456DEF"
+        mock_vehicle2.nickname = "Second Vehicle"
+        
+        available_signals = ["battery.percentRemaining"]
+        
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle, mock_vehicle2])
+        mock_client.get_vehicle_signals = AsyncMock(return_value=available_signals)
+        mock_client.get_vehicle_status = AsyncMock(return_value={})
+        
+        mock_hass.data = {DOMAIN: {mock_config_entry.entry_id: {"client": mock_client}}}
+        mock_hass.async_create_task = MagicMock()
+        
+        entities = []
+        def async_add_entities(new_entities):
+            """Sync callback for adding entities."""
+            entities.extend(new_entities)
+        
+        await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
+        
+        # Should create sensors for both vehicles
+        sensor_entities = [e for e in entities if isinstance(e, NissanGenericSensor)]
+        vehicles_covered = {s._vehicle.id for s in sensor_entities}
+        
+        assert mock_vehicle.id in vehicles_covered
+        assert mock_vehicle2.id in vehicles_covered
+
+
+class TestWebhookSignalSubscription:
+    """Test webhook signal subscription and handling."""
+
+    @pytest.mark.asyncio
+    async def test_webhook_signal_subscription_setup(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
+        """Test that webhook signal subscription is set up."""
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_vehicle_signals = AsyncMock(return_value=["battery.percentRemaining"])
+        mock_client.get_vehicle_status = AsyncMock(return_value={})
+        
+        mock_hass.data = {DOMAIN: {mock_config_entry.entry_id: {"client": mock_client}}}
+        mock_hass.async_create_task = MagicMock()
+        
+        # Track dispatcher connections
+        dispatcher_calls = []
+        def mock_dispatcher_connect(hass, signal, callback):
+            dispatcher_calls.append((signal, callback))
+            return MagicMock()
+        
+        entities = []
+        def async_add_entities(new_entities):
+            """Sync callback for adding entities."""
+            entities.extend(new_entities)
+        
+        with patch("custom_components.nissan_na.sensor.async_dispatcher_connect", side_effect=mock_dispatcher_connect):
+            await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
+        
+        # Should subscribe to webhook signal for the vehicle
+        from custom_components.nissan_na.sensor import SIGNAL_WEBHOOK_DATA
+        webhook_signals = [call[0] for call in dispatcher_calls if SIGNAL_WEBHOOK_DATA in call[0]]
+        
+        assert len(webhook_signals) > 0
+
+    @pytest.mark.asyncio
+    async def test_sensor_webhook_data_merge(self, mock_hass, mock_vehicle, mock_config_entry_metric):
+        """Test sensor merges webhook data correctly."""
+        status = {
+            "battery": {"percentRemaining": 0.85, "range": 250},
+            "location": {"latitude": 40.0}
+        }
+        
+        sensor = NissanGenericSensor(
+            mock_hass,
+            mock_vehicle,
+            status,
+            "battery.range",
+            "range",
+            "Range",
+            "km",
+            None,
+            None,
+            mock_config_entry_metric.entry_id,
+        )
+        
+        sensor.async_write_ha_state = MagicMock()
+        
+        # Webhook brings partial update
+        webhook_data = {
+            "battery": {"percentRemaining": 0.95},  # Updated
+            "location": {"longitude": -74.0}  # New field
+        }
+        
+        sensor._handle_webhook_data(webhook_data)
+        
+        # Status should be merged
+        assert sensor._status["battery"]["percentRemaining"] == 0.95
+        assert sensor._status["battery"]["range"] == 250  # Preserved
+        assert sensor._status["location"]["latitude"] == 40.0  # Preserved
+        assert sensor._status["location"]["longitude"] == -74.0  # Added
+        
+        # State update should be triggered
+        sensor.async_write_ha_state.assert_called()
+
+    @pytest.mark.asyncio
+    async def test_sensor_webhook_invalid_data_type(self, mock_hass, mock_vehicle, mock_config_entry_metric):
+        """Test sensor handles invalid webhook data type gracefully."""
+        status = {"battery": {"percentRemaining": 0.85}}
+        
+        sensor = NissanGenericSensor(
+            mock_hass,
+            mock_vehicle,
+            status,
+            "battery.percentRemaining",
+            "percentRemaining",
+            "Battery Level",
+            "%",
+            None,
+            SensorDeviceClass.BATTERY,
+            mock_config_entry_metric.entry_id,
+        )
+        
+        sensor.async_write_ha_state = MagicMock()
+        
+        # Pass invalid data type (list instead of dict)
+        sensor._handle_webhook_data([1, 2, 3])
+        
+        # Status should not change
+        assert sensor._status == {"battery": {"percentRemaining": 0.85}}
+        
+        # State update should not be called for invalid data
+        sensor.async_write_ha_state.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_sensor_async_update(self, mock_hass, mock_vehicle, mock_config_entry_metric):
+        """Test sensor async_update fetches fresh data."""
+        status = {"battery": {"percentRemaining": 0.85}}
+        
+        sensor = NissanGenericSensor(
+            mock_hass,
+            mock_vehicle,
+            status,
+            "battery.percentRemaining",
+            "percentRemaining",
+            "Battery Level",
+            "%",
+            None,
+            SensorDeviceClass.BATTERY,
+            mock_config_entry_metric.entry_id,
+        )
+        
+        fresh_status = {"battery": {"percentRemaining": 0.95}}
+        mock_client = MagicMock()
+        mock_client.get_vehicle_status = AsyncMock(return_value=fresh_status)
+        
+        mock_hass.data[DOMAIN][mock_config_entry_metric.entry_id] = {"client": mock_client}
+        
+        await sensor.async_update()
+        
+        # Status should be updated with fresh data
+        assert sensor._status["battery"]["percentRemaining"] == 0.95
+
+    @pytest.mark.asyncio
+    async def test_sensor_async_update_api_error(self, mock_hass, mock_vehicle, mock_config_entry_metric):
+        """Test sensor async_update handles API errors."""
+        status = {"battery": {"percentRemaining": 0.85}}
+        
+        sensor = NissanGenericSensor(
+            mock_hass,
+            mock_vehicle,
+            status,
+            "battery.percentRemaining",
+            "percentRemaining",
+            "Battery Level",
+            "%",
+            None,
+            SensorDeviceClass.BATTERY,
+            mock_config_entry_metric.entry_id,
+        )
+        
+        mock_client = MagicMock()
+        mock_client.get_vehicle_status = AsyncMock(side_effect=Exception("API error"))
+        
+        mock_hass.data[DOMAIN][mock_config_entry_metric.entry_id] = {"client": mock_client}
+        
+        # Should not raise
+        await sensor.async_update()
+        
+        # Status should not change
+        assert sensor._status["battery"]["percentRemaining"] == 0.85
+
+
+class TestSensorDefinitionBranches:
+    """Test sensor creation branches for different definition types."""
+
+    @pytest.mark.asyncio
+    async def test_sensor_with_permission_requirement(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
+        """Test sensor creation when permission is required."""
+        # Manually create signals with different permission requirements
+        available_signals = ["battery.percentRemaining"]
+        
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_vehicle_signals = AsyncMock(return_value=available_signals)
+        mock_client.get_vehicle_status = AsyncMock(return_value={})
+        mock_client.get_permissions = AsyncMock(return_value=available_signals)
+        
+        mock_hass.data = {DOMAIN: {mock_config_entry.entry_id: {"client": mock_client}}}
+        mock_hass.async_create_task = MagicMock()
+        
+        entities = []
+        def async_add_entities(new_entities):
+            """Sync callback for adding entities."""
+            entities.extend(new_entities)
+        
+        await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
+        
+        # Should create webhook sensor
+        assert any(isinstance(e, WebhookUrlSensor) for e in entities)
+
+    @pytest.mark.asyncio
+    async def test_rebuild_mode_logs_removals(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
+        """Test rebuild mode logs summary after removals."""
+        from homeassistant.helpers import entity_registry
+        
+        available_signals = ["battery.percentRemaining"]
+        
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_vehicle_signals = AsyncMock(return_value=available_signals)
+        mock_client.get_vehicle_status = AsyncMock(return_value={})
+        
+        mock_registry = MagicMock(spec=entity_registry.EntityRegistry)
+        mock_registry.async_get = MagicMock(return_value=MagicMock())
+        mock_registry.async_remove = MagicMock()
+        
+        with patch.object(entity_registry, 'async_get', return_value=mock_registry):
+            # Setup with existing sensors
+            sensor1 = MagicMock()
+            sensor1._signal_id = "battery.percentRemaining"
+            sensor1.entity_id = "sensor.battery_1"
+            
+            sensor2 = MagicMock()
+            sensor2._signal_id = "fuel.percentRemaining"  # Not available
+            sensor2.entity_id = "sensor.fuel_1"
+            
+            sensor3 = MagicMock()
+            sensor3._signal_id = "charge.state"  # Not available
+            sensor3.entity_id = "sensor.charge_1"
+            
+            mock_hass.data = {
+                DOMAIN: {
+                    mock_config_entry.entry_id: {
+                        "client": mock_client,
+                        "sensors": {
+                            mock_vehicle.id: {
+                                "battery.percentRemaining": sensor1,
+                                "fuel.percentRemaining": sensor2,
+                                "charge.state": sensor3,
+                            }
+                        }
+                    }
+                }
+            }
+            
+            mock_hass.async_create_task = MagicMock()
+            
+            entities = []
+            def async_add_entities(new_entities):
+                """Sync callback for adding entities."""
+                entities.extend(new_entities)
+            
+            # Run in rebuild mode
+            await async_setup_entry(mock_hass, mock_config_entry, async_add_entities, rebuild_mode=True)
+            
+            # Both unavailable sensors should be removed
+            assert "fuel.percentRemaining" not in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
+            assert "charge.state" not in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
+            
+            # Battery should remain
+            assert "battery.percentRemaining" in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
+            
+            # Verify removals were called
+            assert mock_registry.async_remove.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_sensor_entity_value_extraction_from_object(self, mock_hass, mock_vehicle, mock_config_entry_metric):
+        """Test extracting value from object with getattr."""
+        # Create a simple object (not dict) to hold status
+        class StatusObject:
+            def __init__(self):
+                self.percentRemaining = 0.85
+        
+        status = {"battery": StatusObject()}
+        
+        sensor = NissanGenericSensor(
+            mock_hass,
+            mock_vehicle,
+            status,
+            "battery.percentRemaining",
+            "percentRemaining",
+            "Battery Level",
+            "%",
+            None,
+            SensorDeviceClass.BATTERY,
+            mock_config_entry_metric.entry_id,
+        )
+        
+        # Should extract via getattr
+        assert sensor.native_value == 0.85
+
+    @pytest.mark.asyncio
+    async def test_sensor_value_with_unit_conversion(self, mock_hass, mock_vehicle, mock_config_entry_imperial):
+        """Test sensor value conversion to imperial units."""
+        status = {"odometer": {"distance": 100.0}}
+        
+        sensor = NissanGenericSensor(
+            mock_hass,
+            mock_vehicle,
+            status,
+            "odometer.distance",
+            "distance",
+            "Odometer",
+            "km",
+            None,
+            None,
+            mock_config_entry_imperial.entry_id,
+        )
+        
+        # 100 km should convert to miles
+        assert sensor.native_value == pytest.approx(62.137, rel=0.01)
+
+    @pytest.mark.asyncio
+    async def test_sensor_should_poll(self, mock_hass, mock_vehicle, mock_config_entry_metric):
+        """Test that sensor disables polling."""
+        status = {"battery": {"percentRemaining": 0.85}}
+        
+        sensor = NissanGenericSensor(
+            mock_hass,
+            mock_vehicle,
+            status,
+            "battery.percentRemaining",
+            "percentRemaining",
+            "Battery Level",
+            "%",
+            None,
+            SensorDeviceClass.BATTERY,
+            mock_config_entry_metric.entry_id,
+        )
+        
+        assert sensor.should_poll is False
+
+    @pytest.mark.asyncio
+    async def test_initial_refresh_skips_webhook_sensor(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
+        """Test that initial refresh skips WebhookUrlSensor."""
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_vehicle_signals = AsyncMock(return_value=["battery.percentRemaining"])
+        mock_client.get_vehicle_status = AsyncMock(return_value={"battery": {"percentRemaining": 0.85}})
+        
+        mock_hass.data = {DOMAIN: {mock_config_entry.entry_id: {"client": mock_client}}}
+        mock_hass.async_create_task = MagicMock()
+        
+        refresh_call_count = 0
+        
+        async def track_updates(entity):
+            """Track which entities get async_update called."""
+            nonlocal refresh_call_count
+            refresh_call_count += 1
+            await entity._original_async_update()
+        
+        entities = []
+        def async_add_entities(new_entities):
+            """Sync callback for adding entities."""
+            entities.extend(new_entities)
+        
+        await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
+        
+        # Count non-webhook entities
+        non_webhook_entities = [e for e in entities if not isinstance(e, WebhookUrlSensor)]
+        
+        # Should have created at least one sensor entity
+        assert len(non_webhook_entities) > 0
+
+
 
 

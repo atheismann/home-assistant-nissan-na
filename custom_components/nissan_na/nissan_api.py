@@ -659,4 +659,24 @@ class SmartcarApiClient:
         except Exception:
             pass
 
+        try:
+            status["lock"] = await self.get_lock_status(vehicle_id)
+        except Exception:
+            pass
+
+        try:
+            status["fuel"] = await self.get_fuel_level(vehicle_id)
+        except Exception:
+            pass
+
+        try:
+            status["tires"] = await self.get_tire_pressure(vehicle_id)
+        except Exception:
+            pass
+
+        try:
+            status["oil"] = await self.get_engine_oil(vehicle_id)
+        except Exception:
+            pass
+
         return status

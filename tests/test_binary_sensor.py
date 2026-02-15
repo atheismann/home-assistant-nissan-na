@@ -1,11 +1,15 @@
 """Unit tests for binary_sensor.py - binary sensor definitions and structure"""
 import pytest
+from unittest.mock import MagicMock, AsyncMock, patch
 from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 
 from custom_components.nissan_na.binary_sensor import (
     BINARY_SENSOR_DEFINITIONS,
     SIGNAL_WEBHOOK_DATA,
+    NissanBinarySensor,
+    async_setup_entry,
 )
+from custom_components.nissan_na.const import DOMAIN
 
 
 class TestBinarySensorDefinitions:
@@ -262,3 +266,782 @@ class TestBinarySensorIcons:
         for signal_id, name, device_class, icon in BINARY_SENSOR_DEFINITIONS:
             if signal_id == "tractionBattery.isHeaterActive":
                 assert icon == "mdi:fire"
+
+
+class TestNissanBinarySensorEntity:
+    """Tests for NissanBinarySensor entity class"""
+    
+    def test_init_with_nickname(self):
+        """Test sensor initialization with vehicle nickname"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "My Tesla"
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "closure.doors.frontLeft.isOpen",
+            "Front Left Door",
+            BinarySensorDeviceClass.DOOR,
+            "mdi:car-door",
+            "entry_123"
+        )
+        
+        assert sensor._attr_name == "My Tesla Front Left Door"
+        assert sensor._is_on == False
+        assert sensor._vehicle == mock_vehicle
+        assert sensor._signal_id == "closure.doors.frontLeft.isOpen"
+        assert sensor._device_class == BinarySensorDeviceClass.DOOR
+        assert sensor._icon == "mdi:car-door"
+
+    def test_init_with_year_make_model(self):
+        """Test sensor initialization with year/make/model"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = None
+        mock_vehicle.year = "2024"
+        mock_vehicle.make = "Nissan"
+        mock_vehicle.model = "Leaf"
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "closure.windows.frontLeft.isOpen",
+            "Front Left Window",
+            BinarySensorDeviceClass.WINDOW,
+            "mdi:window-closed",
+            "entry_123"
+        )
+        
+        assert sensor._attr_name == "2024 Nissan Leaf Front Left Window"
+
+    def test_init_with_vin_fallback(self):
+        """Test sensor initialization falling back to VIN"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TESTVIN123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = None
+        mock_vehicle.year = None
+        mock_vehicle.make = None
+        mock_vehicle.model = None
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "charge.isPluggedIn",
+            "Charging Cable Plugged In",
+            BinarySensorDeviceClass.PLUG,
+            "mdi:power-plug",
+            "entry_123"
+        )
+        
+        assert sensor._attr_name == "TESTVIN123 Charging Cable Plugged In"
+
+    def test_init_with_none_device_class(self):
+        """Test sensor initialization with None device class"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test"
+        mock_vehicle.year = None
+        mock_vehicle.make = None
+        mock_vehicle.model = None
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "tractionBattery.isHeaterActive",
+            "Battery Heater Active",
+            None,
+            "mdi:fire",
+            "entry_123"
+        )
+        
+        assert sensor._device_class is None
+        assert sensor._icon == "mdi:fire"
+
+    def test_unique_id(self):
+        """Test unique ID generation"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "ABC123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test"
+        mock_vehicle.year = None
+        mock_vehicle.make = None
+        mock_vehicle.model = None
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "closure.doors.frontLeft.isOpen",
+            "Front Left Door",
+            BinarySensorDeviceClass.DOOR,
+            "mdi:car-door",
+            "entry_123"
+        )
+        
+        assert sensor.unique_id == "ABC123_closure.doors.frontLeft.isOpen"
+
+    def test_is_on_property_default(self):
+        """Test is_on property default value"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test"
+        mock_vehicle.year = None
+        mock_vehicle.make = None
+        mock_vehicle.model = None
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "closure.doors.frontLeft.isOpen",
+            "Front Left Door",
+            BinarySensorDeviceClass.DOOR,
+            "mdi:car-door",
+            "entry_123"
+        )
+        
+        assert sensor.is_on == False
+
+    def test_is_on_property_true(self):
+        """Test is_on property when set to True"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test"
+        mock_vehicle.year = None
+        mock_vehicle.make = None
+        mock_vehicle.model = None
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "closure.doors.frontLeft.isOpen",
+            "Front Left Door",
+            BinarySensorDeviceClass.DOOR,
+            "mdi:car-door",
+            "entry_123"
+        )
+        
+        sensor._is_on = True
+        assert sensor.is_on == True
+
+    def test_device_class_property(self):
+        """Test device_class property"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test"
+        mock_vehicle.year = None
+        mock_vehicle.make = None
+        mock_vehicle.model = None
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "closure.doors.frontLeft.isOpen",
+            "Front Left Door",
+            BinarySensorDeviceClass.DOOR,
+            "mdi:car-door",
+            "entry_123"
+        )
+        
+        assert sensor.device_class == BinarySensorDeviceClass.DOOR
+
+    def test_icon_property(self):
+        """Test icon property"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test"
+        mock_vehicle.year = None
+        mock_vehicle.make = None
+        mock_vehicle.model = None
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "closure.doors.frontLeft.isOpen",
+            "Front Left Door",
+            BinarySensorDeviceClass.DOOR,
+            "mdi:car-door",
+            "entry_123"
+        )
+        
+        assert sensor.icon == "mdi:car-door"
+
+    def test_device_info(self):
+        """Test device_info property"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test"
+        mock_vehicle.year = None
+        mock_vehicle.make = None
+        mock_vehicle.model = None
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "closure.doors.frontLeft.isOpen",
+            "Front Left Door",
+            BinarySensorDeviceClass.DOOR,
+            "mdi:car-door",
+            "entry_123"
+        )
+        
+        device_info = sensor.device_info
+        assert device_info == {"identifiers": {(DOMAIN, "TEST123")}}
+
+
+class TestBinarySensorWebhookHandling:
+    """Tests for webhook data handling"""
+    
+    def test_handle_webhook_data_door_open(self):
+        """Test webhook handling for door open event"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test"
+        mock_vehicle.year = None
+        mock_vehicle.make = None
+        mock_vehicle.model = None
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "closure.doors.frontLeft.isOpen",
+            "Front Left Door",
+            BinarySensorDeviceClass.DOOR,
+            "mdi:car-door",
+            "entry_123"
+        )
+        sensor.async_write_ha_state = MagicMock()
+        
+        webhook_data = {
+            "closure": {
+                "doors": {
+                    "frontLeft": {
+                        "isOpen": True
+                    }
+                }
+            }
+        }
+        
+        sensor._handle_webhook_data(webhook_data)
+        
+        assert sensor._is_on == True
+        sensor.async_write_ha_state.assert_called_once()
+
+    def test_handle_webhook_data_door_closed(self):
+        """Test webhook handling for door closed event"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test"
+        mock_vehicle.year = None
+        mock_vehicle.make = None
+        mock_vehicle.model = None
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "closure.doors.frontRight.isOpen",
+            "Front Right Door",
+            BinarySensorDeviceClass.DOOR,
+            "mdi:car-door",
+            "entry_123"
+        )
+        sensor.async_write_ha_state = MagicMock()
+        sensor._is_on = True
+        
+        webhook_data = {
+            "closure": {
+                "doors": {
+                    "frontRight": {
+                        "isOpen": False
+                    }
+                }
+            }
+        }
+        
+        sensor._handle_webhook_data(webhook_data)
+        
+        assert sensor._is_on == False
+        sensor.async_write_ha_state.assert_called_once()
+
+    def test_handle_webhook_data_lock(self):
+        """Test webhook handling for lock status"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test"
+        mock_vehicle.year = None
+        mock_vehicle.make = None
+        mock_vehicle.model = None
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "closure.doors.frontLeft.isLocked",
+            "Front Left Door Lock",
+            BinarySensorDeviceClass.LOCK,
+            "mdi:lock",
+            "entry_123"
+        )
+        sensor.async_write_ha_state = MagicMock()
+        
+        webhook_data = {
+            "closure": {
+                "doors": {
+                    "frontLeft": {
+                        "isLocked": True
+                    }
+                }
+            }
+        }
+        
+        sensor._handle_webhook_data(webhook_data)
+        
+        assert sensor._is_on == True
+        sensor.async_write_ha_state.assert_called_once()
+
+    def test_handle_webhook_data_missing_key(self):
+        """Test webhook handling with missing signal key"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test"
+        mock_vehicle.year = None
+        mock_vehicle.make = None
+        mock_vehicle.model = None
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "closure.doors.frontLeft.isOpen",
+            "Front Left Door",
+            BinarySensorDeviceClass.DOOR,
+            "mdi:car-door",
+            "entry_123"
+        )
+        sensor.async_write_ha_state = MagicMock()
+        
+        webhook_data = {
+            "some_other_data": True
+        }
+        
+        sensor._handle_webhook_data(webhook_data)
+        
+        assert sensor._is_on == False
+        sensor.async_write_ha_state.assert_not_called()
+
+    def test_handle_webhook_data_invalid_type(self):
+        """Test webhook handling with invalid data type"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test"
+        mock_vehicle.year = None
+        mock_vehicle.make = None
+        mock_vehicle.model = None
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "closure.doors.frontLeft.isOpen",
+            "Front Left Door",
+            BinarySensorDeviceClass.DOOR,
+            "mdi:car-door",
+            "entry_123"
+        )
+        sensor.async_write_ha_state = MagicMock()
+        
+        # Pass non-dict data
+        sensor._handle_webhook_data("invalid")
+        
+        assert sensor._is_on == False
+        sensor.async_write_ha_state.assert_not_called()
+
+    def test_handle_webhook_data_connectivity(self):
+        """Test webhook handling for connectivity status"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test"
+        mock_vehicle.year = None
+        mock_vehicle.make = None
+        mock_vehicle.model = None
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "connectivity.isOnline",
+            "Online",
+            BinarySensorDeviceClass.CONNECTIVITY,
+            "mdi:wifi",
+            "entry_123"
+        )
+        sensor.async_write_ha_state = MagicMock()
+        
+        webhook_data = {
+            "connectivity": {
+                "isOnline": True
+            }
+        }
+        
+        sensor._handle_webhook_data(webhook_data)
+        
+        assert sensor._is_on == True
+        sensor.async_write_ha_state.assert_called_once()
+
+    def test_handle_webhook_data_battery_heater(self):
+        """Test webhook handling for battery heater"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test"
+        mock_vehicle.year = None
+        mock_vehicle.make = None
+        mock_vehicle.model = None
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "tractionBattery.isHeaterActive",
+            "Battery Heater Active",
+            None,
+            "mdi:fire",
+            "entry_123"
+        )
+        sensor.async_write_ha_state = MagicMock()
+        
+        webhook_data = {
+            "tractionBattery": {
+                "isHeaterActive": True
+            }
+        }
+        
+        sensor._handle_webhook_data(webhook_data)
+        
+        assert sensor._is_on == True
+        sensor.async_write_ha_state.assert_called_once()
+
+    def test_handle_webhook_data_truthiness(self):
+        """Test webhook handling converts values to boolean correctly"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test"
+        mock_vehicle.year = None
+        mock_vehicle.make = None
+        mock_vehicle.model = None
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "closure.doors.frontLeft.isOpen",
+            "Front Left Door",
+            BinarySensorDeviceClass.DOOR,
+            "mdi:car-door",
+            "entry_123"
+        )
+        sensor.async_write_ha_state = MagicMock()
+        
+        # Test with truthy value that's not a boolean
+        webhook_data = {
+            "closure": {
+                "doors": {
+                    "frontLeft": {
+                        "isOpen": 1
+                    }
+                }
+            }
+        }
+        
+        sensor._handle_webhook_data(webhook_data)
+        assert sensor._is_on == True
+
+    def test_handle_webhook_data_falsy_value(self):
+        """Test webhook handling with falsy values"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test"
+        mock_vehicle.year = None
+        mock_vehicle.make = None
+        mock_vehicle.model = None
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "closure.doors.frontLeft.isOpen",
+            "Front Left Door",
+            BinarySensorDeviceClass.DOOR,
+            "mdi:car-door",
+            "entry_123"
+        )
+        sensor.async_write_ha_state = MagicMock()
+        
+        webhook_data = {
+            "closure": {
+                "doors": {
+                    "frontLeft": {
+                        "isOpen": 0
+                    }
+                }
+            }
+        }
+        
+        sensor._handle_webhook_data(webhook_data)
+        assert sensor._is_on == False
+
+
+@pytest.mark.asyncio
+class TestBinarySensorSetup:
+    """Tests for async_setup_entry"""
+    
+    async def test_async_setup_entry_with_signals(self):
+        """Test setup entry with available signals"""
+        mock_hass = MagicMock()
+        mock_hass.async_create_task = MagicMock()
+        mock_config_entry = MagicMock()
+        mock_config_entry.entry_id = "test_entry"
+        mock_async_add_entities = AsyncMock()
+        
+        mock_vehicle = MagicMock()
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.nickname = "Test Car"
+        
+        mock_client = AsyncMock()
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_vehicle_signals = AsyncMock(return_value=[
+            "closure.doors.frontLeft.isOpen",
+            "closure.doors.frontRight.isOpen",
+            "closure.windows.frontLeft.isOpen",
+            "connectivity.isOnline",
+        ])
+        
+        mock_hass.data = {
+            DOMAIN: {
+                "test_entry": {
+                    "client": mock_client,
+                }
+            }
+        }
+        
+        await async_setup_entry(mock_hass, mock_config_entry, mock_async_add_entities)
+        
+        # Should create entities for available signals only
+        mock_async_add_entities.assert_called_once()
+        entities = mock_async_add_entities.call_args[0][0]
+        assert len(entities) == 4
+
+    async def test_async_setup_entry_signals_api_failure(self):
+        """Test setup entry when signals API fails"""
+        mock_hass = MagicMock()
+        mock_hass.async_create_task = MagicMock()
+        mock_config_entry = MagicMock()
+        mock_config_entry.entry_id = "test_entry"
+        mock_async_add_entities = AsyncMock()
+        
+        mock_vehicle = MagicMock()
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.nickname = "Test Car"
+        
+        mock_client = AsyncMock()
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_vehicle_signals = AsyncMock(side_effect=Exception("API error"))
+        
+        mock_hass.data = {
+            DOMAIN: {
+                "test_entry": {
+                    "client": mock_client,
+                }
+            }
+        }
+        
+        await async_setup_entry(mock_hass, mock_config_entry, mock_async_add_entities)
+        
+        # Should create all sensors when signals API fails
+        mock_async_add_entities.assert_called_once()
+        entities = mock_async_add_entities.call_args[0][0]
+        assert len(entities) == len(BINARY_SENSOR_DEFINITIONS)
+
+    async def test_async_setup_entry_multiple_vehicles(self):
+        """Test setup entry with multiple vehicles"""
+        mock_hass = MagicMock()
+        mock_hass.async_create_task = MagicMock()
+        mock_config_entry = MagicMock()
+        mock_config_entry.entry_id = "test_entry"
+        mock_async_add_entities = AsyncMock()
+        
+        mock_vehicle1 = MagicMock()
+        mock_vehicle1.id = "vehicle_1"
+        mock_vehicle1.vin = "VIN1"
+        mock_vehicle1.nickname = "Car 1"
+        
+        mock_vehicle2 = MagicMock()
+        mock_vehicle2.id = "vehicle_2"
+        mock_vehicle2.vin = "VIN2"
+        mock_vehicle2.nickname = "Car 2"
+        
+        mock_client = AsyncMock()
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle1, mock_vehicle2])
+        mock_client.get_vehicle_signals = AsyncMock(side_effect=Exception("API error"))
+        
+        mock_hass.data = {
+            DOMAIN: {
+                "test_entry": {
+                    "client": mock_client,
+                }
+            }
+        }
+        
+        await async_setup_entry(mock_hass, mock_config_entry, mock_async_add_entities)
+        
+        # Should create sensors for both vehicles
+        entities = mock_async_add_entities.call_args[0][0]
+        assert len(entities) == len(BINARY_SENSOR_DEFINITIONS) * 2
+
+    async def test_async_setup_entry_creates_tracking_dict(self):
+        """Test that setup creates tracking dict for binary sensors"""
+        mock_hass = MagicMock()
+        mock_hass.async_create_task = MagicMock()
+        mock_config_entry = MagicMock()
+        mock_config_entry.entry_id = "test_entry"
+        mock_async_add_entities = AsyncMock()
+        
+        mock_vehicle = MagicMock()
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.nickname = "Test Car"
+        
+        mock_client = AsyncMock()
+        mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+        mock_client.get_vehicle_signals = AsyncMock(side_effect=Exception("API error"))
+        
+        mock_hass.data = {
+            DOMAIN: {
+                "test_entry": {
+                    "client": mock_client,
+                }
+            }
+        }
+        
+        await async_setup_entry(mock_hass, mock_config_entry, mock_async_add_entities)
+        
+        # Check that tracking dict was created
+        assert "binary_sensors" in mock_hass.data[DOMAIN]["test_entry"]
+        assert "vehicle_123" in mock_hass.data[DOMAIN]["test_entry"]["binary_sensors"]
+
+
+@pytest.mark.asyncio
+class TestBinarySensorLifecycle:
+    """Tests for binary sensor lifecycle"""
+    
+    async def test_async_added_to_hass(self):
+        """Test sensor is properly added to hass"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test"
+        mock_vehicle.year = None
+        mock_vehicle.make = None
+        mock_vehicle.model = None
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "closure.doors.frontLeft.isOpen",
+            "Front Left Door",
+            BinarySensorDeviceClass.DOOR,
+            "mdi:car-door",
+            "entry_123"
+        )
+        
+        mock_unsub = MagicMock()
+        with patch("custom_components.nissan_na.binary_sensor.async_dispatcher_connect", return_value=mock_unsub):
+            await sensor.async_added_to_hass()
+        
+        assert sensor._unsub_dispatcher == mock_unsub
+
+    async def test_async_will_remove_from_hass(self):
+        """Test sensor cleanup on removal"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test"
+        mock_vehicle.year = None
+        mock_vehicle.make = None
+        mock_vehicle.model = None
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "closure.doors.frontLeft.isOpen",
+            "Front Left Door",
+            BinarySensorDeviceClass.DOOR,
+            "mdi:car-door",
+            "entry_123"
+        )
+        
+        mock_unsub = MagicMock()
+        sensor._unsub_dispatcher = mock_unsub
+        
+        await sensor.async_will_remove_from_hass()
+        
+        mock_unsub.assert_called_once()
+
+    async def test_async_will_remove_from_hass_no_unsub(self):
+        """Test cleanup when unsub is None"""
+        mock_hass = MagicMock()
+        mock_vehicle = MagicMock()
+        mock_vehicle.vin = "TEST123"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "Test"
+        mock_vehicle.year = None
+        mock_vehicle.make = None
+        mock_vehicle.model = None
+        
+        sensor = NissanBinarySensor(
+            mock_hass,
+            mock_vehicle,
+            "closure.doors.frontLeft.isOpen",
+            "Front Left Door",
+            BinarySensorDeviceClass.DOOR,
+            "mdi:car-door",
+            "entry_123"
+        )
+        
+        sensor._unsub_dispatcher = None
+        
+        # Should not raise error
+        await sensor.async_will_remove_from_hass()
+
