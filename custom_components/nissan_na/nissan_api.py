@@ -119,11 +119,7 @@ class SmartcarApiClient:
         self.access_token = access_token
         self.refresh_token = refresh_token
         self._vehicles_cache: Dict[str, smartcar.Vehicle] = {}
-        self._api_base_url = (
-            "https://api.smartcar.com/v2.0"
-            if not test_mode
-            else "https://api.smartcar.com/v2.0"
-        )
+        self._api_base_url = "https://api.smartcar.com/v2.0"
 
     def get_auth_url(self, state: Optional[str] = None) -> str:
         """
@@ -720,7 +716,8 @@ class SmartcarApiClient:
         _LOGGER.debug("API Call: get_vehicle_signals | Vehicle ID: %s", vehicle_id)
         _LOGGER.debug("Access token: %s", self.access_token)
         _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        url = f"{self._api_base_url}/vehicles/{vehicle_id}/signals"
+        # Use v3 API endpoint with vehicle.api.smartcar.com subdomain
+        url = "https://vehicle.api.smartcar.com/v3/vehicles/{}/signals".format(vehicle_id)
         headers = {"Authorization": f"Bearer {self.access_token}"}
         _LOGGER.debug("HTTP Method: GET | URL: %s", url)
         _LOGGER.debug("Request Headers: %s", headers)
@@ -732,20 +729,41 @@ class SmartcarApiClient:
                         _LOGGER.debug("HTTP Response Status: %d", response.status)
                         data = await response.json()
                         _LOGGER.debug("Response Body: %s", data)
-                        # Smartcar returns signals in format:
-                        # {"signals": [{"id": "battery.percentRemaining", ...}, ...]}
-                        if "signals" in data:
-                            signals = [s.get("id") for s in data["signals"] if s.get("id")]
+                        # v3 API returns signals in format:
+                        # {"data": [{"attributes": {"code": "battery-voltage"}, ...}, ...]}
+                        if "data" in data and isinstance(data["data"], list):
+                            signals = []
+                            for signal in data["data"]:
+                                if isinstance(signal, dict) and "attributes" in signal:
+                                    code = signal["attributes"].get("code")
+                                    if code:
+                                        signals.append(code)
                             _LOGGER.debug("Available signals for vehicle %s: %s", vehicle_id, signals)
                             return signals
                         return []
                     else:
                         # If signal API not available, return empty (will fall back to permission-based)
                         _LOGGER.debug("HTTP Response Status: %d (Signal API not available)", response.status)
+                        try:
+                            error_body = await response.text()
+                            _LOGGER.debug("Response Error Body: %s", error_body)
+                        except Exception:
+                            pass
+                        _LOGGER.warning(
+                            "Unable to get available signals for vehicle %s (Status: %d). "
+                            "Will use permission-based signal detection instead. "
+                            "This may be expected if signals API is not available in your region.",
+                            vehicle_id,
+                            response.status
+                        )
                         return []
         except Exception as err:
             # If API call fails, return empty list (will fall back to permission-based)
             _LOGGER.debug("Error fetching signals for vehicle %s: %s", vehicle_id, err)
+            _LOGGER.warning(
+                "Error fetching available signals for vehicle %s. Will use permission-based detection instead.",
+                vehicle_id
+            )
             return []
 
     async def get_vehicle_status(self, vehicle_id: str) -> Dict[str, Any]:
