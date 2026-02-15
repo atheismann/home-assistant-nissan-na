@@ -155,27 +155,25 @@ async def async_setup_entry(hass, config_entry, async_add_entities, rebuild_mode
             from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
             entity_registry = async_get_entity_registry(hass)
             
-            # Find and remove entities for signals that are no longer available
+            # Remove tracked sensors that are no longer available
             removed_count = 0
             for signal_id in list(data["sensors"][vehicle.id].keys()):
                 if signal_id not in available_signals:
                     # Remove from tracking
                     sensor = data["sensors"][vehicle.id].pop(signal_id)
-                    # Remove from entity registry
-                    if sensor.entity_id:
-                        entity_entry = entity_registry.async_get(sensor.entity_id)
-                        if entity_entry:
-                            entity_registry.async_remove(sensor.entity_id)
-                            removed_count += 1
-                            _LOGGER.info(
-                                "Removed unavailable sensor %s for vehicle %s",
-                                signal_id,
-                                vehicle.id,
-                            )
+                    # Remove from entity registry if sensor has entity_id
+                    if hasattr(sensor, 'entity_id') and sensor.entity_id:
+                        entity_registry.async_remove(sensor.entity_id)
+                        removed_count += 1
+                        _LOGGER.info(
+                            "Removed unavailable sensor %s for vehicle %s",
+                            signal_id,
+                            vehicle.id,
+                        )
             
             if removed_count > 0:
                 _LOGGER.info(
-                    "Vehicle %s: removed %d unsupported sensors",
+                    "Vehicle %s: removed %d unsupported sensors in rebuild",
                     vehicle.id,
                     removed_count,
                 )
