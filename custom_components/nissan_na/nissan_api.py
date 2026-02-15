@@ -768,59 +768,98 @@ class SmartcarApiClient:
 
     async def get_vehicle_status(self, vehicle_id: str) -> Dict[str, Any]:
         """
-        Get comprehensive vehicle status.
+        Get comprehensive vehicle status using v3 signals API.
 
         Args:
             vehicle_id: Smartcar vehicle ID.
 
         Returns:
-            dict: Combined vehicle status data.
+            dict: Vehicle status data from available signals.
         """
         status = {}
-
+        
+        # First, get list of available signals
+        try:
+            signals = await self.get_vehicle_signals(vehicle_id)
+            _LOGGER.debug("Fetching status for %d available signals", len(signals))
+        except Exception as err:
+            _LOGGER.debug("Failed to get signal list: %s", err)
+            signals = []
+        
+        # Map v3 signal codes to status dict structure
+        # v3 signals use format like 'charge-ischarging', 'location-preciselocation'
+        # We'll flatten these into the status dict as-is for now
+        status_from_signals = {}
+        for signal_code in signals:
+            try:
+                # Fetch individual signal value
+                url = f"https://vehicle.api.smartcar.com/v3/vehicles/{vehicle_id}/signals/{signal_code}"
+                headers = {"Authorization": f"Bearer {self.access_token}"}
+                
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url, headers=headers) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            # Extract the value from v3 signal response
+                            if "attributes" in data and "body" in data["attributes"]:
+                                body = data["attributes"]["body"]
+                                status_from_signals[signal_code] = body.get("value")
+                                _LOGGER.debug(
+                                    "Signal %s = %s",
+                                    signal_code,
+                                    body.get("value"),
+                                )
+            except Exception as err:
+                _LOGGER.debug("Failed to fetch signal %s: %s", signal_code, err)
+        
+        # Also try legacy SDK methods as fallback for compatibility
         try:
             status["info"] = await self.get_vehicle_info(vehicle_id)
-        except Exception:
-            pass
+        except Exception as err:
+            _LOGGER.debug("Failed to get vehicle info: %s", err)
 
         try:
             status["location"] = await self.get_vehicle_location(vehicle_id)
-        except Exception:
-            pass
+        except Exception as err:
+            _LOGGER.debug("Failed to get location: %s", err)
 
         try:
             status["battery"] = await self.get_battery_level(vehicle_id)
-        except Exception:
-            pass
+        except Exception as err:
+            _LOGGER.debug("Failed to get battery: %s", err)
 
         try:
             status["charge"] = await self.get_charge_status(vehicle_id)
-        except Exception:
-            pass
+        except Exception as err:
+            _LOGGER.debug("Failed to get charge status: %s", err)
 
         try:
             status["odometer"] = await self.get_odometer(vehicle_id)
-        except Exception:
-            pass
+        except Exception as err:
+            _LOGGER.debug("Failed to get odometer: %s", err)
 
         try:
             status["lock"] = await self.get_lock_status(vehicle_id)
-        except Exception:
-            pass
+        except Exception as err:
+            _LOGGER.debug("Failed to get lock status: %s", err)
 
         try:
             status["fuel"] = await self.get_fuel_level(vehicle_id)
-        except Exception:
-            pass
+        except Exception as err:
+            _LOGGER.debug("Failed to get fuel: %s", err)
 
         try:
             status["tires"] = await self.get_tire_pressure(vehicle_id)
-        except Exception:
-            pass
+        except Exception as err:
+            _LOGGER.debug("Failed to get tires: %s", err)
 
         try:
             status["oil"] = await self.get_engine_oil(vehicle_id)
-        except Exception:
-            pass
-
+        except Exception as err:
+            _LOGGER.debug("Failed to get oil: %s", err)
+        
+        # Add signal values to status dict
+        status["signals"] = status_from_signals
+        
+        _LOGGER.debug("Vehicle status with %d signals: %s", len(status_from_signals), status)
         return status

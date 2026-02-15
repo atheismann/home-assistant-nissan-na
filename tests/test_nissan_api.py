@@ -999,12 +999,12 @@ class TestGetVehicleSignals:
             access_token="test_token"
         )
         
-        # Mock the response data
+        # Mock the response data (v3 API format)
         response_data = {
-            "signals": [
-                {"id": "battery.percentRemaining"},
-                {"id": "location.latitude"},
-                {"id": "location.longitude"}
+            "data": [
+                {"attributes": {"code": "battery-percent-remaining"}},
+                {"attributes": {"code": "location-latitude"}},
+                {"attributes": {"code": "location-longitude"}}
             ]
         }
         
@@ -1027,8 +1027,8 @@ class TestGetVehicleSignals:
             result = await client.get_vehicle_signals("vehicle_1")
             
             assert len(result) == 3
-            assert "battery.percentRemaining" in result
-            assert "location.latitude" in result
+            assert "battery-percent-remaining" in result
+            assert "location-latitude" in result
     
     @pytest.mark.asyncio
     async def test_get_vehicle_signals_api_error(self):

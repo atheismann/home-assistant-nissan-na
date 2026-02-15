@@ -287,20 +287,14 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
             # Track new entities
             new_entities = []
             
-            async def async_add_entities(entities, update_before_add=True):
-                """Callback to track and add entities."""
+            def async_add_entities_callback(entities, update_before_add=True):
+                """Callback to track entities (non-async wrapper)."""
                 new_entities.extend(entities)
-                # Add to Home Assistant
-                from homeassistant.helpers.entity_platform import AddEntitiesCallback
-                # We need to manually add these to the platform
-                platform = self.hass.data.get("entity_platform", {}).get("sensor", [])
-                for p in platform:
-                    if p.config_entry == self.config_entry:
-                        await p.async_add_entities(entities, update_before_add)
-                        break
+                # Note: Platform updates are handled by sensor setup directly
+                # This callback is just for tracking new entities
             
             # Re-run sensor setup in rebuild mode
-            await sensor_setup(self.hass, self.config_entry, async_add_entities, rebuild_mode=True)
+            await sensor_setup(self.hass, self.config_entry, async_add_entities_callback, rebuild_mode=True)
             
             # Count sensors after rebuild
             final_sensors = data.get("sensors", {})

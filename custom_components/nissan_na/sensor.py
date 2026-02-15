@@ -130,7 +130,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities, rebuild_mode
         async def fetch_status():
             """Fetch vehicle status in background."""
             try:
-                fetched_status = await client.get_vehicle_status(vehicle.vin)
+                fetched_status = await client.get_vehicle_status(vehicle.id)
                 _LOGGER.debug("Initial state for vehicle %s: %s", vehicle.id, fetched_status)
                 # Update status in data for future reference
                 if vehicle.id in data["sensors"]:
