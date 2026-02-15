@@ -12,9 +12,123 @@ _LOGGER = logging.getLogger(__name__)
 SIGNAL_WEBHOOK_DATA = "nissan_na_webhook_data"
 
 
+# Mapping from Smartcar v3 API signal codes (kebab-case) to sensor definition IDs (dot notation)
+# This enables matching available signals from the API to sensor definitions
+# Based on official Smartcar API schema: https://smartcar.com/docs/api-reference/signals/schema
+API_SIGNAL_TO_DEFINITION_MAP = {
+    # Fuel/ICE signals (InternalCombustionEngine)
+    "internalcombustionengine-fuellevel": "fuel.percentRemaining",
+    "internalcombustionengine-amountremaining": "fuel.amountRemaining",
+    "internalcombustionengine-range": "fuel.range",
+    "internalcombustionengine-oillife": "engine.oilLifeRemaining",
+    
+    # Odometer signals
+    "odometer-traveleddistance": "odometer.distance",
+    
+    # Charge signals (not yet in sensor definitions, but available from API)
+    "charge-amperage": None,
+    "charge-amperagemax": "charge.amperageMax",
+    "charge-amperagerequested": None,
+    "charge-chargelimits": None,
+    "charge-chargeportstatuscolor": None,
+    "charge-chargerate": None,
+    "charge-chargerecords": None,
+    "charge-chargetimers": None,
+    "charge-chargerphases": None,
+    "charge-chargingconnectortype": None,
+    "charge-detailedchargingstatus": None,
+    "charge-energyadded": None,
+    "charge-fastchargertype": None,
+    "charge-ischarging": None,
+    "charge-ischargingcableconnected": None,
+    "charge-ischargingcablelatched": None,
+    "charge-ischargingportflapopen": None,
+    "charge-isfastchargerpresent": None,
+    "charge-timetocomplete": "charge.timeToComplete",
+    "charge-voltage": "charge.voltage",
+    "charge-wattage": "charge.wattage",
+    
+    # Battery/EV signals (TractionBattery)
+    "tractionbattery-isheateractive": "tractionBattery.isHeaterActive",
+    
+    # Tire signals (Wheel)
+    "wheel-tires": "tires.frontLeft.pressure",  # Maps to all tire sensors
+    
+    # Location signals
+    "location-preciselocation": "location.latitude",  # Maps to both lat/lon
+    "location-isathome": None,
+    
+    # HVAC signals (not yet in sensor definitions)
+    "hvac-cabintargettemperature": None,
+    "hvac-iscabinhvacactive": None,
+    "hvac-isfrontdefrosteractive": None,
+    "hvac-isreardefrosteractive": None,
+    "hvac-issteeringheateractive": None,
+    
+    # Connectivity/Software signals
+    "connectivitysoftware-currentfirmwareversion": "connectivity.softwareVersion",
+    "connectivitystatus-isonline": "connectivity.isOnline",
+    "connectivitystatus-isasleep": "connectivity.isAsleep",
+    "connectivitystatus-isdigitalkeypaired": "connectivity.isDigitalKeyPaired",
+    
+    # Transmission signals (not yet in sensor definitions)
+    "transmission-gearstate": "transmission.gear",
+    "transmission-drivemode": None,
+    
+    # VehicleIdentification signals
+    "vehicleidentification-vin": None,  # Not mapped to sensor definition
+    "vehicleidentification-nickname": None,
+    
+    # Surveillance signals
+    "surveillance-isenabled": "surveillance.isEnabled",
+    
+    # Service signals (not yet in sensor definitions)
+    "service-isinservice": None,
+    "service-records": None,
+    
+    # Diagnostic signals (not yet mapped to definitions)
+    "diagnostics-airbag": None,
+    "diagnostics-brakefluid": None,
+    "diagnostics-oilpressure": None,
+    "diagnostics-tirepressure": None,
+}
+
+
+def map_available_signals(api_signal_codes: list) -> set:
+    """
+    Map Smartcar API signal codes to sensor definition IDs.
+    
+    Handles both formats:
+    - API format: kebab-case codes like 'internalcombustionengine-fuellevel'
+    - Sensor definition format: dot notation like 'battery.percentRemaining'
+    
+    Args:
+        api_signal_codes: List of signal codes from Smartcar v3 API
+    
+    Returns:
+        set: Sensor definition IDs that should be created
+    """
+    mapped_signals = set()
+    
+    for code in api_signal_codes:
+        # Check if it's already in sensor definition format (dot notation)
+        if "." in code:
+            # Direct match - it's already in the format we need
+            mapped_signals.add(code)
+        else:
+            # Try to map from API format (kebab-case)
+            definition_id = API_SIGNAL_TO_DEFINITION_MAP.get(code.lower())
+            if definition_id:
+                mapped_signals.add(definition_id)
+            else:
+                _LOGGER.debug("No sensor definition mapping for API signal: %s", code)
+    
+    return mapped_signals
+
+
 # Sensor definitions mapping API keys to sensor info
 # Format: (signal_id, field_name, sensor_name, unit, required_permission, icon, device_class)
-# signal_id: Signal ID from Smartcar API (e.g., 'battery.percentRemaining')
+# signal_id: Signal ID from sensor definitions (e.g., 'battery.percentRemaining')
 # field_name: Field within that API response object to extract
 # sensor_name: Human-readable sensor name
 # unit: Unit of measurement (None if no unit)
@@ -33,9 +147,10 @@ SENSOR_DEFINITIONS = [
     ("charge.state", "state", "Charging Status", None, "read_charge", "mdi:power-plug", None),
     ("charge.voltage", "voltage", "Charging Voltage", "V", "read_charge", "mdi:lightning-bolt", SensorDeviceClass.VOLTAGE),
     ("charge.amperage", "amperage", "Charging Current", "A", "read_charge", "mdi:current-ac", SensorDeviceClass.CURRENT),
-    ("charge.wattage", "wattage", "Charging Power", "kW", "read_charge", "mdi:lightning-bolt-circle", SensorDeviceClass.POWER),
+    ("charge.wattage", "wattage", "Charging Power", "W", "read_charge", "mdi:lightning-bolt-circle", SensorDeviceClass.POWER),
     ("charge.timeToComplete", "timeToComplete", "Charging Time Remaining", "min", "read_charge", "mdi:battery-clock", None),
     ("charge.amperageMax", "amperageMax", "Charging Current Max", "A", "read_charge", "mdi:current-ac", SensorDeviceClass.CURRENT),
+    ("charge.limit", "limit", "Charge Limit", "%", "read_charge", None, None),
     
     # Odometer sensor
     ("odometer.distance", "distance", "Odometer", "km", "read_odometer", "mdi:speedometer", None),
@@ -68,11 +183,8 @@ SENSOR_DEFINITIONS = [
     # Surveillance sensors (webhook only)
     ("surveillance.isEnabled", "isEnabled", "Surveillance Enabled", None, None, "mdi:cctv", None),
     
-    # Traction battery sensors (webhook only)
+    # Traction battery sensors (EV only)
     ("tractionBattery.isHeaterActive", "isHeaterActive", "Battery Heater Active", None, None, "mdi:fire", None),
-    
-    # Charge limit sensor
-    ("charge.limit", "limit", "Charge Limit", "%", "read_charge", None, None),
 ]
 
 
@@ -104,11 +216,13 @@ async def async_setup_entry(hass, config_entry, async_add_entities, rebuild_mode
         available_signals = set()
         try:
             signals = await client.get_vehicle_signals(vehicle.id)
-            available_signals = set(signals)
+            # Map API signal codes to sensor definition IDs
+            available_signals = map_available_signals(signals)
             _LOGGER.info(
-                "Vehicle %s has %d available signals",
+                "Vehicle %s has %d available signals (mapped from %d API codes)",
                 vehicle.id,
                 len(available_signals),
+                len(signals),
             )
             _LOGGER.debug(
                 "Available signals for %s: %s",

@@ -22,14 +22,11 @@ Easily control and monitor your Nissan vehicle from Home Assistant using the **S
 - [Webhook Support (Real-time Updates)](#webhook-support-real-time-updates)
 - [OAuth Permissions](#oauth-permissions)
 - [Available Entities](#available-entities)
+- [Signal Mapping Reference](#signal-mapping-reference)
 - [Services](#services)
 - [Vehicle Compatibility](#vehicle-compatibility)
 - [Troubleshooting](#troubleshooting)
 - [Debugging & Logging](#debugging--logging)
-- [FAQ](#faq)
-- [Automation Examples](#automation-examples)
-- [Support & Contributing](#support--contributing)
-- [Troubleshooting](#troubleshooting)
 - [FAQ](#faq)
 - [Automation Examples](#automation-examples)
 - [Support & Contributing](#support--contributing)
@@ -728,7 +725,88 @@ The integration creates up to **58 entities** for your vehicle. **Entity availab
 
 ---
 
+## Signal Mapping Reference
+
+This section documents how Smartcar v3 API signals are mapped to Home Assistant sensor definitions.
+
+**Reference**: https://smartcar.com/docs/api-reference/signals/schema
+
+### Fuel & Engine Signals
+| API Signal Code | Sensor Definition | Description | Unit | Status |
+|---|---|---|---|---|
+| `internalcombustionengine-fuellevel` | `fuel.percentRemaining` | Current fuel level percentage | % | ✅ Mapped |
+| `internalcombustionengine-amountremaining` | `fuel.amountRemaining` | Quantity of fuel remaining | L/gal | ✅ Mapped |
+| `internalcombustionengine-range` | `fuel.range` | Estimated driving range | km/mi | ✅ Mapped |
+| `internalcombustionengine-oillife` | `engine.oilLifeRemaining` | Engine oil life remaining | % | ✅ Mapped |
+
+### Odometer Signals
+| API Signal Code | Sensor Definition | Description | Unit | Status |
+|---|---|---|---|---|
+| `odometer-traveleddistance` | `odometer.distance` | Total distance traveled | km/mi | ✅ Mapped |
+
+### Charging Signals
+| API Signal Code | Sensor Definition | Description | Unit | Status |
+|---|---|---|---|---|
+| `charge-amperagemax` | `charge.amperageMax` | Max available amperage | A | ✅ Mapped |
+| `charge-timetocomplete` | `charge.timeToComplete` | Time to full charge | min | ✅ Mapped |
+| `charge-voltage` | `charge.voltage` | Charging voltage | V | ✅ Mapped |
+| `charge-wattage` | `charge.wattage` | Charging power | W | ✅ Mapped |
+| `charge-limit` | `charge.limit` | Charge limit percentage | % | ✅ Mapped |
+
+### Location Signals
+| API Signal Code | Sensor Definition | Description | Unit | Status |
+|---|---|---|---|---|
+| `location-preciselocation` | `location.latitude`, `location.longitude` | GPS coordinates + heading | °/N/S/E/W | ✅ Mapped |
+
+### Tire & Wheel Signals
+| API Signal Code | Sensor Definition | Description | Unit | Status |
+|---|---|---|---|---|
+| `wheel-tires` | `tires.frontLeft.pressure`, etc. | Tire pressure all wheels | psi/bar | ✅ Mapped |
+
+### Transmission Signals
+| API Signal Code | Sensor Definition | Description | Unit | Status |
+|---|---|---|---|---|
+| `transmission-gearstate` | `transmission.gear` | Current gear (P/R/N/D) | - | ✅ Mapped |
+
+### Connectivity & Software Signals
+| API Signal Code | Sensor Definition | Description | Unit | Status |
+|---|---|---|---|---|
+| `connectivitysoftware-currentfirmwareversion` | `connectivity.softwareVersion` | Firmware version | - | ✅ Mapped |
+| `connectivitystatus-isonline` | `connectivity.isOnline` | Is vehicle online | - | ✅ Mapped |
+| `connectivitystatus-isasleep` | `connectivity.isAsleep` | Is vehicle in sleep mode | - | ✅ Mapped |
+| `connectivitystatus-isdigitalkeypaired` | `connectivity.isDigitalKeyPaired` | Is digital key paired | - | ✅ Mapped |
+
+### Surveillance Signals
+| API Signal Code | Sensor Definition | Description | Unit | Status |
+|---|---|---|---|---|
+| `surveillance-isenabled` | `surveillance.isEnabled` | Is surveillance enabled | - | ✅ Mapped |
+
+### Traction Battery Signals
+| API Signal Code | Sensor Definition | Description | Unit | Status |
+|---|---|---|---|---|
+| `tractionbattery-isheateractive` | `tractionBattery.isHeaterActive` | Is battery heater active | - | ✅ Mapped |
+
+### Signal Mapping Summary
+
+- **Total API Signals**: 60+
+- **Mapped to Definitions**: 26
+- **Not Yet Mapped**: 35+
+
+### Unmapped Signals (Future Enhancements)
+
+The following signals are available from Smartcar but don't have sensor definitions yet:
+
+- **HVAC**: Cabin temperature, defroster status, steering wheel heater
+- **Charge Details**: Individual status details, timers, records, connector type
+- **Service**: Service history and records
+- **Diagnostics**: Airbag status, brake fluid, oil pressure, tire pressure warnings
+- **Vehicle ID**: VIN, user nickname
+- **Transmission**: Drive mode selection
+
+---
+
 ## Services
+
 
 Call these services from automations or the Developer Tools:
 
