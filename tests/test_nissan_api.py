@@ -1081,6 +1081,7 @@ class TestGetVehicleStatus:
     """Tests for get_vehicle_status method"""
     
     @pytest.mark.asyncio
+    @patch.object(SmartcarApiClient, 'get_vehicle_signals')
     @patch.object(SmartcarApiClient, 'get_engine_oil')
     @patch.object(SmartcarApiClient, 'get_tire_pressure')
     @patch.object(SmartcarApiClient, 'get_fuel_level')
@@ -1092,9 +1093,10 @@ class TestGetVehicleStatus:
     @patch.object(SmartcarApiClient, 'get_vehicle_info')
     async def test_get_vehicle_status_success(
         self, mock_info, mock_location, mock_battery, mock_charge,
-        mock_odometer, mock_lock, mock_fuel, mock_tires, mock_oil
+        mock_odometer, mock_lock, mock_fuel, mock_tires, mock_oil, mock_signals
     ):
         """Test successful comprehensive vehicle status retrieval"""
+        mock_signals.return_value = []  # Mock empty signals to avoid aiohttp calls
         mock_info.return_value = {"make": "Nissan", "model": "Leaf"}
         mock_location.return_value = {"latitude": 37.7749, "longitude": -122.4194}
         mock_battery.return_value = {"percentRemaining": 85}
@@ -1125,6 +1127,7 @@ class TestGetVehicleStatus:
         assert "oil" in result
     
     @pytest.mark.asyncio
+    @patch.object(SmartcarApiClient, 'get_vehicle_signals')
     @patch.object(SmartcarApiClient, 'get_engine_oil')
     @patch.object(SmartcarApiClient, 'get_tire_pressure')
     @patch.object(SmartcarApiClient, 'get_fuel_level')
@@ -1136,9 +1139,10 @@ class TestGetVehicleStatus:
     @patch.object(SmartcarApiClient, 'get_vehicle_info')
     async def test_get_vehicle_status_partial_failure(
         self, mock_info, mock_location, mock_battery, mock_charge,
-        mock_odometer, mock_lock, mock_fuel, mock_tires, mock_oil
+        mock_odometer, mock_lock, mock_fuel, mock_tires, mock_oil, mock_signals
     ):
         """Test vehicle status retrieval with some API failures"""
+        mock_signals.return_value = []  # Mock empty signals to avoid aiohttp calls
         mock_info.return_value = {"make": "Nissan"}
         mock_location.side_effect = Exception("Location API failed")
         mock_battery.return_value = {"percentRemaining": 85}
