@@ -109,7 +109,195 @@ class TestWebhookConstants:
         
         assert SIGNAL_WEBHOOK_DATA == "nissan_na_webhook_data"
 
-class TestHashChallenge:
+
+class TestSmartcarSignalParser:
+    """Test Smartcar webhook signal format parser."""
+
+    def test_parse_smartcar_signals_basic_boolean(self):
+        """Test parsing simple boolean signal."""
+        from custom_components.nissan_na.webhook import _parse_smartcar_signals
+        
+        signals = [
+            {
+                "code": "charge-ischarging",
+                "name": "IsCharging",
+                "body": True,
+                "status": {"value": "SUCCESS"},
+                "meta": {"oemUpdatedAt": 1771185093925}
+            }
+        ]
+        
+        result = _parse_smartcar_signals(signals)
+        assert result == {"charge-ischarging": True}
+
+    def test_parse_smartcar_signals_numeric_with_unit(self):
+        """Test parsing numeric signal with unit."""
+        from custom_components.nissan_na.webhook import _parse_smartcar_signals
+        
+        signals = [
+            {
+                "code": "internalcombustionengine-fuellevel",
+                "name": "FuelLevel",
+                "body": {"value": 65, "unit": "percent"},
+                "status": {"value": "SUCCESS"},
+                "meta": {"oemUpdatedAt": 1771185093925}
+            }
+        ]
+        
+        result = _parse_smartcar_signals(signals)
+        assert result == {"internalcombustionengine-fuellevel": 65}
+
+    def test_parse_smartcar_signals_complex_location(self):
+        """Test parsing complex location signal."""
+        from custom_components.nissan_na.webhook import _parse_smartcar_signals
+        
+        signals = [
+            {
+                "code": "location-preciselocation",
+                "name": "PreciseLocation",
+                "body": {
+                    "latitude": 51.5014,
+                    "longitude": -0.1419,
+                    "direction": "NE",
+                    "heading": 45.3,
+                    "locationType": "CURRENT"
+                },
+                "status": {"value": "SUCCESS"},
+                "meta": {"oemUpdatedAt": 1771185093925}
+            }
+        ]
+        
+        result = _parse_smartcar_signals(signals)
+        # Complex objects should be stored as-is
+        assert "location-preciselocation" in result
+        assert result["location-preciselocation"]["latitude"] == 51.5014
+        assert result["location-preciselocation"]["longitude"] == -0.1419
+
+    def test_parse_smartcar_signals_multiple_signals(self):
+        """Test parsing multiple signals."""
+        from custom_components.nissan_na.webhook import _parse_smartcar_signals
+        
+        signals = [
+            {
+                "code": "charge-ischarging",
+                "name": "IsCharging",
+                "body": True,
+                "status": {"value": "SUCCESS"},
+            },
+            {
+                "code": "closure-islocked",
+                "name": "IsLocked",
+                "body": False,
+                "status": {"value": "SUCCESS"},
+            },
+            {
+                "code": "battery-percent",
+                "name": "BatteryPercent",
+                "body": {"value": 78, "unit": "percent"},
+                "status": {"value": "SUCCESS"},
+            }
+        ]
+        
+        result = _parse_smartcar_signals(signals)
+        assert len(result) == 3
+        assert result["charge-ischarging"] is True
+        assert result["closure-islocked"] is False
+        assert result["battery-percent"] == 78
+
+    def test_parse_smartcar_signals_skips_failed_status(self):
+        """Test that signals with non-SUCCESS status are skipped."""
+        from custom_components.nissan_na.webhook import _parse_smartcar_signals
+        
+        signals = [
+            {
+                "code": "charge-ischarging",
+                "name": "IsCharging",
+                "body": True,
+                "status": {"value": "SUCCESS"},
+            },
+            {
+                "code": "battery-level",
+                "name": "BatteryLevel",
+                "body": 75,
+                "status": {"value": "ERROR"},  # This should be skipped
+            }
+        ]
+        
+        result = _parse_smartcar_signals(signals)
+        assert len(result) == 1
+        assert "charge-ischarging" in result
+        assert "battery-level" not in result
+
+    def test_parse_smartcar_signals_empty_signals_list(self):
+        """Test parsing empty signals list."""
+        from custom_components.nissan_na.webhook import _parse_smartcar_signals
+        
+        result = _parse_smartcar_signals([])
+        assert result == {}
+
+    def test_parse_smartcar_signals_invalid_input(self):
+        """Test parsing with invalid input types."""
+        from custom_components.nissan_na.webhook import _parse_smartcar_signals
+        
+        # Non-list input should return empty dict
+        result = _parse_smartcar_signals("not a list")
+        assert result == {}
+        
+        result = _parse_smartcar_signals(None)
+        assert result == {}
+        
+        result = _parse_smartcar_signals({"dict": "instead of list"})
+        assert result == {}
+
+    def test_parse_smartcar_signals_missing_code(self):
+        """Test parsing signal with missing code."""
+        from custom_components.nissan_na.webhook import _parse_smartcar_signals
+        
+        signals = [
+            {
+                # Missing "code" field
+                "name": "IsCharging",
+                "body": True,
+                "status": {"value": "SUCCESS"},
+            },
+            {
+                "code": "charge-ischarging",
+                "name": "IsCharging",
+                "body": True,
+                "status": {"value": "SUCCESS"},
+            }
+        ]
+        
+        result = _parse_smartcar_signals(signals)
+        assert len(result) == 1
+        assert "charge-ischarging" in result
+
+    def test_parse_smartcar_signals_missing_body(self):
+        """Test parsing signal with missing body."""
+        from custom_components.nissan_na.webhook import _parse_smartcar_signals
+        
+        signals = [
+            {
+                "code": "charge-ischarging",
+                "name": "IsCharging",
+                # Missing "body" field
+                "status": {"value": "SUCCESS"},
+            },
+            {
+                "code": "battery-level",
+                "name": "BatteryLevel",
+                "body": 75,
+                "status": {"value": "SUCCESS"},
+            }
+        ]
+        
+        result = _parse_smartcar_signals(signals)
+        assert len(result) == 1
+        assert "battery-level" in result
+        assert "charge-ischarging" not in result
+
+
+
     """Test hash_challenge function."""
 
     def test_hash_challenge_generates_valid_hash(self):
