@@ -426,6 +426,20 @@ class TestLatitudeLongitudeProperties:
         
         assert tracker.latitude == 37.7749
     
+    def test_latitude_with_latitude_key(self):
+        """Test latitude property with Smartcar API format (latitude key)"""
+        mock_hass = Mock()
+        mock_vehicle = Mock()
+        mock_vehicle.vin = "TEST123VIN"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "My Nissan"
+        
+        # Smartcar API returns latitude/longitude keys
+        status = {"location": {"latitude": 37.7749, "longitude": -122.4194}}
+        tracker = NissanVehicleTracker(mock_hass, mock_vehicle, status, "test_entry_id")
+        
+        assert tracker.latitude == 37.7749
+    
     def test_latitude_with_no_location(self):
         """Test latitude property when no location data"""
         mock_hass = Mock()
@@ -460,6 +474,20 @@ class TestLatitudeLongitudeProperties:
         mock_vehicle.nickname = "My Nissan"
         
         status = {"location": {"lat": 37.7749, "lon": -122.4194}}
+        tracker = NissanVehicleTracker(mock_hass, mock_vehicle, status, "test_entry_id")
+        
+        assert tracker.longitude == -122.4194
+    
+    def test_longitude_with_longitude_key(self):
+        """Test longitude property with Smartcar API format (longitude key)"""
+        mock_hass = Mock()
+        mock_vehicle = Mock()
+        mock_vehicle.vin = "TEST123VIN"
+        mock_vehicle.id = "vehicle_123"
+        mock_vehicle.nickname = "My Nissan"
+        
+        # Smartcar API returns latitude/longitude keys
+        status = {"location": {"latitude": 37.7749, "longitude": -122.4194}}
         tracker = NissanVehicleTracker(mock_hass, mock_vehicle, status, "test_entry_id")
         
         assert tracker.longitude == -122.4194

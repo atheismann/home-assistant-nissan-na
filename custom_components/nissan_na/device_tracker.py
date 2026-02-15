@@ -173,9 +173,10 @@ class NissanVehicleTracker(TrackerEntity):
         loc = self._status.get("location")
         if not loc:
             return None
-        # Handle nested structure with metadata: {'lat': ..., 'lon': ..., 'meta': {...}}
+        # Handle both formats: Smartcar API returns latitude/longitude
         if isinstance(loc, dict):
-            return loc.get("lat")
+            # Try both common key names
+            return loc.get("latitude") or loc.get("lat")
         return None
 
     @property
@@ -184,9 +185,10 @@ class NissanVehicleTracker(TrackerEntity):
         loc = self._status.get("location")
         if not loc:
             return None
-        # Handle nested structure with metadata: {'lat': ..., 'lon': ..., 'meta': {...}}
+        # Handle both formats: Smartcar API returns latitude/longitude
         if isinstance(loc, dict):
-            return loc.get("lon")
+            # Try both common key names
+            return loc.get("longitude") or loc.get("lon")
         return None
 
     @property
