@@ -80,7 +80,7 @@ class TestNissanChargeLimitNumber:
         
         assert number._attr_name == "Test Vehicle Charge Limit"
         assert number._attr_unique_id == "VIN123ABC_charge_limit"
-        assert number._value == 80  # Default value
+        assert number._attr_native_value == 80  # Default value
 
     def test_number_initialization_without_nickname(self, mock_hass, mock_vehicle_no_nickname, mock_client):
         """Test number initialization with year/make/model."""
@@ -102,13 +102,13 @@ class TestNissanChargeLimitNumber:
             "test_entry",
         )
         
-        assert number.native_value == 80
-        assert number.native_min_value == 0
-        assert number.native_max_value == 100
-        assert number.native_step == 1
-        assert number.native_unit_of_measurement == "%"
-        assert number.icon == "mdi:battery-charging-100"
-        assert number.available is True
+        assert number._attr_native_value == 80
+        assert number._attr_native_min_value == 0
+        assert number._attr_native_max_value == 100
+        assert number._attr_native_step == 1
+        assert number._attr_native_unit_of_measurement == "%"
+        assert number._attr_icon == "mdi:battery-charging-100"
+        assert number._attr_available is True
 
     def test_number_device_info(self, mock_hass, mock_vehicle, mock_client):
         """Test number entity device info."""
@@ -165,13 +165,13 @@ class TestNissanChargeLimitNumber:
         number.async_write_ha_state = MagicMock()
         
         # Initial value
-        assert number._value == 80
+        assert number._attr_native_value == 80
         
         # Update via webhook
         webhook_data = {"charge": {"limit": 90}}
         number._handle_webhook_data(webhook_data)
         
-        assert number._value == 90.0
+        assert number._attr_native_value == 90.0
         # Verify state update was called
         number.async_write_ha_state.assert_called_once()
 
@@ -184,17 +184,17 @@ class TestNissanChargeLimitNumber:
             "test_entry",
         )
         
-        initial_value = number._value
+        initial_value = number._attr_native_value
         
         # Invalid data types
         number._handle_webhook_data(None)
-        assert number._value == initial_value
+        assert number._attr_native_value == initial_value
         
         number._handle_webhook_data("invalid")
-        assert number._value == initial_value
+        assert number._attr_native_value == initial_value
         
         number._handle_webhook_data({"charge": "invalid"})
-        assert number._value == initial_value
+        assert number._attr_native_value == initial_value
 
     @pytest.mark.asyncio
     async def test_async_set_value_success(self, mock_hass, mock_vehicle, mock_client):
@@ -224,7 +224,7 @@ class TestNissanChargeLimitNumber:
         with patch("aiohttp.ClientSession", return_value=mock_session):
             await number.async_set_value(85.0)
         
-        assert number._value == 85
+        assert number._attr_native_value == 85
         number.async_write_ha_state.assert_called_once()
 
     @pytest.mark.asyncio
@@ -255,11 +255,11 @@ class TestNissanChargeLimitNumber:
         with patch("aiohttp.ClientSession", return_value=mock_session):
             # Test upper bound
             await number.async_set_value(150.0)
-            assert number._value == 100
+            assert number._attr_native_value == 100
             
             # Test lower bound
             await number.async_set_value(-10.0)
-            assert number._value == 0
+            assert number._attr_native_value == 0
 
     @pytest.mark.asyncio
     async def test_async_set_value_failure(self, mock_hass, mock_vehicle, mock_client):
@@ -289,7 +289,7 @@ class TestNissanChargeLimitNumber:
         with patch("aiohttp.ClientSession", return_value=mock_session):
             await number.async_set_value(90.0)
         
-        assert number._available is False
+        assert number._attr_available is False
 
     @pytest.mark.asyncio
     async def test_async_set_value_exception(self, mock_hass, mock_vehicle, mock_client):
@@ -307,7 +307,7 @@ class TestNissanChargeLimitNumber:
         with patch("aiohttp.ClientSession", side_effect=Exception("Connection error")):
             await number.async_set_value(90.0)
         
-        assert number._available is False
+        assert number._attr_available is False
 
 
 class TestAsyncSetupEntryErrorHandling:
@@ -422,14 +422,14 @@ class TestNumberWebhookHandling:
         )
         
         number.async_write_ha_state = MagicMock()
-        initial_value = number._value
+        initial_value = number._attr_native_value
         
         # Charge data without limit
         webhook_data = {"charge": {"state": "CHARGING"}}
         number._handle_webhook_data(webhook_data)
         
         # Value should not change
-        assert number._value == initial_value
+        assert number._attr_native_value == initial_value
         # State update should not be called
         number.async_write_ha_state.assert_not_called()
 
@@ -443,7 +443,7 @@ class TestNumberWebhookHandling:
         )
         
         number.async_write_ha_state = MagicMock()
-        number._value = 80
+        number._attr_native_value = 80
         
         # Update with same value
         webhook_data = {"charge": {"limit": 80}}
@@ -462,14 +462,14 @@ class TestNumberWebhookHandling:
         )
         
         number.async_write_ha_state = MagicMock()
-        initial_value = number._value
+        initial_value = number._attr_native_value
         
         # Empty webhook data
         webhook_data = {}
         number._handle_webhook_data(webhook_data)
         
         # Value should not change
-        assert number._value == initial_value
+        assert number._attr_native_value == initial_value
         number.async_write_ha_state.assert_not_called()
 
 
@@ -485,10 +485,10 @@ class TestNumberPropertiesAndAttributes:
             "test_entry",
         )
         
-        assert number.native_min_value == 0
-        assert number.native_max_value == 100
-        assert number.native_step == 1
-        assert number.native_unit_of_measurement == "%"
+        assert number._attr_native_min_value == 0
+        assert number._attr_native_max_value == 100
+        assert number._attr_native_step == 1
+        assert number._attr_native_unit_of_measurement == "%"
 
     def test_icon_attribute(self, mock_hass, mock_vehicle, mock_client):
         """Test icon attribute."""
@@ -499,7 +499,7 @@ class TestNumberPropertiesAndAttributes:
             "test_entry",
         )
         
-        assert number.icon == "mdi:battery-charging-100"
+        assert number._attr_icon == "mdi:battery-charging-100"
 
     def test_unique_id_format(self, mock_hass, mock_vehicle, mock_client):
         """Test unique ID is correctly formatted."""
@@ -533,10 +533,10 @@ class TestNumberPropertiesAndAttributes:
             "test_entry",
         )
         
-        assert number.available is True
+        assert number._attr_available is True
         
-        number._available = False
-        assert number.available is False
+        number._attr_available = False
+        assert number._attr_available is False
 
     @pytest.mark.asyncio
     async def test_async_set_value_with_204_response(self, mock_hass, mock_vehicle, mock_client):
@@ -564,6 +564,6 @@ class TestNumberPropertiesAndAttributes:
         with patch("aiohttp.ClientSession", return_value=mock_session):
             await number.async_set_value(75.0)
         
-        assert number._value == 75
-        assert number._available is True
+        assert number._attr_native_value == 75
+        assert number._attr_available is True
         number.async_write_ha_state.assert_called()

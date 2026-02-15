@@ -2,7 +2,7 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch, call
 from homeassistant.components.sensor import SensorDeviceClass
-from custom_components.nissan_na.sensor import WebhookUrlSensor, NissanGenericSensor, async_setup_entry
+from custom_components.nissan_na.sensor import NissanGenericSensor, async_setup_entry
 from custom_components.nissan_na.const import DOMAIN
 
 
@@ -78,9 +78,8 @@ class TestAsyncSetupEntry:
         
         await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
         
-        # Should create sensors for available signals plus webhook sensor
+        # Should create sensors for available signals
         assert len(entities) > 0
-        assert any(isinstance(e, WebhookUrlSensor) for e in entities)
 
     @pytest.mark.asyncio
     async def test_setup_without_signals_skips_vehicle(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
@@ -98,8 +97,8 @@ class TestAsyncSetupEntry:
         
         await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
         
-        # Should only have webhook sensor (no vehicle sensors since signals API failed)
-        assert any(isinstance(e, WebhookUrlSensor) for e in entities)
+        # Should have no sensors when signals API fails
+        assert len(entities) == 0
 
     @pytest.mark.asyncio
     async def test_setup_with_failed_status_fetch(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
@@ -142,14 +141,11 @@ class TestAsyncSetupEntry:
         
         await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
         
-        # Count non-webhook sensors
-        sensor_entities = [e for e in entities if not isinstance(e, WebhookUrlSensor)]
-        
         # Should create sensors only for the 3 available signals
-        assert len(sensor_entities) == 3
+        assert len(entities) == 3
         
         # All created sensors should be for available signals
-        for sensor in sensor_entities:
+        for sensor in entities:
             assert sensor._signal_id in available_signals
     
     @pytest.mark.asyncio
@@ -192,8 +188,7 @@ class TestAsyncSetupEntry:
         await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
         
         # Should only add 2 NEW sensors (battery.range and charge.state), not battery.percentRemaining (already exists)
-        sensor_entities = [e for e in entities if not isinstance(e, WebhookUrlSensor)]
-        assert len(sensor_entities) == 2
+        assert len(entities) == 2
         
         # Existing unavailable sensor should still be in tracking (not removed at boot)
         assert "fuel.percentRemaining" in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
@@ -256,8 +251,7 @@ class TestAsyncSetupEntry:
             assert "battery.percentRemaining" in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
             
             # Should add the new sensor (battery.range)
-            sensor_entities = [e for e in entities if not isinstance(e, WebhookUrlSensor)]
-            assert any(s._signal_id == "battery.range" for s in sensor_entities)
+            assert any(s._signal_id == "battery.range" for s in entities)
     
     @pytest.mark.asyncio
     async def test_rebuild_mode_with_no_removals_needed(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
@@ -312,8 +306,7 @@ class TestAsyncSetupEntry:
             assert "battery.range" in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
             
             # Should add the new sensor (charge.state)
-            sensor_entities = [e for e in entities if not isinstance(e, WebhookUrlSensor)]
-            assert any(s._signal_id == "charge.state" for s in sensor_entities)
+            assert any(s._signal_id == "charge.state" for s in entities)
             
             # Verify no removals were attempted
             mock_registry.async_remove.assert_not_called()
@@ -492,8 +485,7 @@ class TestAsyncSetupEntry:
         assert "odometer.distance" in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
         
         # Should not add new entities for already existing sensors
-        sensor_entities = [e for e in entities if not isinstance(e, WebhookUrlSensor)]
-        assert len(sensor_entities) == 0
+        assert len(entities) == 0
 
 
 class TestNissanGenericSensor:
@@ -736,53 +728,6 @@ class TestNissanGenericSensor:
         assert sensor.device_class == SensorDeviceClass.BATTERY
         assert sensor.device_info is not None
         assert (DOMAIN, mock_vehicle.vin) in sensor.device_info["identifiers"]
-
-
-class TestWebhookUrlSensor:
-    """Test WebhookUrlSensor class."""
-
-    def test_webhook_sensor_initialization(self, mock_hass, mock_config_entry):
-        """Test webhook sensor initialization."""
-        sensor = WebhookUrlSensor(mock_hass, mock_config_entry)
-        
-        assert sensor._attr_name == "Webhook URL"
-        assert sensor._attr_icon == "mdi:webhook"
-        assert sensor._attr_unique_id == "test_entry_id_webhook_url"
-
-    def test_webhook_sensor_native_value(self, mock_hass, mock_config_entry):
-        """Test webhook sensor returns webhook URL."""
-        sensor = WebhookUrlSensor(mock_hass, mock_config_entry)
-        
-        assert sensor.native_value == "https://example.com/webhook"
-
-    def test_webhook_sensor_no_url_configured(self, mock_hass):
-        """Test webhook sensor when no URL is configured."""
-        entry = MagicMock()
-        entry.entry_id = "test_entry"
-        entry.data = {}
-        
-        sensor = WebhookUrlSensor(mock_hass, entry)
-        
-        assert sensor.native_value == "Not configured"
-
-    @pytest.mark.asyncio
-    async def test_webhook_sensor_async_update(self, mock_hass, mock_config_entry):
-        """Test webhook sensor async_update does nothing."""
-        sensor = WebhookUrlSensor(mock_hass, mock_config_entry)
-        
-        # Should not raise any exceptions
-        await sensor.async_update()
-
-    def test_webhook_sensor_device_info(self, mock_hass, mock_config_entry):
-        """Test webhook sensor device info."""
-        from custom_components.nissan_na.const import DOMAIN
-        
-        sensor = WebhookUrlSensor(mock_hass, mock_config_entry)
-        
-        device_info = sensor.device_info
-        assert device_info["identifiers"] == {(DOMAIN, "webhook")}
-        assert device_info["name"] == "Webhook Configuration"
-        assert device_info["manufacturer"] == "Smartcar"
 
 
 class TestFetchStatusBackgroundTask:
@@ -1150,8 +1095,8 @@ class TestSensorDefinitionBranches:
         
         await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
         
-        # Should create webhook sensor
-        assert any(isinstance(e, WebhookUrlSensor) for e in entities)
+        # Should create at least one sensor entity
+        assert len(entities) > 0
 
     @pytest.mark.asyncio
     async def test_rebuild_mode_logs_removals(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
@@ -1285,22 +1230,14 @@ class TestSensorDefinitionBranches:
         assert sensor.should_poll is False
 
     @pytest.mark.asyncio
-    async def test_initial_refresh_skips_webhook_sensor(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
-        """Test that initial refresh skips WebhookUrlSensor."""
+    async def test_initial_refresh_creates_sensors(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
+        """Test that initial setup creates sensor entities."""
         mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
         mock_client.get_vehicle_signals = AsyncMock(return_value=["battery.percentRemaining"])
         mock_client.get_vehicle_status = AsyncMock(return_value={"battery": {"percentRemaining": 0.85}})
         
         mock_hass.data = {DOMAIN: {mock_config_entry.entry_id: {"client": mock_client}}}
         mock_hass.async_create_task = MagicMock()
-        
-        refresh_call_count = 0
-        
-        async def track_updates(entity):
-            """Track which entities get async_update called."""
-            nonlocal refresh_call_count
-            refresh_call_count += 1
-            await entity._original_async_update()
         
         entities = []
         def async_add_entities(new_entities):
@@ -1309,11 +1246,8 @@ class TestSensorDefinitionBranches:
         
         await async_setup_entry(mock_hass, mock_config_entry, async_add_entities)
         
-        # Count non-webhook entities
-        non_webhook_entities = [e for e in entities if not isinstance(e, WebhookUrlSensor)]
-        
         # Should have created at least one sensor entity
-        assert len(non_webhook_entities) > 0
+        assert len(entities) > 0
 
 
 

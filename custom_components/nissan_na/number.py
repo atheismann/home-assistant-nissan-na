@@ -104,8 +104,8 @@ class NissanChargeLimitNumber(NumberEntity):
         self._vehicle = vehicle
         self._client = client
         self._entry_id = entry_id
-        self._value = 80  # Default charge limit
-        self._available = True
+        self._attr_native_value = 80  # Default charge limit
+        self._attr_available = True
         self._unsub_dispatcher = None
         
         # Build device name
@@ -162,12 +162,12 @@ class NissanChargeLimitNumber(NumberEntity):
                 charge_data = data["charge"]
                 if "limit" in charge_data:
                     limit = charge_data["limit"]
-                    old_value = self._value
-                    self._value = float(limit)
-                    if old_value != self._value:
+                    old_value = self._attr_native_value
+                    self._attr_native_value = float(limit)
+                    if old_value != self._attr_native_value:
                         _LOGGER.info(
                             "Charge limit updated via webhook: %s%%",
-                            self._value,
+                            self._attr_native_value,
                         )
                         self.async_write_ha_state()
         except (KeyError, TypeError, ValueError):
@@ -189,7 +189,7 @@ class NissanChargeLimitNumber(NumberEntity):
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, headers=headers, json=data) as response:
                     if response.status in (200, 204):
-                        self._value = limit
+                        self._attr_native_value = limit
                         self.async_write_ha_state()
                         _LOGGER.info(
                             "Set charge limit to %s%% for vehicle %s",
@@ -201,19 +201,9 @@ class NissanChargeLimitNumber(NumberEntity):
                             "Failed to set charge limit: %s",
                             response.status,
                         )
-                        self._available = False
+                        self._attr_available = False
                         self.async_write_ha_state()
         except Exception as err:
             _LOGGER.error("Failed to set charge limit: %s", err)
-            self._available = False
+            self._attr_available = False
             self.async_write_ha_state()
-
-    @property
-    def available(self):
-        """Return True if entity is available."""
-        return self._available
-
-    @property
-    def native_value(self):
-        """Return the current charge limit."""
-        return self._value

@@ -261,18 +261,11 @@ async def async_setup_entry(hass, config_entry, async_add_entities, rebuild_mode
                 skipped_count,
             )
 
-    # Add webhook URL sensor for configuration reference
-    webhook_sensor = WebhookUrlSensor(hass, config_entry)
-    entities.append(webhook_sensor)
-
     async_add_entities(entities)
     
     # Fetch fresh initial state for all sensors after adding them
-    # Skip WebhookUrlSensor as it doesn't need API refresh
-    _LOGGER.info("Refreshing initial state for %d sensors", len(entities) - 1)
+    _LOGGER.info("Refreshing initial state for %d sensors", len(entities))
     for entity in entities:
-        if isinstance(entity, WebhookUrlSensor):
-            continue
         try:
             await entity.async_update()
         except Exception as err:
@@ -536,38 +529,4 @@ class NissanGenericSensor(SensorEntity):
         """Return device information to link this entity to a device."""
         return {
             "identifiers": {(DOMAIN, self._vehicle.vin)},
-        }
-
-class WebhookUrlSensor(SensorEntity):
-    """Sensor for displaying the webhook URL for configuration."""
-
-    def __init__(self, hass, config_entry):
-        """Initialize webhook URL sensor."""
-        self.hass = hass
-        self._config_entry = config_entry
-        self._attr_unique_id = f"{config_entry.entry_id}_webhook_url"
-        self._attr_name = "Webhook URL"
-        self._attr_icon = "mdi:webhook"
-        
-    async def async_added_to_hass(self) -> None:
-        """Subscribe to config entry updates."""
-        await super().async_added_to_hass()
-    
-    async def async_update(self) -> None:
-        """Update the webhook URL from config entry."""
-        # URL is retrieved from config entry data, no API call needed
-        pass
-    
-    @property
-    def native_value(self):
-        """Return the webhook URL."""
-        return self._config_entry.data.get("webhook_url", "Not configured")
-    
-    @property
-    def device_info(self):
-        """Return device information."""
-        return {
-            "identifiers": {(DOMAIN, "webhook")},
-            "name": "Webhook Configuration",
-            "manufacturer": "Smartcar",
         }
