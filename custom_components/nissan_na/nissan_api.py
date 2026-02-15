@@ -183,6 +183,8 @@ class SmartcarApiClient:
         self.access_token = response.access_token
         self.refresh_token = response.refresh_token
         _LOGGER.debug("Successfully authenticated with Smartcar API")
+        _LOGGER.debug("Access token: %s", self.access_token)
+        _LOGGER.debug("Refresh token: %s", self.refresh_token)
 
         # Clear vehicle cache to ensure fresh tokens are used
         self._vehicles_cache.clear()
@@ -221,6 +223,8 @@ class SmartcarApiClient:
         self.access_token = response.access_token
         self.refresh_token = response.refresh_token
         _LOGGER.debug("Successfully refreshed access token")
+        _LOGGER.debug("New access token: %s", self.access_token)
+        _LOGGER.debug("New refresh token: %s", self.refresh_token)
 
         # Clear vehicle cache since tokens have changed
         # Cached vehicles will use the old token otherwise
