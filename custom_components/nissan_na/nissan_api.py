@@ -791,11 +791,11 @@ class SmartcarApiClient:
                         data = await response.json()
                         if "data" in data and isinstance(data["data"], list):
                             signals = [
-                                sig["attributes"]["capability"]
+                                sig["attributes"]["code"]
                                 for sig in data["data"]
                                 if isinstance(sig, dict)
                                 and "attributes" in sig
-                                and "capability" in sig["attributes"]
+                                and "code" in sig["attributes"]
                             ]
                             if signals:
                                 _LOGGER.info(
@@ -857,20 +857,28 @@ class SmartcarApiClient:
         _LOGGER.debug("Applying signal %s body: %s", code, body)
 
         if code == "odometer-traveleddistance":
+            # Body: {"value": 12845.78, "unit": "km"}
             status.setdefault("odometer", {})["distance"] = (
-                body.get("traveledDistance") or body.get("distance")
+                body.get("traveledDistance") or body.get("distance") or body.get("value")
             )
 
         elif code == "internalcombustionengine-fuellevel":
+            # Body: {"value": 66.74, "unit": "percent"}
             status.setdefault("fuel", {})["percentRemaining"] = (
-                body.get("fuelLevel") or body.get("percentRemaining")
+                body.get("fuelLevel") or body.get("percentRemaining") or body.get("value")
             )
 
         elif code == "internalcombustionengine-amountremaining":
-            status.setdefault("fuel", {})["amountRemaining"] = body.get("amountRemaining")
+            # Body: {"value": 46.74, "unit": "liters"}
+            status.setdefault("fuel", {})["amountRemaining"] = (
+                body.get("amountRemaining") or body.get("value")
+            )
 
         elif code == "internalcombustionengine-range":
-            status.setdefault("fuel", {})["range"] = body.get("range")
+            # Body: {"value": 439.35, "unit": "km"}
+            status.setdefault("fuel", {})["range"] = (
+                body.get("range") or body.get("value")
+            )
 
         elif code == "location-preciselocation":
             status["location"] = {
@@ -879,44 +887,31 @@ class SmartcarApiClient:
             }
 
         elif code == "wheel-tires":
-            # v3 body expected: {"tires": [{"type": "frontLeft", "pressure": 32.0}, ...]}
-            # or {"frontLeft": {"pressure": 32.0}, ...}
-            tires_raw = body.get("tires", body)
+            # Body: {"values": [{"row": 0, "column": 0, "tirePressure": 255.1}, ...], "unit": "kPa"}
+            # row=0 → front, row=1 → back; column=0 → left, column=1 → right
+            _ROW_COL_TO_POS = {
+                (0, 0): "frontLeft",
+                (0, 1): "frontRight",
+                (1, 0): "backLeft",
+                (1, 1): "backRight",
+            }
             tires: dict = {}
-            if isinstance(tires_raw, list):
-                for t in tires_raw:
-                    if isinstance(t, dict):
-                        key = t.get("type") or t.get("position")
-                        if key:
-                            tires[key] = {"pressure": t.get("pressure") or t.get("tirePressure")}
-            elif isinstance(tires_raw, dict):
-                for k, v in tires_raw.items():
-                    if isinstance(v, dict):
-                        tires[k] = {"pressure": v.get("pressure") or v.get("tirePressure")}
-                    else:
-                        tires[k] = {"pressure": v}
+            for entry in body.get("values", []):
+                if not isinstance(entry, dict):
+                    continue
+                row = entry.get("row")
+                col = entry.get("column")
+                pressure = entry.get("tirePressure") or entry.get("pressure")
+                pos = _ROW_COL_TO_POS.get((row, col)) if row is not None and col is not None else None
+                if pos and pressure is not None:
+                    tires[pos] = {"pressure": pressure}
             if tires:
                 status["tires"] = tires
 
         elif code == "diagnostics-tirepressure":
-            # Alternative tire pressure signal — same mapping target
-            if "tires" not in status:
-                tires_raw = body.get("tires", body)
-                tires: dict = {}
-                if isinstance(tires_raw, list):
-                    for t in tires_raw:
-                        if isinstance(t, dict):
-                            key = t.get("type") or t.get("position")
-                            if key:
-                                tires[key] = {"pressure": t.get("pressure") or t.get("tirePressure")}
-                elif isinstance(tires_raw, dict):
-                    for k, v in tires_raw.items():
-                        if isinstance(v, dict):
-                            tires[k] = {"pressure": v.get("pressure") or v.get("tirePressure")}
-                        else:
-                            tires[k] = {"pressure": v}
-                if tires:
-                    status["tires"] = tires
+            # This signal is a warning indicator ("OK" / "LOW"), not per-tire pressure values.
+            # Store it as a diagnostic flag; the wheel-tires signal has the actual pressure.
+            status.setdefault("diagnostics", {})["tirePressureWarning"] = body.get("status")
 
         elif code == "closure-islocked":
             status.setdefault("security", {})["isLocked"] = body.get("isLocked")
@@ -1020,11 +1015,12 @@ class SmartcarApiClient:
 
     async def get_vehicle_status(self, vehicle_id: str) -> Dict[str, Any]:
         """
-        Get comprehensive vehicle status by fetching each compatible signal via the
-        Smartcar v3 SDK (non-legacy).
+        Get comprehensive vehicle status in a single bulk call to the v3 signals endpoint.
 
-        Uses the cached signal list from get_vehicle_signals() / get_compatibility_signals().
-        Falls back to get_vehicle_signals() if the cache is empty.
+        Fetches all signals at once, filters to SUCCESS-only, and extracts the body
+        directly from the response — no per-signal SDK calls needed.
+
+        Also refreshes the signals cache as a side effect.
 
         Args:
             vehicle_id: Smartcar vehicle ID.
@@ -1032,24 +1028,48 @@ class SmartcarApiClient:
         Returns:
             dict: Structured vehicle status keyed by domain (odometer, fuel, tires, …).
         """
-        signals = self._vehicle_signals_cache.get(vehicle_id)
-        if signals is None:
-            signals = await self.get_vehicle_signals(vehicle_id)
+        url = f"https://vehicle.api.smartcar.com/v3/vehicles/{vehicle_id}/signals"
+        headers = {"Authorization": f"Bearer {self.access_token}"}
 
-        if not signals:
-            _LOGGER.debug("No signals available for vehicle %s — status will be empty", vehicle_id)
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(url, headers=headers) as response:
+                    if response.status != 200:
+                        _LOGGER.warning(
+                            "Signals endpoint returned %d for vehicle %s — status will be empty",
+                            response.status,
+                            vehicle_id,
+                        )
+                        return {}
+                    data = await response.json()
+        except Exception as err:
+            _LOGGER.error("Failed to fetch vehicle status for %s: %s", vehicle_id, err)
             return {}
 
-        vehicle_obj = self._get_vehicle(vehicle_id)
-        status: Dict[str, Any] = {}
+        signal_list = data.get("data", [])
 
-        for signal_code in signals:
-            try:
-                result = await asyncio.to_thread(vehicle_obj.get_signal, signal_code)
-                body = self._extract_signal_body(result)
-                self._apply_signal_to_status(status, signal_code, body)
-            except Exception as err:
-                _LOGGER.debug("Failed to fetch signal %s: %s", signal_code, err)
+        # Refresh the signals cache from this response (codes regardless of status)
+        all_codes = [
+            sig["attributes"]["code"]
+            for sig in signal_list
+            if isinstance(sig, dict)
+            and "attributes" in sig
+            and "code" in sig.get("attributes", {})
+        ]
+        if all_codes:
+            self._vehicle_signals_cache[vehicle_id] = all_codes
+
+        status: Dict[str, Any] = {}
+        for signal in signal_list:
+            attrs = signal.get("attributes", {})
+            code = attrs.get("code", "")
+            if not code:
+                continue
+            if attrs.get("status", {}).get("value") != "SUCCESS":
+                continue
+            body = attrs.get("body")
+            if body:
+                self._apply_signal_to_status(status, code, body)
 
         _LOGGER.debug("Vehicle status for %s: %s", vehicle_id, status)
         return status

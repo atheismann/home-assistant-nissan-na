@@ -999,12 +999,12 @@ class TestGetVehicleSignals:
             access_token="test_token"
         )
         
-        # Mock the response data (v3 API format — field is 'capability', not 'code')
+        # Mock the response data (v3 API format — field is 'code')
         response_data = {
             "data": [
-                {"attributes": {"capability": "tractionbattery-stateofcharge"}},
-                {"attributes": {"capability": "location-preciselocation"}},
-                {"attributes": {"capability": "odometer-traveleddistance"}},
+                {"attributes": {"code": "tractionbattery-stateofcharge"}},
+                {"attributes": {"code": "location-preciselocation"}},
+                {"attributes": {"code": "odometer-traveleddistance"}},
             ]
         }
         
@@ -1083,9 +1083,7 @@ class TestGetVehicleStatus:
     
     @pytest.mark.asyncio
     async def test_get_vehicle_status_success(self):
-        """Test successful vehicle status retrieval using v3 signals."""
-        import asyncio
-
+        """Test successful vehicle status retrieval from bulk signals endpoint."""
         client = SmartcarApiClient(
             client_id="test_client_id",
             client_secret="test_secret",
@@ -1093,75 +1091,110 @@ class TestGetVehicleStatus:
             access_token="test_token",
         )
 
-        # Pre-populate signal cache so no API call is made
-        client._vehicle_signals_cache["vehicle_1"] = [
-            "odometer-traveleddistance",
-            "tractionbattery-stateofcharge",
-            "internalcombustionengine-fuellevel",
-        ]
+        bulk_response = {
+            "data": [
+                {
+                    "attributes": {
+                        "code": "odometer-traveleddistance",
+                        "status": {"value": "SUCCESS"},
+                        "body": {"value": 15000.0, "unit": "km"},
+                    }
+                },
+                {
+                    "attributes": {
+                        "code": "internalcombustionengine-fuellevel",
+                        "status": {"value": "SUCCESS"},
+                        "body": {"value": 0.75, "unit": "percent"},
+                    }
+                },
+                {
+                    "attributes": {
+                        "code": "location-preciselocation",
+                        "status": {"value": "SUCCESS"},
+                        "body": {"latitude": 37.77, "longitude": -122.42},
+                    }
+                },
+            ]
+        }
 
-        # Each get_signal() call returns a SDK-format dict
-        def fake_get_signal(code):
-            responses = {
-                "odometer-traveleddistance": {"body": {"traveledDistance": 15000.0}},
-                "tractionbattery-stateofcharge": {"body": {"stateOfCharge": 0.85}},
-                "internalcombustionengine-fuellevel": {"body": {"percentRemaining": 1.0}},
-            }
-            return responses.get(code, {})
+        with patch("custom_components.nissan_na.nissan_api.aiohttp.ClientSession") as mock_session_class:
+            mock_response = AsyncMock()
+            mock_response.status = 200
+            mock_response.json = AsyncMock(return_value=bulk_response)
 
-        with patch("asyncio.to_thread", side_effect=lambda fn, *a, **kw: asyncio.coroutine(lambda: fn(*a, **kw))()):
-            # Simpler: patch to_thread so it calls the function synchronously
-            async def fake_to_thread(fn, *args, **kwargs):
-                return fn(*args, **kwargs)
+            mock_ctx = AsyncMock()
+            mock_ctx.__aenter__ = AsyncMock(return_value=mock_response)
+            mock_ctx.__aexit__ = AsyncMock(return_value=None)
 
-            with patch("custom_components.nissan_na.nissan_api.asyncio.to_thread", side_effect=fake_to_thread):
-                mock_vehicle = MagicMock()
-                mock_vehicle.get_signal = fake_get_signal
-                client._vehicles_cache["vehicle_1"] = mock_vehicle
+            mock_session = AsyncMock()
+            mock_session.get = Mock(return_value=mock_ctx)
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.__aexit__ = AsyncMock(return_value=None)
 
-                result = await client.get_vehicle_status("vehicle_1")
-
-        assert "odometer" in result
-        assert result["odometer"]["distance"] == 15000.0
-        assert "battery" in result
-        assert result["battery"]["percentRemaining"] == 0.85
-        assert "fuel" in result
-        assert result["fuel"]["percentRemaining"] == 1.0
-
-    @pytest.mark.asyncio
-    async def test_get_vehicle_status_partial_failure(self):
-        """Test vehicle status retrieval continues when individual signals fail."""
-        client = SmartcarApiClient(
-            client_id="test_client_id",
-            client_secret="test_secret",
-            redirect_uri="https://example.com/callback",
-            access_token="test_token",
-        )
-
-        client._vehicle_signals_cache["vehicle_1"] = [
-            "odometer-traveleddistance",
-            "tractionbattery-stateofcharge",  # will raise
-        ]
-
-        def fake_get_signal(code):
-            if code == "tractionbattery-stateofcharge":
-                raise Exception("API error")
-            return {"body": {"traveledDistance": 15000.0}}
-
-        async def fake_to_thread(fn, *args, **kwargs):
-            return fn(*args, **kwargs)
-
-        with patch("custom_components.nissan_na.nissan_api.asyncio.to_thread", side_effect=fake_to_thread):
-            mock_vehicle = MagicMock()
-            mock_vehicle.get_signal = fake_get_signal
-            client._vehicles_cache["vehicle_1"] = mock_vehicle
+            mock_session_class.return_value = mock_session
 
             result = await client.get_vehicle_status("vehicle_1")
 
-        # Successful signal should populate status
         assert "odometer" in result
         assert result["odometer"]["distance"] == 15000.0
-        # Failed signal should be silently skipped
+        assert "fuel" in result
+        assert result["fuel"]["percentRemaining"] == 0.75
+        assert "location" in result
+        assert result["location"]["latitude"] == 37.77
+
+    @pytest.mark.asyncio
+    async def test_get_vehicle_status_partial_failure(self):
+        """Test that ERROR signals are skipped and SUCCESS signals populate status."""
+        client = SmartcarApiClient(
+            client_id="test_client_id",
+            client_secret="test_secret",
+            redirect_uri="https://example.com/callback",
+            access_token="test_token",
+        )
+
+        bulk_response = {
+            "data": [
+                {
+                    "attributes": {
+                        "code": "odometer-traveleddistance",
+                        "status": {"value": "SUCCESS"},
+                        "body": {"value": 15000.0, "unit": "km"},
+                    }
+                },
+                {
+                    "attributes": {
+                        "code": "tractionbattery-stateofcharge",
+                        "status": {
+                            "value": "ERROR",
+                            "error": {"type": "COMPATIBILITY", "code": "VEHICLE_NOT_CAPABLE"},
+                        },
+                    }
+                },
+            ]
+        }
+
+        with patch("custom_components.nissan_na.nissan_api.aiohttp.ClientSession") as mock_session_class:
+            mock_response = AsyncMock()
+            mock_response.status = 200
+            mock_response.json = AsyncMock(return_value=bulk_response)
+
+            mock_ctx = AsyncMock()
+            mock_ctx.__aenter__ = AsyncMock(return_value=mock_response)
+            mock_ctx.__aexit__ = AsyncMock(return_value=None)
+
+            mock_session = AsyncMock()
+            mock_session.get = Mock(return_value=mock_ctx)
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.__aexit__ = AsyncMock(return_value=None)
+
+            mock_session_class.return_value = mock_session
+
+            result = await client.get_vehicle_status("vehicle_1")
+
+        # SUCCESS signal should populate status
+        assert "odometer" in result
+        assert result["odometer"]["distance"] == 15000.0
+        # ERROR signal should be silently skipped
         assert "battery" not in result
 
 

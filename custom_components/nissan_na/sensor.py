@@ -26,9 +26,9 @@ API_SIGNAL_TO_DEFINITION_MAP = {
     # Odometer signals
     "odometer-traveleddistance": "odometer.distance",
 
-    # Tire signals — wheel-tires gives per-tire data; diagnostics-tirepressure is a warning signal
-    "wheel-tires": "tires.frontLeft",        # enables all four tire sensors
-    "diagnostics-tirepressure": "tires.frontLeft",  # also enables tire sensors (same target)
+    # Tire signals — wheel-tires gives per-tire pressure; diagnostics-tirepressure is a warning flag only
+    "wheel-tires": "tires.frontLeft",        # enables all four tire pressure sensors
+    "diagnostics-tirepressure": None,        # {"status": "OK"} — not per-tire pressure data
 
     # Location signals
     "location-preciselocation": "location.latitude",  # enables both lat and lon sensors
@@ -155,10 +155,10 @@ SENSOR_DEFINITIONS = [
     ("fuel.range", "range", "Fuel Range", "km", "read_fuel", "mdi:gas-cylinder", None),
     
     # Tire pressure sensors
-    ("tires.frontLeft.pressure", "pressure", "Tire Pressure Front Left", "psi", "read_tires", "mdi:tire", SensorDeviceClass.PRESSURE),
-    ("tires.frontRight.pressure", "pressure", "Tire Pressure Front Right", "psi", "read_tires", "mdi:tire", SensorDeviceClass.PRESSURE),
-    ("tires.backLeft.pressure", "pressure", "Tire Pressure Back Left", "psi", "read_tires", "mdi:tire", SensorDeviceClass.PRESSURE),
-    ("tires.backRight.pressure", "pressure", "Tire Pressure Back Right", "psi", "read_tires", "mdi:tire", SensorDeviceClass.PRESSURE),
+    ("tires.frontLeft.pressure", "pressure", "Tire Pressure Front Left", "kPa", "read_tires", "mdi:tire", SensorDeviceClass.PRESSURE),
+    ("tires.frontRight.pressure", "pressure", "Tire Pressure Front Right", "kPa", "read_tires", "mdi:tire", SensorDeviceClass.PRESSURE),
+    ("tires.backLeft.pressure", "pressure", "Tire Pressure Back Left", "kPa", "read_tires", "mdi:tire", SensorDeviceClass.PRESSURE),
+    ("tires.backRight.pressure", "pressure", "Tire Pressure Back Right", "kPa", "read_tires", "mdi:tire", SensorDeviceClass.PRESSURE),
     
     # Vehicle status sensors
     ("transmission.gear", "gear", "Gear State", None, "read_drivetrain", "mdi:car-shift-pattern", None),
