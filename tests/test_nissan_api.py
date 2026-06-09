@@ -999,12 +999,13 @@ class TestGetVehicleSignals:
             access_token="test_token"
         )
         
-        # Mock the response data (v3 API format — field is 'code')
+        # Mock the response data (v3 API format — only SUCCESS signals are returned)
         response_data = {
             "data": [
-                {"attributes": {"code": "tractionbattery-stateofcharge"}},
-                {"attributes": {"code": "location-preciselocation"}},
-                {"attributes": {"code": "odometer-traveleddistance"}},
+                {"attributes": {"code": "tractionbattery-stateofcharge", "status": {"value": "SUCCESS"}}},
+                {"attributes": {"code": "location-preciselocation", "status": {"value": "SUCCESS"}}},
+                {"attributes": {"code": "odometer-traveleddistance", "status": {"value": "SUCCESS"}}},
+                {"attributes": {"code": "internalcombustionengine-fuellevel", "status": {"value": "ERROR"}}},
             ]
         }
         

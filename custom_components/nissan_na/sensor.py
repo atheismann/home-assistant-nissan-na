@@ -1,5 +1,9 @@
 import logging
 
+from homeassistant.components.persistent_notification import (
+    async_create as async_create_notification,
+    async_dismiss as async_dismiss_notification,
+)
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
@@ -27,11 +31,11 @@ API_SIGNAL_TO_DEFINITION_MAP = {
     "odometer-traveleddistance": "odometer.distance",
 
     # Tire signals — wheel-tires gives per-tire pressure; diagnostics-tirepressure is a warning flag only
-    "wheel-tires": "tires.frontLeft",        # enables all four tire pressure sensors
+    "wheel-tires": "tires",                  # prefix → enables all four tires.*.pressure sensors
     "diagnostics-tirepressure": None,        # {"status": "OK"} — not per-tire pressure data
 
     # Location signals
-    "location-preciselocation": "location.latitude",  # enables both lat and lon sensors
+    "location-preciselocation": "location",  # prefix → enables both location.latitude and location.longitude
 
     # Charge / EV signals
     "charge-timetocomplete": "charge.timeToComplete",
@@ -252,7 +256,33 @@ async def async_setup_entry(hass, config_entry, async_add_entities, rebuild_mode
                 vehicle.id,
                 err,
             )
-        
+
+        # Notify the user about signals that need re-authorization.
+        # get_vehicle_status() and get_vehicle_signals() both populate the cache.
+        permission_denied = client.get_permission_denied_signals(vehicle.id)
+        notif_id = f"nissan_na_permission_{vehicle.id}"
+        if permission_denied:
+            signals_str = "\n".join(f"- `{s}`" for s in permission_denied)
+            async_create_notification(
+                hass,
+                (
+                    f"**{len(permission_denied)} signal(s) require re-authorization** "
+                    f"before they can be accessed:\n\n{signals_str}\n\n"
+                    "Go to **Settings → Integrations → Nissan (Smartcar) → Configure → "
+                    "Re-authorize Integration** to grant the missing permissions. "
+                    "After re-authorizing, use **Rebuild Sensors** to pick up the new sensors."
+                ),
+                title="Nissan NA — Re-authorization Required",
+                notification_id=notif_id,
+            )
+            _LOGGER.warning(
+                "Vehicle %s: %d signal(s) need re-authorization: %s",
+                vehicle.id, len(permission_denied), permission_denied,
+            )
+        else:
+            # Clear any stale notification from a previous run (e.g. after successful reauth).
+            async_dismiss_notification(hass, notif_id)
+
         # Initialize tracking dict for this vehicle
         if vehicle.id not in data["sensors"]:
             data["sensors"][vehicle.id] = {}

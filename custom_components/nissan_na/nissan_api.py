@@ -121,6 +121,7 @@ class SmartcarApiClient:
         self._vehicles_cache: Dict[str, smartcar.Vehicle] = {}
         self._vehicle_model_cache: Dict[str, Any] = {}  # vehicle_id -> Vehicle model
         self._vehicle_signals_cache: Dict[str, List[str]] = {}  # vehicle_id -> capability codes
+        self._permission_denied_signals: Dict[str, List[str]] = {}  # vehicle_id -> PERMISSION-error codes
         self._api_base_url = "https://api.smartcar.com/v2.0"
 
     def get_auth_url(self, state: Optional[str] = None) -> str:
@@ -227,6 +228,7 @@ class SmartcarApiClient:
         # Clear vehicle caches since tokens have changed
         self._vehicles_cache.clear()
         self._vehicle_signals_cache.clear()
+        self._permission_denied_signals.clear()
 
         # Return as dict for compatibility
         return {
@@ -790,12 +792,37 @@ class SmartcarApiClient:
                     if response.status == 200:
                         data = await response.json()
                         if "data" in data and isinstance(data["data"], list):
+                            all_sigs = data["data"]
+
+                            # Detect PERMISSION errors — vehicle supports these but OAuth token
+                            # lacks the required scope.  Reauth will fix them.
+                            permission_codes = [
+                                sig["attributes"]["code"]
+                                for sig in all_sigs
+                                if isinstance(sig, dict)
+                                and "attributes" in sig
+                                and "code" in sig.get("attributes", {})
+                                and sig["attributes"].get("status", {}).get("error", {}).get("type") == "PERMISSION"
+                            ]
+                            if permission_codes:
+                                self._permission_denied_signals[vehicle_id] = permission_codes
+                                _LOGGER.warning(
+                                    "Vehicle %s: %d signal(s) have PERMISSION errors "
+                                    "(re-authorization required): %s",
+                                    vehicle_id, len(permission_codes), permission_codes,
+                                )
+                            else:
+                                self._permission_denied_signals.pop(vehicle_id, None)
+
+                            # Only include signals with SUCCESS status — ERROR means the vehicle
+                            # cannot provide that data (VEHICLE_NOT_CAPABLE or PERMISSION issue).
                             signals = [
                                 sig["attributes"]["code"]
-                                for sig in data["data"]
+                                for sig in all_sigs
                                 if isinstance(sig, dict)
                                 and "attributes" in sig
                                 and "code" in sig["attributes"]
+                                and sig["attributes"].get("status", {}).get("value") == "SUCCESS"
                             ]
                             if signals:
                                 _LOGGER.info(
@@ -829,6 +856,14 @@ class SmartcarApiClient:
         )
         self._vehicle_signals_cache[vehicle_id] = []
         return []
+
+    def get_permission_denied_signals(self, vehicle_id: str) -> List[str]:
+        """Return signal codes that returned PERMISSION errors for the given vehicle.
+
+        These signals are supported by the vehicle hardware but the current OAuth
+        token lacks the required scope.  Re-authorizing the integration will fix them.
+        """
+        return self._permission_denied_signals.get(vehicle_id, [])
 
     @staticmethod
     def _extract_signal_body(sdk_result: dict) -> dict:
@@ -1048,16 +1083,32 @@ class SmartcarApiClient:
 
         signal_list = data.get("data", [])
 
-        # Refresh the signals cache from this response (codes regardless of status)
-        all_codes = [
+        # Refresh the signals cache with only SUCCESS codes — keeps it consistent with
+        # what get_vehicle_signals() returns when the v3 endpoint is available.
+        success_codes = [
             sig["attributes"]["code"]
             for sig in signal_list
             if isinstance(sig, dict)
             and "attributes" in sig
             and "code" in sig.get("attributes", {})
+            and sig.get("attributes", {}).get("status", {}).get("value") == "SUCCESS"
         ]
-        if all_codes:
-            self._vehicle_signals_cache[vehicle_id] = all_codes
+        if success_codes:
+            self._vehicle_signals_cache[vehicle_id] = success_codes
+
+        # Refresh PERMISSION-denied cache so it stays current after each poll.
+        permission_codes = [
+            sig["attributes"]["code"]
+            for sig in signal_list
+            if isinstance(sig, dict)
+            and "attributes" in sig
+            and "code" in sig.get("attributes", {})
+            and sig.get("attributes", {}).get("status", {}).get("error", {}).get("type") == "PERMISSION"
+        ]
+        if permission_codes:
+            self._permission_denied_signals[vehicle_id] = permission_codes
+        else:
+            self._permission_denied_signals.pop(vehicle_id, None)
 
         status: Dict[str, Any] = {}
         for signal in signal_list:
