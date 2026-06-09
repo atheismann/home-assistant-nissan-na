@@ -171,7 +171,7 @@ SENSOR_DEFINITIONS = [
     
     # Location sensors (from location API response)
     ("location.latitude", "latitude", "Location Latitude", "°", "read_location", "mdi:map-marker", None),
-    ("location.longitude", "longitude", "longitude", "°", "read_location", "mdi:map-marker", None),
+    ("location.longitude", "longitude", "Location Longitude", "°", "read_location", "mdi:map-marker", None),
     
     # Connectivity sensors (webhook only)
     ("connectivity.isOnline", "isOnline", "Online", None, None, "mdi:wifi", None),
@@ -287,17 +287,39 @@ async def async_setup_entry(hass, config_entry, async_add_entities, rebuild_mode
         if vehicle.id not in data["sensors"]:
             data["sensors"][vehicle.id] = {}
 
-        # In rebuild mode, remove any tracked sensors that are no longer available
+        # In rebuild mode, flush signal cache so we always use fresh API data
+        if rebuild_mode:
+            data["vehicle_signals"].pop(vehicle.id, None)
+            client._vehicle_signals_cache.pop(vehicle.id, None)
+            # Re-fetch fresh signals now that cache is clear
+            try:
+                signals = await client.get_vehicle_signals(vehicle.id, vehicle=vehicle)
+                data["vehicle_signals"][vehicle.id] = signals
+                available_signals = map_available_signals(signals)
+                _LOGGER.info(
+                    "Rebuild: refreshed signals for vehicle %s — %d available",
+                    vehicle.id, len(available_signals),
+                )
+            except Exception as err:
+                _LOGGER.error("Rebuild: failed to refresh signals for %s: %s", vehicle.id, err)
+
+        # In rebuild mode, remove ALL tracked sensors from the registry so they get
+        # re-created fresh.  This clears stale disabled/unknown state and handles sensors
+        # whose entity was rejected by HA on a previous rebuild due to duplicate unique_id.
         if rebuild_mode:
             registry = er.async_get(hass)
-            to_remove = [sid for sid in list(data["sensors"][vehicle.id]) if sid not in available_signals]
-            for sid in to_remove:
-                sensor_to_remove = data["sensors"][vehicle.id][sid]
-                _LOGGER.info("Rebuild: removing sensor %s (no longer available for vehicle %s)", sid, vehicle.id)
-                entity_id = getattr(sensor_to_remove, "entity_id", None)
+            for sid, existing_sensor in list(data["sensors"][vehicle.id].items()):
+                if sid not in available_signals:
+                    _LOGGER.info("Rebuild: removing sensor %s (not in available signals)", sid)
+                else:
+                    _LOGGER.debug("Rebuild: recycling sensor %s for fresh creation", sid)
+                entity_id = getattr(existing_sensor, "entity_id", None)
                 if entity_id:
-                    registry.async_remove(entity_id)
-                del data["sensors"][vehicle.id][sid]
+                    try:
+                        registry.async_remove(entity_id)
+                    except Exception as remove_err:
+                        _LOGGER.debug("Rebuild: could not remove %s: %s", entity_id, remove_err)
+            data["sensors"][vehicle.id].clear()
 
         # Create sensors based on available signals AND permission fallback
         # In rebuild mode: strict — only signals from the signals API are created.

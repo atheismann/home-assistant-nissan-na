@@ -261,7 +261,7 @@ class TestAsyncSetupEntry:
     
     @pytest.mark.asyncio
     async def test_rebuild_mode_with_no_removals_needed(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
-        """Test rebuild mode when all existing sensors are still available."""
+        """Test rebuild mode does a clean slate — removes all tracked sensors and recreates them."""
         available_signals = [
             "battery.percentRemaining",
             "battery.range",
@@ -270,22 +270,22 @@ class TestAsyncSetupEntry:
         mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
         mock_client.get_vehicle_signals = AsyncMock(return_value=available_signals)
         mock_client.get_vehicle_status = AsyncMock(return_value={})
-        
+
         from homeassistant.helpers import entity_registry
         mock_registry = MagicMock(spec=entity_registry.EntityRegistry)
         mock_registry.async_get = MagicMock(return_value=MagicMock())
         mock_registry.async_remove = MagicMock()
-        
+
         with patch.object(entity_registry, 'async_get', return_value=mock_registry):
             # Simulate existing sensors that are all still available
             existing_sensor1 = MagicMock()
             existing_sensor1._signal_id = "battery.percentRemaining"
             existing_sensor1.entity_id = "sensor.test_battery"
-            
+
             existing_sensor2 = MagicMock()
             existing_sensor2._signal_id = "battery.range"
             existing_sensor2.entity_id = "sensor.test_range"
-            
+
             mock_hass.data = {
                 DOMAIN: {
                     mock_config_entry.entry_id: {
@@ -299,23 +299,25 @@ class TestAsyncSetupEntry:
                     }
                 }
             }
-            
+
             entities = []
             def async_add_entities(new_entities):
                 """Sync callback for adding entities."""
                 entities.extend(new_entities)
-            
+
             await async_setup_entry(mock_hass, mock_config_entry, async_add_entities, rebuild_mode=True)
-            
-            # Should not remove any sensors
-            assert "battery.percentRemaining" in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
-            assert "battery.range" in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
-            
-            # Should add the new sensor (charge.state)
-            assert any(s._signal_id == "charge.state" for s in entities)
-            
-            # Verify no removals were attempted
-            mock_registry.async_remove.assert_not_called()
+
+            # Rebuild removes ALL tracked sensors (including still-available ones) and recreates
+            # them fresh — this clears disabled/stale state and handles duplicate unique_id issues.
+            mock_registry.async_remove.assert_any_call("sensor.test_battery")
+            mock_registry.async_remove.assert_any_call("sensor.test_range")
+
+            # All 3 available signals should be freshly created
+            assert len(entities) == 3
+            signal_ids = {s._signal_id for s in entities}
+            assert "battery.percentRemaining" in signal_ids
+            assert "battery.range" in signal_ids
+            assert "charge.state" in signal_ids
     
     @pytest.mark.asyncio
     async def test_rebuild_mode_with_multiple_vehicles(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
@@ -389,16 +391,23 @@ class TestAsyncSetupEntry:
             
             await async_setup_entry(mock_hass, mock_config_entry, async_add_entities, rebuild_mode=True)
             
-            # Vehicle 1: should remove fuel, keep battery, add range
-            assert "fuel.percentRemaining" not in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
-            assert "battery.percentRemaining" in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
-            
-            # Vehicle 2: should remove range, keep battery, add charge.state
-            assert "battery.range" not in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle2.id]
-            assert "battery.percentRemaining" in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle2.id]
-            
-            # Verify correct number of removals
-            assert mock_registry.async_remove.call_count == 2
+            # Rebuild does a clean slate — all previously tracked sensors are removed
+            # from the registry (both supported and unsupported), then recreated fresh.
+            # Vehicle 1: had 2 sensors (battery + fuel) → both removed → 2 recreated (battery + range)
+            # Vehicle 2: had 2 sensors (battery + range) → both removed → 2 recreated (battery + charge.state)
+            assert mock_registry.async_remove.call_count == 4
+
+            # After rebuild, both vehicles should have fresh sensors for their available signals
+            sensors_v1 = mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
+            sensors_v2 = mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle2.id]
+
+            assert "fuel.percentRemaining" not in sensors_v1
+            assert "battery.percentRemaining" in sensors_v1
+            assert "battery.range" in sensors_v1
+
+            assert "battery.range" not in sensors_v2
+            assert "battery.percentRemaining" in sensors_v2
+            assert "charge.state" in sensors_v2
     
     @pytest.mark.asyncio
     async def test_rebuild_mode_handles_sensor_without_entity_id(self, mock_hass, mock_config_entry, mock_vehicle, mock_client):
@@ -1132,15 +1141,18 @@ class TestSensorDefinitionBranches:
             # Run in rebuild mode
             await async_setup_entry(mock_hass, mock_config_entry, async_add_entities, rebuild_mode=True)
             
-            # Both unavailable sensors should be removed
-            assert "fuel.percentRemaining" not in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
-            assert "charge.state" not in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
-            
-            # Battery should remain
-            assert "battery.percentRemaining" in mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
-            
-            # Verify removals were called
-            assert mock_registry.async_remove.call_count == 2
+            sensors = mock_hass.data[DOMAIN][mock_config_entry.entry_id]["sensors"][mock_vehicle.id]
+
+            # Clean-slate rebuild removes all 3 tracked sensors then recreates supported ones.
+            # Unavailable sensors are not recreated.
+            assert "fuel.percentRemaining" not in sensors
+            assert "charge.state" not in sensors
+
+            # battery.percentRemaining is still available — recreated fresh.
+            assert "battery.percentRemaining" in sensors
+
+            # All 3 original entities were removed from the registry (clean slate).
+            assert mock_registry.async_remove.call_count == 3
 
     @pytest.mark.asyncio
     async def test_sensor_entity_value_extraction_from_object(self, mock_hass, mock_vehicle, mock_config_entry_metric):

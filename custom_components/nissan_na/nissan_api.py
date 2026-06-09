@@ -936,7 +936,7 @@ class SmartcarApiClient:
                     continue
                 row = entry.get("row")
                 col = entry.get("column")
-                pressure = entry.get("tirePressure") or entry.get("pressure")
+                pressure = entry.get("tirePressure") if entry.get("tirePressure") is not None else entry.get("pressure")
                 pos = _ROW_COL_TO_POS.get((row, col)) if row is not None and col is not None else None
                 if pos and pressure is not None:
                     tires[pos] = {"pressure": pressure}
