@@ -1,6 +1,7 @@
 import logging
 
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import CONF_UNIT_SYSTEM, DOMAIN, UNIT_SYSTEM_METRIC
@@ -21,108 +22,101 @@ API_SIGNAL_TO_DEFINITION_MAP = {
     "internalcombustionengine-amountremaining": "fuel.amountRemaining",
     "internalcombustionengine-range": "fuel.range",
     "internalcombustionengine-oillife": "engine.oilLifeRemaining",
-    
+
     # Odometer signals
     "odometer-traveleddistance": "odometer.distance",
-    
-    # Charge signals (not yet in sensor definitions, but available from API)
-    "charge-amperage": None,
-    "charge-amperagemax": "charge.amperageMax",
-    "charge-amperagerequested": None,
-    "charge-chargelimits": None,
-    "charge-chargeportstatuscolor": None,
-    "charge-chargerate": None,
-    "charge-chargerecords": None,
-    "charge-chargetimers": None,
-    "charge-chargerphases": None,
-    "charge-chargingconnectortype": None,
-    "charge-detailedchargingstatus": None,
-    "charge-energyadded": None,
-    "charge-fastchargertype": None,
-    "charge-ischarging": None,
-    "charge-ischargingcableconnected": None,
-    "charge-ischargingcablelatched": None,
-    "charge-ischargingportflapopen": None,
-    "charge-isfastchargerpresent": None,
+
+    # Tire signals — wheel-tires gives per-tire data; diagnostics-tirepressure is a warning signal
+    "wheel-tires": "tires.frontLeft",        # enables all four tire sensors
+    "diagnostics-tirepressure": "tires.frontLeft",  # also enables tire sensors (same target)
+
+    # Location signals
+    "location-preciselocation": "location.latitude",  # enables both lat and lon sensors
+
+    # Charge / EV signals
     "charge-timetocomplete": "charge.timeToComplete",
     "charge-voltage": "charge.voltage",
     "charge-wattage": "charge.wattage",
-    
-    # Battery/EV signals (TractionBattery)
-    "tractionbattery-isheateractive": "tractionBattery.isHeaterActive",
-    
-    # Tire signals (Wheel)
-    "wheel-tires": "tires.frontLeft.pressure",  # Maps to all tire sensors
-    
-    # Location signals
-    "location-preciselocation": "location.latitude",  # Maps to both lat/lon
-    "location-isathome": None,
-    
-    # HVAC signals (not yet in sensor definitions)
-    "hvac-cabintargettemperature": None,
-    "hvac-iscabinhvacactive": None,
-    "hvac-isfrontdefrosteractive": None,
-    "hvac-isreardefrosteractive": None,
-    "hvac-issteeringheateractive": None,
-    
+    "charge-amperagemax": "charge.amperageMax",
+    "charge-ischarging": "charge.isCharging",
+    "charge-ischargingcableconnected": "charge.isPluggedIn",
+    "charge-detailedchargingstatus": "charge.state",
+    "charge-chargetimers": None,
+
+    # TractionBattery / EV signals
+    "tractionbattery-stateofcharge": "battery.percentRemaining",
+    "tractionbattery-range": "battery.range",
+    "tractionbattery-nominalcapacity": "battery.capacityKwh",
+    "tractionbattery-isheateractive": None,  # binary sensor — handled in binary_sensor.py
+
+    # HVAC signals
+    "hvac-cabintargettemperature": "hvac.targetTemperature",
+    "hvac-iscabinhvacactive": None,  # binary sensor
+
     # Connectivity/Software signals
     "connectivitysoftware-currentfirmwareversion": "connectivity.softwareVersion",
-    "connectivitystatus-isonline": "connectivity.isOnline",
-    "connectivitystatus-isasleep": "connectivity.isAsleep",
-    "connectivitystatus-isdigitalkeypaired": "connectivity.isDigitalKeyPaired",
-    
-    # Transmission signals (not yet in sensor definitions)
+    "connectivitystatus-isonline": None,   # binary sensor
+    "connectivitystatus-isasleep": None,   # binary sensor
+    "connectivitystatus-isdigitalkeypaired": None,  # binary sensor
+
+    # Transmission
     "transmission-gearstate": "transmission.gear",
-    "transmission-drivemode": None,
-    
-    # VehicleIdentification signals
-    "vehicleidentification-vin": None,  # Not mapped to sensor definition
-    "vehicleidentification-nickname": None,
-    
-    # Surveillance signals
-    "surveillance-isenabled": "surveillance.isEnabled",
-    
-    # Service signals (not yet in sensor definitions)
-    "service-isinservice": None,
-    "service-records": None,
-    
-    # Diagnostic signals (not yet mapped to definitions)
-    "diagnostics-airbag": None,
+
+    # Surveillance
+    "surveillance-isenabled": None,  # binary sensor
+
+    # Closure / security signals — handled primarily in binary_sensor.py
+    "closure-islocked": "security.isLocked",
+    "closure-doors": None,       # binary sensor
+    "closure-reartrunk": None,   # binary sensor
+    "closure-fronttrunk": None,  # binary sensor
+    "closure-enginecover": None, # binary sensor
+
+    # Diagnostics — handled primarily in binary_sensor.py
+    "diagnostics-mil": None,
+    "diagnostics-abs": None,
     "diagnostics-brakefluid": None,
+    "diagnostics-airbag": None,
     "diagnostics-oilpressure": None,
-    "diagnostics-tirepressure": None,
+
+    # VehicleIdentification (not a sensor)
+    "vehicleidentification-vin": None,
+    "vehicleidentification-nickname": None,
 }
 
 
 def map_available_signals(api_signal_codes: list) -> set:
     """
-    Map Smartcar API signal codes to sensor definition IDs.
-    
-    Handles both formats:
-    - API format: kebab-case codes like 'internalcombustionengine-fuellevel'
-    - Sensor definition format: dot notation like 'battery.percentRemaining'
-    
+    Map Smartcar capability codes (kebab-case) to sensor definition IDs (dot-notation).
+
+    A capability code can map to a prefix that matches multiple definitions — e.g.
+    'wheel-tires' → 'tires.frontLeft' enables all four tires.* sensors.
+
     Args:
-        api_signal_codes: List of signal codes from Smartcar v3 API
-    
+        api_signal_codes: Capability codes from the v3 signals or compatibility API.
+
     Returns:
-        set: Sensor definition IDs that should be created
+        set: Sensor definition signal_ids that should be created.
     """
     mapped_signals = set()
-    
+
     for code in api_signal_codes:
-        # Check if it's already in sensor definition format (dot notation)
         if "." in code:
-            # Direct match - it's already in the format we need
+            # Already in dot-notation — direct match
             mapped_signals.add(code)
-        else:
-            # Try to map from API format (kebab-case)
-            definition_id = API_SIGNAL_TO_DEFINITION_MAP.get(code.lower())
-            if definition_id:
-                mapped_signals.add(definition_id)
-            else:
-                _LOGGER.debug("No sensor definition mapping for API signal: %s", code)
-    
+            continue
+
+        definition_prefix = API_SIGNAL_TO_DEFINITION_MAP.get(code.lower())
+        if not definition_prefix:
+            _LOGGER.debug("No sensor definition mapping for signal: %s", code)
+            continue
+
+        # Add every sensor definition whose signal_id equals or starts with this prefix
+        for defn in SENSOR_DEFINITIONS:
+            sid = defn[0]
+            if sid == definition_prefix or sid.startswith(definition_prefix + "."):
+                mapped_signals.add(sid)
+
     return mapped_signals
 
 
@@ -205,97 +199,83 @@ async def async_setup_entry(hass, config_entry, async_add_entities, rebuild_mode
     vehicles = await client.get_vehicle_list()
     entities = []
     
-    # Track created sensors per vehicle: {vehicle_id: {signal_id: sensor}}
+    # Initialize caches
     if "sensors" not in data:
         data["sensors"] = {}
+    if "vehicle_signals" not in data:
+        data["vehicle_signals"] = {}
 
     for vehicle in vehicles:
         _LOGGER.info("Setting up sensors for vehicle %s", vehicle.id)
         
-        # Get available signals from Smartcar API (mandatory validation)
-        available_signals = set()
-        try:
-            signals = await client.get_vehicle_signals(vehicle.id)
-            # Map API signal codes to sensor definition IDs
-            available_signals = map_available_signals(signals)
-            _LOGGER.info(
-                "Vehicle %s has %d available signals (mapped from %d API codes)",
-                vehicle.id,
-                len(available_signals),
-                len(signals),
-            )
-            _LOGGER.debug(
-                "Available signals for %s: %s",
-                vehicle.id,
-                sorted(available_signals),
-            )
-        except Exception as err:
-            _LOGGER.error(
-                "Failed to get vehicle signals for %s, skipping sensor setup: %s",
-                vehicle.id,
-                err,
-            )
-            # Skip this vehicle if we can't get signals
-            continue
-        
-        # Fetch initial state from API on boot (non-blocking, continues after timeout)
-        # Use empty status initially, will be populated via webhook
-        status = {}
-        async def fetch_status():
-            """Fetch vehicle status in background."""
+        # Get available signals from Smartcar API (cached)
+        if vehicle.id not in data["vehicle_signals"]:
             try:
-                fetched_status = await client.get_vehicle_status(vehicle.id)
-                _LOGGER.debug("Initial state for vehicle %s: %s", vehicle.id, fetched_status)
-                # Update status in data for future reference
-                if vehicle.id in data["sensors"]:
-                    for sensor in data["sensors"][vehicle.id].values():
-                        sensor._status = fetched_status
+                signals = await client.get_vehicle_signals(vehicle.id, vehicle=vehicle)
+                data["vehicle_signals"][vehicle.id] = signals
+                _LOGGER.debug("Fetched signals for vehicle %s: %d codes", vehicle.id, len(signals))
             except Exception as err:
-                _LOGGER.debug(
-                    "Failed to fetch initial state for vehicle %s (will use webhook): %s",
+                _LOGGER.error(
+                    "Failed to get vehicle signals for %s, skipping sensor setup: %s",
                     vehicle.id,
                     err,
                 )
+                # Skip this vehicle if we can't get signals
+                continue
+        else:
+            signals = data["vehicle_signals"][vehicle.id]
+            _LOGGER.debug("Using cached signals for vehicle %s: %d codes", vehicle.id, len(signals))
         
-        # Schedule status fetch as background task (don't wait for it)
-        hass.async_create_task(fetch_status())
+        # Map API signal codes to sensor definition IDs
+        available_signals = map_available_signals(signals)
+        _LOGGER.info(
+            "Vehicle %s has %d available signals (mapped from %d API codes)",
+            vehicle.id,
+            len(available_signals),
+            len(signals),
+        )
+        _LOGGER.debug(
+            "Available signals for %s: %s",
+            vehicle.id,
+            sorted(available_signals),
+        )
+        
+        # Fetch initial state from API on boot (blocking to ensure we have data for permission-based sensors)
+        # Use empty status initially if fetch fails
+        status = {}
+        try:
+            status = await client.get_vehicle_status(vehicle.id)
+            _LOGGER.debug("Initial state for vehicle %s: %s", vehicle.id, status)
+        except Exception as err:
+            _LOGGER.debug(
+                "Failed to fetch initial state for vehicle %s (will use webhook): %s",
+                vehicle.id,
+                err,
+            )
         
         # Initialize tracking dict for this vehicle
         if vehicle.id not in data["sensors"]:
             data["sensors"][vehicle.id] = {}
-        
-        # In rebuild mode, remove sensors that are no longer available
-        if rebuild_mode:
-            from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
-            entity_registry = async_get_entity_registry(hass)
-            
-            # Remove tracked sensors that are no longer available
-            removed_count = 0
-            for signal_id in list(data["sensors"][vehicle.id].keys()):
-                if signal_id not in available_signals:
-                    # Remove from tracking
-                    sensor = data["sensors"][vehicle.id].pop(signal_id)
-                    # Remove from entity registry if sensor has entity_id
-                    if hasattr(sensor, 'entity_id') and sensor.entity_id:
-                        entity_registry.async_remove(sensor.entity_id)
-                        removed_count += 1
-                        _LOGGER.info(
-                            "Removed unavailable sensor %s for vehicle %s",
-                            signal_id,
-                            vehicle.id,
-                        )
-            
-            if removed_count > 0:
-                _LOGGER.info(
-                    "Vehicle %s: removed %d unsupported sensors in rebuild",
-                    vehicle.id,
-                    removed_count,
-                )
 
-        # Create sensors based on available signals
+        # In rebuild mode, remove any tracked sensors that are no longer available
+        if rebuild_mode:
+            registry = er.async_get(hass)
+            to_remove = [sid for sid in list(data["sensors"][vehicle.id]) if sid not in available_signals]
+            for sid in to_remove:
+                sensor_to_remove = data["sensors"][vehicle.id][sid]
+                _LOGGER.info("Rebuild: removing sensor %s (no longer available for vehicle %s)", sid, vehicle.id)
+                entity_id = getattr(sensor_to_remove, "entity_id", None)
+                if entity_id:
+                    registry.async_remove(entity_id)
+                del data["sensors"][vehicle.id][sid]
+
+        # Create sensors based on available signals AND permission fallback
+        # In rebuild mode: strict — only signals from the signals API are created.
+        # In normal mode: also allow permission-based fallback for sensors with required permissions.
         created_sensors = set()
         skipped_count = 0
         added_count = 0
+
         for definition in SENSOR_DEFINITIONS:
             signal_id = definition[0]
             field_name = definition[1]
@@ -304,19 +284,33 @@ async def async_setup_entry(hass, config_entry, async_add_entities, rebuild_mode
             required_permission = definition[4]
             icon = definition[5]
             device_class = definition[6]
-            
+
             # Avoid duplicate sensors
             sensor_unique_id = f"{signal_id}_{field_name}"
             if sensor_unique_id in created_sensors:
                 continue
             created_sensors.add(sensor_unique_id)
-            
-            # Only create sensors for signals that are actually available
-            if signal_id not in available_signals:
+
+            # Determine how this sensor should be created
+            is_in_signals_api = signal_id in available_signals
+            has_permission_fallback = required_permission is not None
+
+            # Decide whether to create this sensor
+            should_create = False
+            creation_method = None
+
+            if is_in_signals_api:
+                should_create = True
+                creation_method = "signals API"
+            elif has_permission_fallback and not rebuild_mode:
+                # Permission fallback only in normal (non-rebuild) mode
+                should_create = True
+                creation_method = "permission fallback"
+            else:
                 _LOGGER.debug(
-                    "Signal %s not available for vehicle %s, skipping sensor creation",
+                    "Signal %s: not available via signals API%s, skipping",
                     signal_id,
-                    vehicle.id,
+                    " (rebuild mode)" if rebuild_mode else " and no permission fallback",
                 )
                 skipped_count += 1
                 continue
@@ -329,33 +323,36 @@ async def async_setup_entry(hass, config_entry, async_add_entities, rebuild_mode
                     vehicle.id,
                 )
                 continue
-
-            _LOGGER.info(
-                "Creating sensor %s for vehicle %s (signal: %s)",
-                name,
-                vehicle.id,
-                signal_id,
-            )
-            sensor = NissanGenericSensor(
-                hass,
-                vehicle,
-                status,
-                signal_id,
-                field_name,
-                name,
-                unit,
-                icon,
-                device_class,
-                config_entry.entry_id,
-            )
-            entities.append(sensor)
-            # Track this sensor by signal_id
-            data["sensors"][vehicle.id][signal_id] = sensor
-            added_count += 1
+            
+            if should_create:
+                _LOGGER.info(
+                    "Creating sensor %s for vehicle %s (signal: %s, via %s)",
+                    name,
+                    vehicle.id,
+                    signal_id,
+                    creation_method,
+                )
+                sensor = NissanGenericSensor(
+                    hass,
+                    vehicle,
+                    status,
+                    signal_id,
+                    field_name,
+                    name,
+                    unit,
+                    icon,
+                    device_class,
+                    config_entry.entry_id,
+                )
+                entities.append(sensor)
+                # Track this sensor by signal_id
+                data["sensors"][vehicle.id][signal_id] = sensor
+                added_count += 1
+            else:
+                skipped_count += 1
         
         # Log sensor creation summary for this vehicle
         total_sensors = len(data["sensors"][vehicle.id])
-        total_possible = len(SENSOR_DEFINITIONS)
         if rebuild_mode:
             _LOGGER.info(
                 "Vehicle %s: %d total sensors, %d added this rebuild, %d skipped (not available)",
@@ -374,19 +371,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities, rebuild_mode
             )
 
     async_add_entities(entities)
-    
-    # Fetch fresh initial state for all sensors after adding them
-    _LOGGER.info("Refreshing initial state for %d sensors", len(entities))
-    for entity in entities:
-        try:
-            await entity.async_update()
-        except Exception as err:
-            _LOGGER.warning(
-                "Failed to refresh initial state for sensor %s: %s",
-                entity._attr_name,
-                err,
-            )
-    
+
     # Set up webhook handler for dynamic entity creation
     # With signals API validation, all supported entities should be created at setup,
     # but this handles edge cases of new signals becoming available
@@ -442,7 +427,9 @@ class NissanGenericSensor(SensorEntity):
         self._vehicle = vehicle
         self._status = status
         self._signal_id = signal_id  # Smartcar signal ID (e.g., 'battery.percentRemaining')
-        self._api_key = signal_id.split(".")[0]  # Extract API key (e.g., 'battery')
+        parts = signal_id.split(".")
+        self._status_path = parts[:-1]  # All but last, used for nested dict navigation
+        self._api_key = parts[0]        # Top-level key (kept for logging)
         self._field_name = field_name
         self._entry_id = entry_id
         self._icon = icon
@@ -567,51 +554,35 @@ class NissanGenericSensor(SensorEntity):
         Return the current value of the sensor.
         Extracts the specified field from the API response object.
         """
-        # Get the API response object (e.g., battery, charge, odometer, location)
-        api_response = self._status.get(self._api_key)
-        
-        if not api_response:
-            _LOGGER.debug(
-                "No data for sensor %s (api_key=%s)",
-                self._attr_name,
-                self._api_key,
-            )
-            return None
-        
-        # If it's a dict (API response object), extract the field
-        if isinstance(api_response, dict):
-            value = api_response.get(self._field_name)
-            _LOGGER.debug(
-                "Sensor %s: extracted %s from %s = %s",
-                self._attr_name,
-                self._field_name,
-                self._api_key,
-                value,
-            )
-        else:
-            # If it's a namedtuple or object, try to get the attribute
-            try:
-                value = getattr(api_response, self._field_name, None)
+        # Navigate nested status dict using _status_path, e.g.
+        # signal_id "tires.frontLeft.pressure" → path ["tires", "frontLeft"] → field "pressure"
+        api_response = self._status
+        for key in self._status_path:
+            if not isinstance(api_response, dict):
+                return None
+            api_response = api_response.get(key)
+            if api_response is None:
                 _LOGGER.debug(
-                    "Sensor %s: extracted attribute %s from %s = %s",
+                    "No data for sensor %s (missing key %s in path %s)",
                     self._attr_name,
-                    self._field_name,
-                    self._api_key,
-                    value,
-                )
-            except AttributeError:
-                _LOGGER.debug(
-                    "Attribute %s not found on %s for sensor %s",
-                    self._field_name,
-                    self._api_key,
-                    self._attr_name,
+                    key,
+                    self._status_path,
                 )
                 return None
-        
-        # Convert value based on unit system if it's numeric
+
+        if not api_response:
+            return None
+
+        if isinstance(api_response, dict):
+            value = api_response.get(self._field_name)
+        else:
+            value = getattr(api_response, self._field_name, None)
+
+        _LOGGER.debug("Sensor %s: %s = %s", self._attr_name, self._signal_id, value)
+
         if value is not None and isinstance(value, (int, float)) and self._metric_unit:
             return convert_value(value, self._metric_unit, self._unit_system)
-        
+
         return value
 
     @property

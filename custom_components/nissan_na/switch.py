@@ -19,31 +19,49 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     vehicles = await client.get_vehicle_list()
     entities = []
     
-    # Track created switches per vehicle
+    # Initialize caches
     if "switches" not in data:
         data["switches"] = {}
+    if "vehicle_signals" not in data:
+        data["vehicle_signals"] = {}
+    if "vehicle_permissions" not in data:
+        data["vehicle_permissions"] = {}
 
     for vehicle in vehicles:
         _LOGGER.info("Setting up switches for vehicle %s", vehicle.id)
         
-        # Get available signals from Smartcar API
-        available_signals = set()
-        try:
-            signals = await client.get_vehicle_signals(vehicle.id)
-            available_signals = set(signals)
-        except Exception as err:
-            _LOGGER.warning(
-                "Failed to get vehicle signals for switches %s: %s",
-                vehicle.id,
-                err,
-            )
+        # Get available signals from Smartcar API (cached)
+        if vehicle.id not in data["vehicle_signals"]:
+            try:
+                signals = await client.get_vehicle_signals(vehicle.id, vehicle=vehicle)
+                data["vehicle_signals"][vehicle.id] = signals
+                _LOGGER.debug("Fetched signals for switches on vehicle %s: %d codes", vehicle.id, len(signals))
+            except Exception as err:
+                _LOGGER.warning(
+                    "Failed to get vehicle signals for switches %s: %s",
+                    vehicle.id,
+                    err,
+                )
+                signals = []
+        else:
+            signals = data["vehicle_signals"][vehicle.id]
+            _LOGGER.debug("Using cached signals for switches on vehicle %s: %d codes", vehicle.id, len(signals))
         
-        # Check permissions for charging control
-        permissions = []
-        try:
-            permissions = await client.get_permissions(vehicle.id)
-        except Exception:
-            pass
+        available_signals = set(signals)
+        
+        # Check permissions for charging control (cached)
+        if vehicle.id not in data["vehicle_permissions"]:
+            permissions = []
+            try:
+                permissions = await client.get_permissions(vehicle.id)
+                data["vehicle_permissions"][vehicle.id] = permissions
+                _LOGGER.debug("Fetched permissions for vehicle %s: %s", vehicle.id, permissions)
+            except Exception:
+                permissions = []
+                data["vehicle_permissions"][vehicle.id] = permissions
+        else:
+            permissions = data["vehicle_permissions"][vehicle.id]
+            _LOGGER.debug("Using cached permissions for vehicle %s: %s", vehicle.id, permissions)
         
         # Initialize tracking dict for this vehicle
         if vehicle.id not in data["switches"]:

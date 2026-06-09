@@ -373,7 +373,7 @@ class NissanNAOptionsFlowHandler(config_entries.OptionsFlow):
             # Track new entities
             new_entities = []
             
-            async def async_add_entities(entities):
+            def async_add_entities(entities):
                 """Callback to track added entities."""
                 new_entities.extend(entities)
             

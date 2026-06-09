@@ -999,12 +999,12 @@ class TestGetVehicleSignals:
             access_token="test_token"
         )
         
-        # Mock the response data (v3 API format)
+        # Mock the response data (v3 API format — field is 'capability', not 'code')
         response_data = {
             "data": [
-                {"attributes": {"code": "battery-percent-remaining"}},
-                {"attributes": {"code": "location-latitude"}},
-                {"attributes": {"code": "location-longitude"}}
+                {"attributes": {"capability": "tractionbattery-stateofcharge"}},
+                {"attributes": {"capability": "location-preciselocation"}},
+                {"attributes": {"capability": "odometer-traveleddistance"}},
             ]
         }
         
@@ -1025,10 +1025,11 @@ class TestGetVehicleSignals:
             mock_session_class.return_value = mock_session
             
             result = await client.get_vehicle_signals("vehicle_1")
-            
+
             assert len(result) == 3
-            assert "battery-percent-remaining" in result
-            assert "location-latitude" in result
+            assert "tractionbattery-stateofcharge" in result
+            assert "location-preciselocation" in result
+            assert "odometer-traveleddistance" in result
     
     @pytest.mark.asyncio
     async def test_get_vehicle_signals_api_error(self):
@@ -1081,94 +1082,87 @@ class TestGetVehicleStatus:
     """Tests for get_vehicle_status method"""
     
     @pytest.mark.asyncio
-    @patch.object(SmartcarApiClient, 'get_vehicle_signals')
-    @patch.object(SmartcarApiClient, 'get_engine_oil')
-    @patch.object(SmartcarApiClient, 'get_tire_pressure')
-    @patch.object(SmartcarApiClient, 'get_fuel_level')
-    @patch.object(SmartcarApiClient, 'get_lock_status')
-    @patch.object(SmartcarApiClient, 'get_odometer')
-    @patch.object(SmartcarApiClient, 'get_charge_status')
-    @patch.object(SmartcarApiClient, 'get_battery_level')
-    @patch.object(SmartcarApiClient, 'get_vehicle_location')
-    @patch.object(SmartcarApiClient, 'get_vehicle_info')
-    async def test_get_vehicle_status_success(
-        self, mock_info, mock_location, mock_battery, mock_charge,
-        mock_odometer, mock_lock, mock_fuel, mock_tires, mock_oil, mock_signals
-    ):
-        """Test successful comprehensive vehicle status retrieval"""
-        mock_signals.return_value = []  # Mock empty signals to avoid aiohttp calls
-        mock_info.return_value = {"make": "Nissan", "model": "Leaf"}
-        mock_location.return_value = {"latitude": 37.7749, "longitude": -122.4194}
-        mock_battery.return_value = {"percentRemaining": 85}
-        mock_charge.return_value = {"state": "CHARGING"}
-        mock_odometer.return_value = {"distance": 15000}
-        mock_lock.return_value = {"is_locked": True}
-        mock_fuel.return_value = {"percentRemaining": 100}
-        mock_tires.return_value = {"frontLeft": 32.5}
-        mock_oil.return_value = {"percentRemaining": 85}
-        
+    async def test_get_vehicle_status_success(self):
+        """Test successful vehicle status retrieval using v3 signals."""
+        import asyncio
+
         client = SmartcarApiClient(
             client_id="test_client_id",
             client_secret="test_secret",
             redirect_uri="https://example.com/callback",
-            access_token="test_token"
+            access_token="test_token",
         )
-        
-        result = await client.get_vehicle_status("vehicle_1")
-        
-        assert "info" in result
-        assert "location" in result
-        assert "battery" in result
-        assert "charge" in result
+
+        # Pre-populate signal cache so no API call is made
+        client._vehicle_signals_cache["vehicle_1"] = [
+            "odometer-traveleddistance",
+            "tractionbattery-stateofcharge",
+            "internalcombustionengine-fuellevel",
+        ]
+
+        # Each get_signal() call returns a SDK-format dict
+        def fake_get_signal(code):
+            responses = {
+                "odometer-traveleddistance": {"body": {"traveledDistance": 15000.0}},
+                "tractionbattery-stateofcharge": {"body": {"stateOfCharge": 0.85}},
+                "internalcombustionengine-fuellevel": {"body": {"percentRemaining": 1.0}},
+            }
+            return responses.get(code, {})
+
+        with patch("asyncio.to_thread", side_effect=lambda fn, *a, **kw: asyncio.coroutine(lambda: fn(*a, **kw))()):
+            # Simpler: patch to_thread so it calls the function synchronously
+            async def fake_to_thread(fn, *args, **kwargs):
+                return fn(*args, **kwargs)
+
+            with patch("custom_components.nissan_na.nissan_api.asyncio.to_thread", side_effect=fake_to_thread):
+                mock_vehicle = MagicMock()
+                mock_vehicle.get_signal = fake_get_signal
+                client._vehicles_cache["vehicle_1"] = mock_vehicle
+
+                result = await client.get_vehicle_status("vehicle_1")
+
         assert "odometer" in result
-        assert "lock" in result
+        assert result["odometer"]["distance"] == 15000.0
+        assert "battery" in result
+        assert result["battery"]["percentRemaining"] == 0.85
         assert "fuel" in result
-        assert "tires" in result
-        assert "oil" in result
-    
+        assert result["fuel"]["percentRemaining"] == 1.0
+
     @pytest.mark.asyncio
-    @patch.object(SmartcarApiClient, 'get_vehicle_signals')
-    @patch.object(SmartcarApiClient, 'get_engine_oil')
-    @patch.object(SmartcarApiClient, 'get_tire_pressure')
-    @patch.object(SmartcarApiClient, 'get_fuel_level')
-    @patch.object(SmartcarApiClient, 'get_lock_status')
-    @patch.object(SmartcarApiClient, 'get_odometer')
-    @patch.object(SmartcarApiClient, 'get_charge_status')
-    @patch.object(SmartcarApiClient, 'get_battery_level')
-    @patch.object(SmartcarApiClient, 'get_vehicle_location')
-    @patch.object(SmartcarApiClient, 'get_vehicle_info')
-    async def test_get_vehicle_status_partial_failure(
-        self, mock_info, mock_location, mock_battery, mock_charge,
-        mock_odometer, mock_lock, mock_fuel, mock_tires, mock_oil, mock_signals
-    ):
-        """Test vehicle status retrieval with some API failures"""
-        mock_signals.return_value = []  # Mock empty signals to avoid aiohttp calls
-        mock_info.return_value = {"make": "Nissan"}
-        mock_location.side_effect = Exception("Location API failed")
-        mock_battery.return_value = {"percentRemaining": 85}
-        mock_charge.side_effect = Exception("Charge API failed")
-        mock_odometer.return_value = {"distance": 15000}
-        mock_lock.return_value = {"is_locked": True}
-        mock_fuel.return_value = {"percentRemaining": 100}
-        mock_tires.return_value = {"frontLeft": 32.5}
-        mock_oil.return_value = {"percentRemaining": 85}
-        
+    async def test_get_vehicle_status_partial_failure(self):
+        """Test vehicle status retrieval continues when individual signals fail."""
         client = SmartcarApiClient(
             client_id="test_client_id",
             client_secret="test_secret",
             redirect_uri="https://example.com/callback",
-            access_token="test_token"
+            access_token="test_token",
         )
-        
-        result = await client.get_vehicle_status("vehicle_1")
-        
-        # Should have successfully retrieved data even with some failures
-        assert "info" in result
-        assert "battery" in result
+
+        client._vehicle_signals_cache["vehicle_1"] = [
+            "odometer-traveleddistance",
+            "tractionbattery-stateofcharge",  # will raise
+        ]
+
+        def fake_get_signal(code):
+            if code == "tractionbattery-stateofcharge":
+                raise Exception("API error")
+            return {"body": {"traveledDistance": 15000.0}}
+
+        async def fake_to_thread(fn, *args, **kwargs):
+            return fn(*args, **kwargs)
+
+        with patch("custom_components.nissan_na.nissan_api.asyncio.to_thread", side_effect=fake_to_thread):
+            mock_vehicle = MagicMock()
+            mock_vehicle.get_signal = fake_get_signal
+            client._vehicles_cache["vehicle_1"] = mock_vehicle
+
+            result = await client.get_vehicle_status("vehicle_1")
+
+        # Successful signal should populate status
         assert "odometer" in result
-        # Failed ones should not be in result
-        assert "location" not in result
-        assert "charge" not in result
+        assert result["odometer"]["distance"] == 15000.0
+        # Failed signal should be silently skipped
+        assert "battery" not in result
 
 
 class TestClimateControl:
