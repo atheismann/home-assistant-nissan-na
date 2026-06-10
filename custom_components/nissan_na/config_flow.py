@@ -1,13 +1,15 @@
 """Config flow for Nissan North America integration using Smartcar OAuth2."""
 
+import asyncio
 import logging
 from typing import Any
 
+import smartcar
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.helpers import config_entry_oauth2_flow
 
-from .const import CONF_MANAGEMENT_TOKEN, CONF_UNIT_SYSTEM, DOMAIN, UNIT_SYSTEM_IMPERIAL, UNIT_SYSTEM_METRIC
+from .const import CONF_MANAGEMENT_TOKEN, CONF_UNIT_SYSTEM, CONF_USER_ID, DOMAIN, UNIT_SYSTEM_IMPERIAL, UNIT_SYSTEM_METRIC
 from .nissan_api import SmartcarApiClient
 
 _LOGGER = logging.getLogger(__name__)
@@ -70,26 +72,28 @@ class OAuth2FlowHandler(
 
     async def async_oauth_create_entry(self, data: dict) -> dict:
         """Create an entry for Nissan NA after OAuth is complete."""
-        # Test connection by getting vehicle list
-
-        # Validate OAuth implementation has credentials
         if not self.flow_impl.client_id or not self.flow_impl.client_secret:
-            _LOGGER.error(
-                "OAuth credentials not configured. "
-                "Please set up Application Credentials first."
-            )
+            _LOGGER.error("OAuth credentials not configured.")
             return self.async_abort(reason="missing_credentials")
 
-        # Extract token data
-        token = data["token"]
+        # Capture user_id from the initial access token, then discard user tokens
+        token = data.get("token", {})
+        try:
+            user_resp = await asyncio.to_thread(
+                smartcar.get_user, token["access_token"]
+            )
+            user_id: str = user_resp.id
+        except Exception as err:
+            _LOGGER.error("Failed to retrieve user_id from Smartcar: %s", err, exc_info=True)
+            return self.async_abort(reason="connection_error")
+
+        # Build a client-credentials client and verify we can reach the vehicle list
         client = SmartcarApiClient(
             client_id=self.flow_impl.client_id,
             client_secret=self.flow_impl.client_secret,
             redirect_uri=self.flow_impl.redirect_uri,
-            access_token=token["access_token"],
-            refresh_token=token["refresh_token"],
+            user_id=user_id,
         )
-
         try:
             vehicles = await client.get_vehicle_list()
             if not vehicles:
@@ -98,19 +102,17 @@ class OAuth2FlowHandler(
             _LOGGER.error("Error fetching vehicles: %s", err, exc_info=True)
             return self.async_abort(reason="connection_error")
 
-        # Check if this is a reauth flow
+        # Store user_id in config entry; keep token block so HA's OAuth2
+        # scaffolding stays happy, but we never use it for API calls.
+        entry_data = {**data, CONF_USER_ID: user_id}
+
         if self.source == config_entries.SOURCE_REAUTH:
-            # Update existing entry with new tokens
             reauth_entry = self._get_reauth_entry()
-            self.hass.config_entries.async_update_entry(reauth_entry, data=data)
+            self.hass.config_entries.async_update_entry(reauth_entry, data=entry_data)
             await self.hass.config_entries.async_reload(reauth_entry.entry_id)
             return self.async_abort(reason="reauth_successful")
 
-        # Create new config entry
-        return self.async_create_entry(
-            title="Nissan (Smartcar)",
-            data=data,
-        )
+        return self.async_create_entry(title="Nissan (Smartcar)", data=entry_data)
 
     async def async_step_reauth(self, entry_data: dict) -> dict:
         """Perform reauth upon an API authentication error."""

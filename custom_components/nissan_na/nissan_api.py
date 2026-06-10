@@ -1,16 +1,14 @@
 """
-Smartcar API client implementation for Nissan vehicles.
+Smartcar API client for Nissan vehicles.
 
-This module provides the SmartcarApiClient class for interacting with
-Nissan vehicles through the Smartcar API. It supports OAuth authentication,
-vehicle data retrieval, and remote actions such as locking/unlocking doors,
-starting/stopping climate control, location tracking, and more.
-
-Smartcar API documentation: https://smartcar.com/docs/
+Uses the OAuth 2.0 client-credentials grant for all API calls after the
+initial Smartcar Connect flow.  No per-user refresh tokens are stored —
+a short-lived application token is fetched automatically as needed.
 """
 
 import asyncio
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 import aiohttp
@@ -21,29 +19,16 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _namedtuple_to_dict(obj: Any) -> Dict[str, Any]:
-    """
-    Convert a namedtuple (or any object with __dict__) to a dictionary.
-
-    This helper handles smartcar v6 API responses which return namedtuples.
-
-    Args:
-        obj: Object to convert (namedtuple, dict, or other).
-
-    Returns:
-        dict: Dictionary representation of the object.
-    """
+    """Convert a namedtuple (or any object with __dict__) to a dictionary."""
     if isinstance(obj, dict):
         return obj
     elif hasattr(obj, "_asdict"):
-        # It's a namedtuple
         result = obj._asdict()
-        # Recursively convert nested namedtuples
         return {
             k: _namedtuple_to_dict(v) if hasattr(v, "_asdict") else v
             for k, v in result.items()
         }
     else:
-        # Try to access as attributes
         return {k: getattr(obj, k) for k in dir(obj) if not k.startswith("_")}
 
 
@@ -51,688 +36,357 @@ class Vehicle(BaseModel):
     """Model representing a Nissan vehicle."""
 
     vin: str
-    id: str  # Smartcar vehicle ID
+    id: str
     model: Optional[str] = None
     year: Optional[int] = None
     make: Optional[str] = None
 
 
 class SmartcarApiClient:
+    """Client for Nissan vehicles via Smartcar API.
+
+    Authentication uses the client-credentials grant: the user completes
+    Smartcar Connect once (to associate their vehicle), we capture their
+    user_id, then all subsequent API calls use short-lived app-level tokens
+    that are fetched and cached automatically — no user interaction needed.
     """
-    Client for interacting with Nissan vehicles via Smartcar API.
 
-    The Smartcar API provides a standardized interface for vehicle connectivity
-    across multiple brands including Nissan. This client handles OAuth
-    authentication and provides methods for vehicle control and monitoring.
-
-    Methods:
-        authenticate: Exchange authorization code for access token.
-        get_vehicle_list: Retrieve all vehicles linked to the account.
-        get_vehicle_info: Get vehicle make, model, year information.
-        get_vehicle_location: Get current vehicle location.
-        get_battery_level: Get battery charge level (for EVs).
-        get_battery_capacity: Get battery capacity information.
-        get_charge_status: Get charging status.
-        get_odometer: Get odometer reading.
-        get_fuel_level: Get fuel level (for non-EVs).
-        get_lock_status: Get lock status of doors and windows.
-        get_tire_pressure: Get tire pressure for all tires.
-        get_engine_oil: Get engine oil life information.
-        lock_doors: Lock the vehicle doors.
-        unlock_doors: Unlock the vehicle doors.
-        start_charge: Start charging the vehicle.
-        stop_charge: Stop charging the vehicle.
-        start_climate: Start climate control (direct API call).
-        stop_climate: Stop climate control (direct API call).
-        get_climate_status: Get climate status (direct API call).
-        disconnect: Disconnect a vehicle from Smartcar.
-
-    Note:
-        Climate control methods use direct HTTP requests to Smartcar API
-        since they are not exposed in the Python SDK.
-    """
+    _IAM_TOKEN_URL = "https://iam.smartcar.com/oauth2/token"
+    _V3_BASE = "https://vehicle.api.smartcar.com/v3"
 
     def __init__(
         self,
         client_id: str,
         client_secret: str,
         redirect_uri: str,
-        access_token: Optional[str] = None,
-        refresh_token: Optional[str] = None,
+        user_id: Optional[str] = None,
         test_mode: bool = False,
     ):
-        """
-        Initialize the SmartcarApiClient.
-
-        Args:
-            client_id: Smartcar application client ID.
-            client_secret: Smartcar application client secret.
-            redirect_uri: OAuth redirect URI configured in Smartcar dashboard.
-            access_token: Existing access token (if available).
-            refresh_token: Existing refresh token for token renewal.
-            test_mode: Use Smartcar test mode (for development/testing).
-        """
         self.client_id = client_id
         self.client_secret = client_secret
         self.redirect_uri = redirect_uri
+        self.user_id = user_id
         self.test_mode = test_mode
-        self.access_token = access_token
-        self.refresh_token = refresh_token
-        self._vehicles_cache: Dict[str, smartcar.Vehicle] = {}
-        self._vehicle_model_cache: Dict[str, Any] = {}  # vehicle_id -> Vehicle model
-        self._vehicle_signals_cache: Dict[str, List[str]] = {}  # vehicle_id -> capability codes
-        self._permission_denied_signals: Dict[str, List[str]] = {}  # vehicle_id -> PERMISSION-error codes
-        self._api_base_url = "https://api.smartcar.com/v2.0"
+        # Client-credentials token cache
+        self._cc_token: Optional[str] = None
+        self._cc_token_expires_at: float = 0.0
+        # Vehicle / signal caches
+        self._vehicle_model_cache: Dict[str, Any] = {}
+        self._vehicle_signals_cache: Dict[str, List[str]] = {}
+        self._permission_denied_signals: Dict[str, List[str]] = {}
+
+    # ------------------------------------------------------------------
+    # Token management (client-credentials)
+    # ------------------------------------------------------------------
+
+    async def _get_access_token(self) -> str:
+        """Return a valid client-credentials access token, fetching one if expired."""
+        if self._cc_token and time.monotonic() < self._cc_token_expires_at:
+            return self._cc_token
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                self._IAM_TOKEN_URL,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                },
+            ) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    raise ValueError(
+                        f"Client-credentials token request failed ({resp.status}): {text}"
+                    )
+                data = await resp.json()
+
+        token: str = data["access_token"]
+        self._cc_token = token
+        # Expire 60 s early to avoid edge-case expiry mid-request
+        self._cc_token_expires_at = time.monotonic() + data.get("expires_in", 3600) - 60
+        _LOGGER.debug("Obtained new client-credentials access token")
+        return token
+
+    async def _api_headers(self) -> Dict[str, str]:
+        """Return auth headers for Smartcar v3 API calls."""
+        token = await self._get_access_token()
+        headers: Dict[str, str] = {"Authorization": f"Bearer {token}"}
+        if self.user_id:
+            headers["sc-user-id"] = self.user_id
+        return headers
+
+    # ------------------------------------------------------------------
+    # Initial OAuth flow (Smartcar Connect — runs once to capture user_id)
+    # ------------------------------------------------------------------
 
     def get_auth_url(self, state: Optional[str] = None) -> str:
-        """
-        Generate Smartcar OAuth authorization URL.
-
-        Args:
-            state: Optional state parameter for CSRF protection.
-
-        Returns:
-            str: Authorization URL for user to grant access.
-        """
+        """Generate Smartcar OAuth authorization URL."""
         client = smartcar.AuthClient(
             client_id=self.client_id,
             client_secret=self.client_secret,
             redirect_uri=self.redirect_uri,
             mode="test" if self.test_mode else "live",
         )
-        # Build scope list for get_auth_url
         scope = [
             "required:read_vehicle_info",
             "required:read_location",
             "required:read_odometer",
-            "required:control_security",
+            "read_security",
+            "control_security",
             "read_battery",
             "read_charge",
             "control_charge",
             "read_fuel",
         ]
-        # In v6, state goes in options dict
-        options = {
-            "make_bypass": "NISSAN",  # Skip make selection, go directly to Nissan
-        }
+        options: Dict[str, Any] = {"make_bypass": "NISSAN"}
         if state:
             options["state"] = state
         return client.get_auth_url(scope=scope, options=options)
 
     async def authenticate(self, code: str) -> Dict[str, Any]:
-        """
-        Exchange authorization code for access token.
+        """Exchange authorization code and capture user_id.
 
-        Args:
-            code: Authorization code from OAuth callback.
-
-        Returns:
-            dict: Token information including access_token and refresh_token.
+        The access/refresh tokens from the code exchange are discarded after
+        extracting the user_id.  Subsequent calls use client-credentials tokens.
         """
-        _LOGGER.debug("Authenticating with Smartcar API")
-        client = smartcar.AuthClient(
+        auth_client = smartcar.AuthClient(
             client_id=self.client_id,
             client_secret=self.client_secret,
             redirect_uri=self.redirect_uri,
         )
-
-        # Exchange code for tokens
-        # v6 returns an Access NamedTuple
-        response = await asyncio.to_thread(client.exchange_code, code)
-        self.access_token = response.access_token
-        self.refresh_token = response.refresh_token
-        _LOGGER.debug("Successfully authenticated with Smartcar API")
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-
-        # Clear vehicle cache to ensure fresh tokens are used
-        self._vehicles_cache.clear()
-
-        # Return as dict for compatibility
-        return {
-            "access_token": response.access_token,
-            "refresh_token": response.refresh_token,
-            "expires_in": response.expires_in,
-            "token_type": response.token_type,
-            "expiration": response.expiration,
-            "refresh_expiration": response.refresh_expiration,
-        }
-
-    async def refresh_access_token(self) -> Dict[str, Any]:
-        """
-        Refresh the access token using the refresh token.
-
-        Returns:
-            dict: New token information.
-        """
-        if not self.refresh_token:
-            raise ValueError("No refresh token available")
-
-        _LOGGER.debug("Refreshing access token with Smartcar API")
-        client = smartcar.AuthClient(
-            client_id=self.client_id,
-            client_secret=self.client_secret,
-            redirect_uri=self.redirect_uri,
-        )
-
-        # v6 returns an Access NamedTuple
-        response = await asyncio.to_thread(
-            client.exchange_refresh_token, self.refresh_token
-        )
-        self.access_token = response.access_token
-        self.refresh_token = response.refresh_token
-        _LOGGER.debug("Successfully refreshed access token")
-        _LOGGER.debug("New access token: %s", self.access_token)
-        _LOGGER.debug("New refresh token: %s", self.refresh_token)
-
-        # Clear vehicle caches since tokens have changed
-        self._vehicles_cache.clear()
+        tokens = await asyncio.to_thread(auth_client.exchange_code, code)
+        user_resp = await asyncio.to_thread(smartcar.get_user, tokens.access_token)
+        self.user_id = user_resp.id
+        _LOGGER.debug("Smartcar Connect complete — user_id: %s", self.user_id)
         self._vehicle_signals_cache.clear()
         self._permission_denied_signals.clear()
+        return {"user_id": self.user_id}
 
-        # Return as dict for compatibility
-        return {
-            "access_token": response.access_token,
-            "refresh_token": response.refresh_token,
-            "expires_in": response.expires_in,
-            "token_type": response.token_type,
-            "expiration": response.expiration,
-            "refresh_expiration": response.refresh_expiration,
-        }
+    # ------------------------------------------------------------------
+    # Vehicle list (Connections API)
+    # ------------------------------------------------------------------
 
     async def get_vehicle_list(self) -> List[Vehicle]:
-        """
-        Retrieve a list of vehicles linked to the Smartcar account.
+        """Return all vehicles connected for this user via the Connections API."""
+        if not self.user_id:
+            raise ValueError("user_id is not set. Run authenticate() first.")
 
-        Returns:
-            List[Vehicle]: List of Vehicle objects.
-        """
-        if not self.access_token:
-            raise ValueError("Not authenticated. Call authenticate() first.")
+        headers = await self._api_headers()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{self._V3_BASE}/connections",
+                headers=headers,
+                params={"filter[user_id]": self.user_id},
+            ) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    raise ValueError(f"Connections API failed ({resp.status}): {text}")
+                data = await resp.json()
 
-        _LOGGER.debug("API Call: get_vehicle_list")
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        _LOGGER.debug("SDK Method: smartcar.get_vehicles")
-        # Get vehicle IDs - v6 returns a Vehicles NamedTuple
-        response = await asyncio.to_thread(smartcar.get_vehicles, self.access_token)
-        vehicle_ids = response.vehicles
-        _LOGGER.debug("Retrieved %d vehicles from Smartcar API", len(vehicle_ids))
-
-        vehicles = []
-        for vehicle_id in vehicle_ids:
-            vehicle = smartcar.Vehicle(vehicle_id, self.access_token)
-            self._vehicles_cache[vehicle_id] = vehicle
-
-            # Get vehicle attributes and VIN (v6 API)
-            attrs = await asyncio.to_thread(vehicle.attributes)
-            vin_response = await asyncio.to_thread(vehicle.vin)
-
-            # Convert namedtuple responses to dict
-            attrs_dict = _namedtuple_to_dict(attrs)
-            vin_dict = _namedtuple_to_dict(vin_response)
-
-            v = Vehicle(
-                id=vehicle_id,
-                vin=vin_dict.get("vin", ""),
-                make=attrs_dict.get("make"),
-                model=attrs_dict.get("model"),
-                year=int(attrs_dict["year"]) if attrs_dict.get("year") else None,
-            )
-            vehicles.append(v)
-            self._vehicle_model_cache[vehicle_id] = v
+        vehicles: List[Vehicle] = []
+        for conn in data.get("data", []):
+            vehicle_id = conn.get("vehicleId") or conn.get("attributes", {}).get("vehicleId")
+            if not vehicle_id:
+                continue
+            try:
+                vehicle = await self._fetch_vehicle_attributes(vehicle_id, headers)
+                vehicles.append(vehicle)
+                self._vehicle_model_cache[vehicle_id] = vehicle
+            except Exception as err:
+                _LOGGER.warning("Failed to get attributes for vehicle %s: %s", vehicle_id, err)
 
         return vehicles
 
-    def _get_vehicle(self, vehicle_id: str) -> smartcar.Vehicle:
-        """
-        Get or create a Smartcar Vehicle instance.
+    async def _fetch_vehicle_attributes(
+        self, vehicle_id: str, headers: Optional[Dict[str, str]] = None
+    ) -> Vehicle:
+        """Fetch make/model/year and VIN via direct v3 HTTP calls."""
+        if headers is None:
+            headers = await self._api_headers()
 
-        Args:
-            vehicle_id: Smartcar vehicle ID.
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"{self._V3_BASE}/vehicles/{vehicle_id}", headers=headers
+            ) as resp:
+                attrs_data = await resp.json() if resp.status == 200 else {}
 
-        Returns:
-            smartcar.Vehicle: Vehicle instance.
-        """
-        if vehicle_id not in self._vehicles_cache:
-            self._vehicles_cache[vehicle_id] = smartcar.Vehicle(
-                vehicle_id, self.access_token
-            )
-        return self._vehicles_cache[vehicle_id]
+            async with session.get(
+                f"{self._V3_BASE}/vehicles/{vehicle_id}/vin", headers=headers
+            ) as resp:
+                vin_data = await resp.json() if resp.status == 200 else {}
+
+        attrs = attrs_data.get("data", {}).get("attributes", {})
+        vin_attrs = vin_data.get("data", {}).get("attributes", {})
+        year = attrs.get("year")
+
+        return Vehicle(
+            id=vehicle_id,
+            vin=vin_attrs.get("vin", ""),
+            make=attrs.get("make"),
+            model=attrs.get("model"),
+            year=int(year) if year else None,
+        )
+
+    # ------------------------------------------------------------------
+    # Vehicle info
+    # ------------------------------------------------------------------
 
     async def get_vehicle_info(self, vehicle_id: str) -> Dict[str, Any]:
-        """
-        Get vehicle information (make, model, year).
+        """Get vehicle information (make, model, year, VIN)."""
+        if vehicle_id in self._vehicle_model_cache:
+            v = self._vehicle_model_cache[vehicle_id]
+            return {"id": vehicle_id, "make": v.make, "model": v.model, "year": v.year, "vin": v.vin}
+        vehicle = await self._fetch_vehicle_attributes(vehicle_id)
+        self._vehicle_model_cache[vehicle_id] = vehicle
+        return {"id": vehicle_id, "make": vehicle.make, "model": vehicle.model, "year": vehicle.year, "vin": vehicle.vin}
 
-        Args:
-            vehicle_id: Smartcar vehicle ID.
+    # ------------------------------------------------------------------
+    # SDK-based read methods (use cc token via smartcar.Vehicle)
+    # ------------------------------------------------------------------
 
-        Returns:
-            dict: Vehicle information.
-        """
-        _LOGGER.debug("API Call: get_vehicle_info | Vehicle ID: %s", vehicle_id)
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        _LOGGER.debug("SDK Methods: vehicle.attributes, vehicle.vin")
-        vehicle = self._get_vehicle(vehicle_id)
-        attrs = await asyncio.to_thread(vehicle.attributes)
-        vin_response = await asyncio.to_thread(vehicle.vin)
-
-        # Convert namedtuple responses to dict for v6
-        attrs_dict = _namedtuple_to_dict(attrs)
-        vin_dict = _namedtuple_to_dict(vin_response)
-
-        # Convert year to int if it's a string
-        year = attrs_dict.get("year")
-        if year and isinstance(year, str):
-            year = int(year)
-
-        return {
-            "id": attrs_dict.get("id"),
-            "make": attrs_dict.get("make"),
-            "model": attrs_dict.get("model"),
-            "year": year,
-            "vin": vin_dict.get("vin"),
-        }
+    async def _sdk_vehicle(self, vehicle_id: str) -> smartcar.Vehicle:
+        """Return a smartcar.Vehicle instance with a fresh cc access token."""
+        token = await self._get_access_token()
+        return smartcar.Vehicle(vehicle_id, token)
 
     async def get_vehicle_location(self, vehicle_id: str) -> Dict[str, Any]:
-        """
-        Get vehicle location coordinates.
-
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-
-        Returns:
-            dict: Location data with latitude and longitude.
-        """
-        _LOGGER.debug("API Call: get_vehicle_location | Vehicle ID: %s", vehicle_id)
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        _LOGGER.debug("SDK Method: vehicle.location")
-        vehicle = self._get_vehicle(vehicle_id)
-        location = await asyncio.to_thread(vehicle.location)
-        return _namedtuple_to_dict(location)
+        vehicle = await self._sdk_vehicle(vehicle_id)
+        return _namedtuple_to_dict(await asyncio.to_thread(vehicle.location))
 
     async def get_battery_level(self, vehicle_id: str) -> Dict[str, Any]:
-        """
-        Get battery charge level (for electric vehicles).
-
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-
-        Returns:
-            dict: Battery level percentage.
-        """
-        _LOGGER.debug("API Call: get_battery_level | Vehicle ID: %s", vehicle_id)
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        _LOGGER.debug("SDK Method: vehicle.battery")
-        vehicle = self._get_vehicle(vehicle_id)
-        battery = await asyncio.to_thread(vehicle.battery)
-        return _namedtuple_to_dict(battery)
+        vehicle = await self._sdk_vehicle(vehicle_id)
+        return _namedtuple_to_dict(await asyncio.to_thread(vehicle.battery))
 
     async def get_battery_capacity(self, vehicle_id: str) -> Dict[str, Any]:
-        """
-        Get battery capacity information.
-
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-
-        Returns:
-            dict: Battery capacity in kWh.
-        """
-        _LOGGER.debug("API Call: get_battery_capacity | Vehicle ID: %s", vehicle_id)
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        _LOGGER.debug("SDK Method: vehicle.battery_capacity")
-        vehicle = self._get_vehicle(vehicle_id)
-        capacity = await asyncio.to_thread(vehicle.battery_capacity)
-        return _namedtuple_to_dict(capacity)
+        vehicle = await self._sdk_vehicle(vehicle_id)
+        return _namedtuple_to_dict(await asyncio.to_thread(vehicle.battery_capacity))
 
     async def get_charge_status(self, vehicle_id: str) -> Dict[str, Any]:
-        """
-        Get charging status (plugged in, charging, etc).
-
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-
-        Returns:
-            dict: Charging status information.
-        """
-        _LOGGER.debug("API Call: get_charge_status | Vehicle ID: %s", vehicle_id)
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        _LOGGER.debug("SDK Method: vehicle.charge")
-        vehicle = self._get_vehicle(vehicle_id)
-        charge = await asyncio.to_thread(vehicle.charge)
-        return _namedtuple_to_dict(charge)
+        vehicle = await self._sdk_vehicle(vehicle_id)
+        return _namedtuple_to_dict(await asyncio.to_thread(vehicle.charge))
 
     async def get_odometer(self, vehicle_id: str) -> Dict[str, Any]:
-        """
-        Get odometer reading.
-
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-
-        Returns:
-            dict: Odometer distance.
-        """
-        _LOGGER.debug("API Call: get_odometer | Vehicle ID: %s", vehicle_id)
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        _LOGGER.debug("SDK Method: vehicle.odometer")
-        vehicle = self._get_vehicle(vehicle_id)
-        odometer = await asyncio.to_thread(vehicle.odometer)
-        return _namedtuple_to_dict(odometer)
+        vehicle = await self._sdk_vehicle(vehicle_id)
+        return _namedtuple_to_dict(await asyncio.to_thread(vehicle.odometer))
 
     async def get_fuel_level(self, vehicle_id: str) -> Dict[str, Any]:
-        """
-        Get fuel level (for non-electric vehicles).
-
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-
-        Returns:
-            dict: Fuel level information.
-        """
-        _LOGGER.debug("API Call: get_fuel_level | Vehicle ID: %s", vehicle_id)
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        _LOGGER.debug("SDK Method: vehicle.fuel")
-        vehicle = self._get_vehicle(vehicle_id)
-        fuel = await asyncio.to_thread(vehicle.fuel)
-        return _namedtuple_to_dict(fuel)
+        vehicle = await self._sdk_vehicle(vehicle_id)
+        return _namedtuple_to_dict(await asyncio.to_thread(vehicle.fuel))
 
     async def get_lock_status(self, vehicle_id: str) -> Dict[str, Any]:
-        """Get lock status of doors and windows.
-
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-
-        Returns:
-            dict: Lock status information for doors, windows, etc.
-        """
-        _LOGGER.debug("API Call: get_lock_status | Vehicle ID: %s", vehicle_id)
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        _LOGGER.debug("SDK Method: vehicle.lock_status")
-        vehicle = self._get_vehicle(vehicle_id)
-        security = await asyncio.to_thread(vehicle.lock_status)
-        return _namedtuple_to_dict(security)
+        vehicle = await self._sdk_vehicle(vehicle_id)
+        return _namedtuple_to_dict(await asyncio.to_thread(vehicle.lock_status))
 
     async def get_tire_pressure(self, vehicle_id: str) -> Dict[str, Any]:
-        """Get tire pressure for all tires.
-
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-
-        Returns:
-            dict: Tire pressure information for all tires.
-        """
-        _LOGGER.debug("API Call: get_tire_pressure | Vehicle ID: %s", vehicle_id)
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        _LOGGER.debug("SDK Method: vehicle.tires")
-        vehicle = self._get_vehicle(vehicle_id)
-        tires = await asyncio.to_thread(vehicle.tires)
-        return _namedtuple_to_dict(tires)
+        vehicle = await self._sdk_vehicle(vehicle_id)
+        return _namedtuple_to_dict(await asyncio.to_thread(vehicle.tires))
 
     async def get_engine_oil(self, vehicle_id: str) -> Dict[str, Any]:
-        """Get engine oil life information.
+        vehicle = await self._sdk_vehicle(vehicle_id)
+        return _namedtuple_to_dict(await asyncio.to_thread(vehicle.engine_oil))
 
-        Args:
-            vehicle_id: Smartcar vehicle ID.
+    async def get_permissions(self, vehicle_id: str) -> List[str]:
+        vehicle = await self._sdk_vehicle(vehicle_id)
+        response = await asyncio.to_thread(vehicle.permissions)
+        return _namedtuple_to_dict(response).get("permissions", [])
 
-        Returns:
-            dict: Engine oil life percentage and status.
-        """
-        _LOGGER.debug("API Call: get_engine_oil | Vehicle ID: %s", vehicle_id)
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        _LOGGER.debug("SDK Method: vehicle.engine_oil")
-        vehicle = self._get_vehicle(vehicle_id)
-        oil = await asyncio.to_thread(vehicle.engine_oil)
-        return _namedtuple_to_dict(oil)
+    # ------------------------------------------------------------------
+    # Vehicle action methods
+    # ------------------------------------------------------------------
 
     async def lock_doors(self, vehicle_id: str) -> Dict[str, Any]:
-        """
-        Lock the vehicle doors.
-
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-
-        Returns:
-            dict: API response with action status.
-        """
-        _LOGGER.debug("API Call: lock_doors | Vehicle ID: %s", vehicle_id)
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        _LOGGER.debug("SDK Method: vehicle.lock")
-        vehicle = self._get_vehicle(vehicle_id)
+        vehicle = await self._sdk_vehicle(vehicle_id)
         result = await asyncio.to_thread(vehicle.lock)
-        _LOGGER.debug("Lock doors command sent for vehicle %s", vehicle_id)
+        _LOGGER.debug("Lock command sent for vehicle %s", vehicle_id)
         return _namedtuple_to_dict(result)
 
     async def unlock_doors(self, vehicle_id: str) -> Dict[str, Any]:
-        """
-        Unlock the vehicle doors.
-
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-
-        Returns:
-            dict: API response with action status.
-        """
-        _LOGGER.debug("API Call: unlock_doors | Vehicle ID: %s", vehicle_id)
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        _LOGGER.debug("SDK Method: vehicle.unlock")
-        vehicle = self._get_vehicle(vehicle_id)
+        vehicle = await self._sdk_vehicle(vehicle_id)
         result = await asyncio.to_thread(vehicle.unlock)
-        _LOGGER.debug("Unlock doors command sent for vehicle %s", vehicle_id)
+        _LOGGER.debug("Unlock command sent for vehicle %s", vehicle_id)
         return _namedtuple_to_dict(result)
 
     async def start_charge(self, vehicle_id: str) -> Dict[str, Any]:
-        """
-        Start charging the vehicle.
-
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-
-        Returns:
-            dict: API response with action status.
-        """
-        _LOGGER.debug("API Call: start_charge | Vehicle ID: %s", vehicle_id)
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        _LOGGER.debug("SDK Method: vehicle.start_charge")
-        vehicle = self._get_vehicle(vehicle_id)
+        vehicle = await self._sdk_vehicle(vehicle_id)
         result = await asyncio.to_thread(vehicle.start_charge)
         _LOGGER.debug("Start charge command sent for vehicle %s", vehicle_id)
         return _namedtuple_to_dict(result)
 
     async def stop_charge(self, vehicle_id: str) -> Dict[str, Any]:
-        """
-        Stop charging the vehicle.
-
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-
-        Returns:
-            dict: API response with action status.
-        """
-        _LOGGER.debug("API Call: stop_charge | Vehicle ID: %s", vehicle_id)
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        _LOGGER.debug("SDK Method: vehicle.stop_charge")
-        vehicle = self._get_vehicle(vehicle_id)
+        vehicle = await self._sdk_vehicle(vehicle_id)
         result = await asyncio.to_thread(vehicle.stop_charge)
         _LOGGER.debug("Stop charge command sent for vehicle %s", vehicle_id)
         return _namedtuple_to_dict(result)
 
+    # ------------------------------------------------------------------
+    # Climate control (direct HTTP — not in SDK)
+    # ------------------------------------------------------------------
+
     async def start_climate(self, vehicle_id: str) -> Dict[str, Any]:
-        """
-        Start the vehicle's climate control system.
-
-        Uses direct API call since Python SDK doesn't expose this endpoint.
-
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-
-        Returns:
-            dict: API response with action status.
-        """
-        _LOGGER.debug("API Call: start_climate | Vehicle ID: %s", vehicle_id)
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        url = f"{self._api_base_url}/vehicles/{vehicle_id}/climate"
-        headers = {"Authorization": f"Bearer {self.access_token}"}
-        _LOGGER.debug("HTTP Method: POST | URL: %s", url)
-        _LOGGER.debug("Request Headers: %s", headers)
-        data = {"action": "START"}
-        _LOGGER.debug("Request Body: %s", data)
-
+        headers = await self._api_headers()
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers, json=data) as response:
-                response.raise_for_status()
-                _LOGGER.debug("HTTP Response Status: %d", response.status)
-                result = await response.json()
-                _LOGGER.debug("Response Body: %s", result)
-                _LOGGER.debug("Start climate command sent for vehicle %s", vehicle_id)
-                return result
+            async with session.post(
+                f"{self._V3_BASE}/vehicles/{vehicle_id}/climate",
+                headers=headers,
+                json={"action": "START"},
+            ) as resp:
+                resp.raise_for_status()
+                return await resp.json()
 
     async def stop_climate(self, vehicle_id: str) -> Dict[str, Any]:
-        """
-        Stop the vehicle's climate control system.
-
-        Uses direct API call since Python SDK doesn't expose this endpoint.
-
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-
-        Returns:
-            dict: API response with action status.
-        """
-        _LOGGER.debug("API Call: stop_climate | Vehicle ID: %s", vehicle_id)
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        url = f"{self._api_base_url}/vehicles/{vehicle_id}/climate"
-        headers = {"Authorization": f"Bearer {self.access_token}"}
-        _LOGGER.debug("HTTP Method: POST | URL: %s", url)
-        _LOGGER.debug("Request Headers: %s", headers)
-        data = {"action": "STOP"}
-        _LOGGER.debug("Request Body: %s", data)
-
+        headers = await self._api_headers()
         async with aiohttp.ClientSession() as session:
-            async with session.post(url, headers=headers, json=data) as response:
-                response.raise_for_status()
-                _LOGGER.debug("HTTP Response Status: %d", response.status)
-                result = await response.json()
-                _LOGGER.debug("Response Body: %s", result)
-                _LOGGER.debug("Stop climate command sent for vehicle %s", vehicle_id)
-                return result
+            async with session.post(
+                f"{self._V3_BASE}/vehicles/{vehicle_id}/climate",
+                headers=headers,
+                json={"action": "STOP"},
+            ) as resp:
+                resp.raise_for_status()
+                return await resp.json()
 
     async def get_climate_status(self, vehicle_id: str) -> Dict[str, Any]:
-        """
-        Get the vehicle's climate control status.
-
-        Uses direct API call since Python SDK doesn't expose this endpoint.
-
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-
-        Returns:
-            dict: Climate status information.
-        """
-        _LOGGER.debug("API Call: get_climate_status | Vehicle ID: %s", vehicle_id)
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        url = f"{self._api_base_url}/vehicles/{vehicle_id}/climate"
-        headers = {"Authorization": f"Bearer {self.access_token}"}
-        _LOGGER.debug("HTTP Method: GET | URL: %s", url)
-        _LOGGER.debug("Request Headers: %s", headers)
-
+        headers = await self._api_headers()
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers) as response:
-                response.raise_for_status()
-                _LOGGER.debug("HTTP Response Status: %d", response.status)
-                result = await response.json()
-                _LOGGER.debug("Response Body: %s", result)
-                return result
+            async with session.get(
+                f"{self._V3_BASE}/vehicles/{vehicle_id}/climate",
+                headers=headers,
+            ) as resp:
+                resp.raise_for_status()
+                return await resp.json()
+
+    # ------------------------------------------------------------------
+    # Disconnect
+    # ------------------------------------------------------------------
 
     async def disconnect(self, vehicle_id: str) -> bool:
-        """
-        Disconnect a vehicle from Smartcar.
+        headers = await self._api_headers()
+        async with aiohttp.ClientSession() as session:
+            async with session.delete(
+                f"{self._V3_BASE}/vehicles/{vehicle_id}", headers=headers
+            ) as resp:
+                success = resp.status in (200, 204)
+        if success:
+            self._vehicle_model_cache.pop(vehicle_id, None)
+            self._vehicle_signals_cache.pop(vehicle_id, None)
+        return success
 
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-
-        Returns:
-            bool: True if successful.
-        """
-        _LOGGER.debug("API Call: disconnect | Vehicle ID: %s", vehicle_id)
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        _LOGGER.debug("SDK Method: vehicle.disconnect")
-        vehicle = self._get_vehicle(vehicle_id)
-        await asyncio.to_thread(vehicle.disconnect)
-        if vehicle_id in self._vehicles_cache:
-            del self._vehicles_cache[vehicle_id]
-        _LOGGER.debug("Successfully disconnected vehicle %s", vehicle_id)
-        return True
-
-    async def get_permissions(self, vehicle_id: str) -> List[str]:
-        """
-        Get the list of permissions granted for a vehicle.
-
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-
-        Returns:
-            List[str]: List of permission strings
-                (e.g., 'read_battery', 'control_security').
-        """
-        _LOGGER.debug("API Call: get_permissions | Vehicle ID: %s", vehicle_id)
-        _LOGGER.debug("Access token: %s", self.access_token)
-        _LOGGER.debug("Refresh token: %s", self.refresh_token)
-        _LOGGER.debug("SDK Method: vehicle.permissions")
-        vehicle = self._get_vehicle(vehicle_id)
-        response = await asyncio.to_thread(vehicle.permissions)
-        permissions_dict = _namedtuple_to_dict(response)
-        permissions = permissions_dict.get("permissions", [])
-        _LOGGER.debug("Permissions for vehicle %s: %s", vehicle_id, permissions)
-        return permissions
+    # ------------------------------------------------------------------
+    # Signals / compatibility
+    # ------------------------------------------------------------------
 
     async def get_compatibility_signals(self, make: str, model: str, year: int) -> List[str]:
-        """
-        Get supported signal capability codes for a vehicle model from the Smartcar
-        compatibility API.  This is a public catalog endpoint — no auth token needed.
-
-        Args:
-            make: Vehicle make (e.g. 'NISSAN').
-            model: Vehicle model (e.g. 'Pathfinder').
-            year: Model year (e.g. 2025).
-
-        Returns:
-            List[str]: Capability codes for signals supported by this model/year,
-                       e.g. ['odometer-traveleddistance', 'internalcombustionengine-fuellevel'].
-        """
+        """Get supported signal codes from the public compatibility API (no auth needed)."""
         url = "https://compatibility.api.smartcar.com/v3/compatible-vehicles"
         params = {"filter[make]": make.upper(), "filter[region]": "US"}
-        _LOGGER.debug(
-            "Fetching compatibility signals for %s %s %d", make, model, year
-        )
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params) as response:
-                    if response.status != 200:
-                        _LOGGER.debug(
-                            "Compatibility API returned %d for %s", response.status, make
-                        )
+                async with session.get(url, params=params) as resp:
+                    if resp.status != 200:
                         return []
-                    data = await response.json()
+                    data = await resp.json()
         except Exception as err:
-            _LOGGER.debug("Error calling compatibility API: %s", err)
+            _LOGGER.debug("Compatibility API error: %s", err)
             return []
 
         signals: List[str] = []
@@ -751,10 +405,7 @@ class SmartcarApiClient:
             if signals:
                 _LOGGER.info(
                     "Compatibility API: %d signals for %s %s %d",
-                    len(signals),
-                    make,
-                    model,
-                    year,
+                    len(signals), make, model, year,
                 )
                 return signals
 
@@ -762,40 +413,22 @@ class SmartcarApiClient:
         return []
 
     async def get_vehicle_signals(self, vehicle_id: str, vehicle: Any = None) -> List[str]:
-        """
-        Get the list of available signal capability codes for a vehicle.
-
-        First tries the v3 per-vehicle signals endpoint.  If that returns an error
-        (common outside certain regions), falls back to the public compatibility API
-        using the vehicle's make/model/year.
-
-        Results are cached on the client instance so repeated calls are free.
-
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-            vehicle: Optional Vehicle model object (used for compatibility API fallback).
-
-        Returns:
-            List[str]: Capability codes, e.g. ['odometer-traveleddistance', ...].
-        """
+        """Return available signal codes for a vehicle (cached after first call)."""
         if vehicle_id in self._vehicle_signals_cache:
             return self._vehicle_signals_cache[vehicle_id]
 
         _LOGGER.debug("Fetching signals for vehicle %s", vehicle_id)
+        headers = await self._api_headers()
+        url = f"{self._V3_BASE}/vehicles/{vehicle_id}/signals"
 
-        # Try v3 per-vehicle signals endpoint first
-        url = f"https://vehicle.api.smartcar.com/v3/vehicles/{vehicle_id}/signals"
-        headers = {"Authorization": f"Bearer {self.access_token}"}
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers) as response:
-                    if response.status == 200:
-                        data = await response.json()
+                async with session.get(url, headers=headers) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
                         if "data" in data and isinstance(data["data"], list):
                             all_sigs = data["data"]
 
-                            # Detect PERMISSION errors — vehicle supports these but OAuth token
-                            # lacks the required scope.  Reauth will fix them.
                             permission_codes = [
                                 sig["attributes"]["code"]
                                 for sig in all_sigs
@@ -807,15 +440,12 @@ class SmartcarApiClient:
                             if permission_codes:
                                 self._permission_denied_signals[vehicle_id] = permission_codes
                                 _LOGGER.warning(
-                                    "Vehicle %s: %d signal(s) have PERMISSION errors "
-                                    "(re-authorization required): %s",
+                                    "Vehicle %s: %d signal(s) have PERMISSION errors: %s",
                                     vehicle_id, len(permission_codes), permission_codes,
                                 )
                             else:
                                 self._permission_denied_signals.pop(vehicle_id, None)
 
-                            # Only include signals with SUCCESS status — ERROR means the vehicle
-                            # cannot provide that data (VEHICLE_NOT_CAPABLE or PERMISSION issue).
                             signals = [
                                 sig["attributes"]["code"]
                                 for sig in all_sigs
@@ -827,8 +457,7 @@ class SmartcarApiClient:
                             if signals:
                                 _LOGGER.info(
                                     "v3 signals endpoint: %d signals for vehicle %s",
-                                    len(signals),
-                                    vehicle_id,
+                                    len(signals), vehicle_id,
                                 )
                                 self._vehicle_signals_cache[vehicle_id] = signals
                                 return signals
@@ -836,8 +465,7 @@ class SmartcarApiClient:
                         _LOGGER.debug(
                             "v3 signals endpoint returned %d for vehicle %s — "
                             "falling back to compatibility API",
-                            response.status,
-                            vehicle_id,
+                            resp.status, vehicle_id,
                         )
         except Exception as err:
             _LOGGER.debug("v3 signals endpoint error for %s: %s", vehicle_id, err)
@@ -850,20 +478,17 @@ class SmartcarApiClient:
                 self._vehicle_signals_cache[vehicle_id] = signals
                 return signals
 
-        _LOGGER.warning(
-            "Could not determine signals for vehicle %s — no sensors will be created",
-            vehicle_id,
-        )
+        _LOGGER.warning("Could not determine signals for vehicle %s — no sensors will be created", vehicle_id)
         self._vehicle_signals_cache[vehicle_id] = []
         return []
 
     def get_permission_denied_signals(self, vehicle_id: str) -> List[str]:
-        """Return signal codes that returned PERMISSION errors for the given vehicle.
-
-        These signals are supported by the vehicle hardware but the current OAuth
-        token lacks the required scope.  Re-authorizing the integration will fix them.
-        """
+        """Return signal codes that returned PERMISSION errors for the given vehicle."""
         return self._permission_denied_signals.get(vehicle_id, [])
+
+    # ------------------------------------------------------------------
+    # Vehicle status (bulk signals call)
+    # ------------------------------------------------------------------
 
     @staticmethod
     def _extract_signal_body(sdk_result: dict) -> dict:
@@ -871,13 +496,11 @@ class SmartcarApiClient:
         body = sdk_result.get("body", {})
         if not isinstance(body, dict):
             return {}
-        # JSON:API format: {"data": {"attributes": {"body": {...}}}}
         data = body.get("data")
         if isinstance(data, dict):
             attrs = data.get("attributes", {})
             if isinstance(attrs, dict) and "body" in attrs:
                 return attrs["body"] or {}
-        # Flat format (some endpoints): {"attributes": {"body": {...}}}
         attrs = body.get("attributes", {})
         if isinstance(attrs, dict) and "body" in attrs:
             return attrs["body"] or {}
@@ -892,25 +515,21 @@ class SmartcarApiClient:
         _LOGGER.debug("Applying signal %s body: %s", code, body)
 
         if code == "odometer-traveleddistance":
-            # Body: {"value": 12845.78, "unit": "km"}
             status.setdefault("odometer", {})["distance"] = (
                 body.get("traveledDistance") or body.get("distance") or body.get("value")
             )
 
         elif code == "internalcombustionengine-fuellevel":
-            # Body: {"value": 66.74, "unit": "percent"}
             status.setdefault("fuel", {})["percentRemaining"] = (
                 body.get("fuelLevel") or body.get("percentRemaining") or body.get("value")
             )
 
         elif code == "internalcombustionengine-amountremaining":
-            # Body: {"value": 46.74, "unit": "liters"}
             status.setdefault("fuel", {})["amountRemaining"] = (
                 body.get("amountRemaining") or body.get("value")
             )
 
         elif code == "internalcombustionengine-range":
-            # Body: {"value": 439.35, "unit": "km"}
             status.setdefault("fuel", {})["range"] = (
                 body.get("range") or body.get("value")
             )
@@ -922,8 +541,6 @@ class SmartcarApiClient:
             }
 
         elif code == "wheel-tires":
-            # Body: {"values": [{"row": 0, "column": 0, "tirePressure": 255.1}, ...], "unit": "kPa"}
-            # row=0 → front, row=1 → back; column=0 → left, column=1 → right
             _ROW_COL_TO_POS = {
                 (0, 0): "frontLeft",
                 (0, 1): "frontRight",
@@ -936,7 +553,11 @@ class SmartcarApiClient:
                     continue
                 row = entry.get("row")
                 col = entry.get("column")
-                pressure = entry.get("tirePressure") if entry.get("tirePressure") is not None else entry.get("pressure")
+                pressure = (
+                    entry.get("tirePressure")
+                    if entry.get("tirePressure") is not None
+                    else entry.get("pressure")
+                )
                 pos = _ROW_COL_TO_POS.get((row, col)) if row is not None and col is not None else None
                 if pos and pressure is not None:
                     tires[pos] = {"pressure": pressure}
@@ -944,8 +565,6 @@ class SmartcarApiClient:
                 status["tires"] = tires
 
         elif code == "diagnostics-tirepressure":
-            # This signal is a warning indicator ("OK" / "LOW"), not per-tire pressure values.
-            # Store it as a diagnostic flag; the wheel-tires signal has the actual pressure.
             status.setdefault("diagnostics", {})["tirePressureWarning"] = body.get("status")
 
         elif code == "closure-islocked":
@@ -964,23 +583,18 @@ class SmartcarApiClient:
             status.setdefault("security", {})["engineCover"] = body
 
         elif code == "diagnostics-mil":
-            # Body: {"status": "OK"|"ACTIVE", "description": null}
             status.setdefault("diagnostics", {})["mil"] = body.get("status")
 
         elif code == "diagnostics-abs":
-            # Body: {"status": "OK"|"ACTIVE", "description": null}
             status.setdefault("diagnostics", {})["abs"] = body.get("status")
 
         elif code == "diagnostics-brakefluid":
-            # Body: {"status": "OK"|"LOW", "description": null}
             status.setdefault("diagnostics", {})["brakeFluid"] = body.get("status")
 
         elif code == "diagnostics-airbag":
-            # Body: {"status": "OK"|"DEPLOYED", "description": null}
             status.setdefault("diagnostics", {})["airbag"] = body.get("status")
 
         elif code == "diagnostics-oilpressure":
-            # Body: {"status": "OK"|"LOW", "description": null}
             status.setdefault("diagnostics", {})["oilPressure"] = body.get("status")
 
         elif code == "tractionbattery-stateofcharge":
@@ -1044,42 +658,26 @@ class SmartcarApiClient:
             status[code] = body
 
     async def get_vehicle_status(self, vehicle_id: str) -> Dict[str, Any]:
-        """
-        Get comprehensive vehicle status in a single bulk call to the v3 signals endpoint.
-
-        Fetches all signals at once, filters to SUCCESS-only, and extracts the body
-        directly from the response — no per-signal SDK calls needed.
-
-        Also refreshes the signals cache as a side effect.
-
-        Args:
-            vehicle_id: Smartcar vehicle ID.
-
-        Returns:
-            dict: Structured vehicle status keyed by domain (odometer, fuel, tires, …).
-        """
-        url = f"https://vehicle.api.smartcar.com/v3/vehicles/{vehicle_id}/signals"
-        headers = {"Authorization": f"Bearer {self.access_token}"}
+        """Get comprehensive vehicle status via a single bulk call to the v3 signals endpoint."""
+        headers = await self._api_headers()
+        url = f"{self._V3_BASE}/vehicles/{vehicle_id}/signals"
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers) as response:
-                    if response.status != 200:
+                async with session.get(url, headers=headers) as resp:
+                    if resp.status != 200:
                         _LOGGER.warning(
-                            "Signals endpoint returned %d for vehicle %s — status will be empty",
-                            response.status,
-                            vehicle_id,
+                            "Signals endpoint returned %d for vehicle %s",
+                            resp.status, vehicle_id,
                         )
                         return {}
-                    data = await response.json()
+                    data = await resp.json()
         except Exception as err:
             _LOGGER.error("Failed to fetch vehicle status for %s: %s", vehicle_id, err)
             return {}
 
         signal_list = data.get("data", [])
 
-        # Refresh the signals cache with only SUCCESS codes — keeps it consistent with
-        # what get_vehicle_signals() returns when the v3 endpoint is available.
         success_codes = [
             sig["attributes"]["code"]
             for sig in signal_list
@@ -1091,7 +689,6 @@ class SmartcarApiClient:
         if success_codes:
             self._vehicle_signals_cache[vehicle_id] = success_codes
 
-        # Refresh PERMISSION-denied cache so it stays current after each poll.
         permission_codes = [
             sig["attributes"]["code"]
             for sig in signal_list

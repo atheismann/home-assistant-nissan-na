@@ -15,8 +15,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.event import async_track_time_interval
 
 from .const import (
-    CONF_ACCESS_TOKEN,
-    CONF_REFRESH_TOKEN,
+    CONF_USER_ID,
     DOMAIN,
     PLATFORMS,
 )
@@ -88,17 +87,23 @@ async def async_setup_entry(
         )
         return False
 
-    # OAuth2 implementation stores tokens differently
-    # Extract from token dict if present, otherwise fall back to direct keys
-    token_data = config_entry.data.get("token", {})
-    access_token = token_data.get("access_token") or config_entry.data.get(
-        CONF_ACCESS_TOKEN
-    )
-    refresh_token = token_data.get("refresh_token") or config_entry.data.get(
-        CONF_REFRESH_TOKEN
-    )
+    # user_id is captured once during the Smartcar Connect flow and stored in the entry
+    user_id = config_entry.data.get(CONF_USER_ID)
+    if not user_id:
+        _LOGGER.warning(
+            "No user_id found in config entry — re-authorization required. "
+            "Go to Settings → Integrations → Nissan → Configure → Re-authorize Integration."
+        )
+        hass.async_create_task(
+            hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={"source": config_entries.SOURCE_REAUTH, "entry_id": config_entry.entry_id},
+                data=config_entry.data,
+            )
+        )
+        return False
 
-    # Get client credentials from implementation
+    # Get client credentials from the application_credentials implementation
     try:
         implementation = (
             await config_entry_oauth2_flow.async_get_config_entry_implementation(
@@ -116,57 +121,25 @@ async def async_setup_entry(
     client_secret = implementation.client_secret
     redirect_uri = implementation.redirect_uri
 
-    # Validate OAuth credentials are present
     if not client_id or not client_secret:
         _LOGGER.error(
             "OAuth credentials are not configured. "
-            "Please configure Application Credentials for Nissan NA "
-            "in Home Assistant settings, then remove and re-add this "
-            "integration."
+            "Please configure Application Credentials for Nissan NA."
         )
         return False
 
-    # Initialize Smartcar client
+    # Initialize Smartcar client (uses client-credentials tokens automatically)
     client = SmartcarApiClient(
         client_id=client_id,
         client_secret=client_secret,
         redirect_uri=redirect_uri,
-        access_token=access_token,
-        refresh_token=refresh_token,
+        user_id=user_id,
     )
-
-    async def refresh_and_update_token():
-        """Refresh access token and update config entry."""
-        try:
-            _LOGGER.debug("Attempting to refresh access token")
-            new_tokens = await client.refresh_access_token()
-
-            # Update config entry with new tokens
-            new_data = {**config_entry.data}
-
-            # Update token dict if it exists, otherwise update direct keys
-            if "token" in new_data:
-                new_data["token"] = {
-                    **new_data["token"],
-                    "access_token": new_tokens["access_token"],
-                    "refresh_token": new_tokens["refresh_token"],
-                }
-            else:
-                new_data[CONF_ACCESS_TOKEN] = new_tokens["access_token"]
-                new_data[CONF_REFRESH_TOKEN] = new_tokens["refresh_token"]
-
-            hass.config_entries.async_update_entry(config_entry, data=new_data)
-            _LOGGER.info("Successfully refreshed and saved access token")
-            return True
-        except Exception as refresh_err:
-            _LOGGER.error("Failed to refresh token: %s", refresh_err)
-            return False
 
     # Store client in hass data
     hass.data[DOMAIN][config_entry.entry_id] = {
         "client": client,
         "vehicles": [],
-        "refresh_token_func": refresh_and_update_token,
     }
 
     # Get initial vehicle list
@@ -205,144 +178,37 @@ async def async_setup_entry(
                 vehicle.vin,
             )
     except Exception as err:
-        error_message = str(err)
-        _LOGGER.error("Failed to get vehicle list: %s", error_message)
-
-        # Check if it's an authentication error
-        if (
-            "AUTHENTICATION" in error_message
-            or "authentication" in error_message.lower()
-        ):
-            _LOGGER.warning("Authentication error detected - attempting token refresh")
-
-            # Try to refresh the token first
-            if await refresh_and_update_token():
-                # Retry getting vehicle list with new token
-                try:
-                    vehicles = await client.get_vehicle_list()
-                    hass.data[DOMAIN][config_entry.entry_id]["vehicles"] = vehicles
-                    _LOGGER.info(
-                        "Successfully retrieved %d vehicle(s) after token refresh",
-                        len(vehicles),
-                    )
-                except Exception as retry_err:
-                    _LOGGER.error("Still failed after token refresh: %s", retry_err)
-                    # Token refresh didn't help, trigger reauth
-                    hass.async_create_task(
-                        hass.config_entries.flow.async_init(
-                            DOMAIN,
-                            context={
-                                "source": config_entries.SOURCE_REAUTH,
-                                "entry_id": config_entry.entry_id,
-                            },
-                            data=config_entry.data,
-                        )
-                    )
-                    return False
-            else:
-                # Token refresh failed, trigger reauth
-                _LOGGER.warning("Token refresh failed - triggering reauth flow")
-                hass.async_create_task(
-                    hass.config_entries.flow.async_init(
-                        DOMAIN,
-                        context={
-                            "source": config_entries.SOURCE_REAUTH,
-                            "entry_id": config_entry.entry_id,
-                        },
-                        data=config_entry.data,
-                    )
-                )
-                return False
-        else:
-            return False
+        _LOGGER.error("Failed to get vehicle list: %s", err)
+        return False
 
     # Periodic update interval (default 60 minutes / 1 hour, can be changed in options)
     update_minutes = config_entry.options.get("update_interval", 60)
 
     async def async_update_all_vehicles(now):
         """Update all vehicles periodically from API and refresh sensor entities."""
-        try:
-            # Get client from hass.data
-            data = hass.data[DOMAIN].get(config_entry.entry_id)
-            if not data:
-                _LOGGER.warning("Client not found for entry %s", config_entry.entry_id)
-                return
-            client = data["client"]
+        data = hass.data[DOMAIN].get(config_entry.entry_id)
+        if not data:
+            _LOGGER.warning("Integration data not found for entry %s", config_entry.entry_id)
+            return
+        client = data["client"]
 
-            # Refresh access token and save to config entry
-            refresh_func = data.get("refresh_token_func")
-            if refresh_func:
-                await refresh_func()
+        for vehicle in data["vehicles"]:
+            try:
+                await client.get_vehicle_status(vehicle.id)
+                _LOGGER.debug("Updated vehicle %s from API", vehicle.vin)
 
-            # Update vehicle data
-            vehicles = data["vehicles"]
-            for vehicle in vehicles:
-                try:
-                    await client.get_vehicle_status(vehicle.id)
-                    _LOGGER.debug("Updated vehicle %s from API", vehicle.vin)
-                    
-                    # Refresh all sensor entities for this vehicle
-                    if "sensors" in data and vehicle.id in data["sensors"]:
-                        for sensor in data["sensors"][vehicle.id].values():
-                            try:
-                                await sensor.async_update()
-                            except Exception as err:
-                                _LOGGER.debug("Failed to update sensor %s: %s", sensor._attr_name, err)
-                except Exception as err:
-                    error_msg = str(err)
-                    _LOGGER.error(
-                        "Failed to update vehicle %s: %s", vehicle.vin, error_msg
-                    )
-
-                    # Check for authentication errors
-                    if (
-                        "AUTHENTICATION" in error_msg
-                        or "authentication" in error_msg.lower()
-                    ):
-                        _LOGGER.warning(
-                            "Authentication error during update - trying token refresh"
-                        )
-
-                        # Try to refresh token
-                        refresh_func = data.get("refresh_token_func")
-                        if refresh_func and await refresh_func():
-                            _LOGGER.info(
-                                "Token refreshed successfully, continuing updates"
+                if "sensors" in data and vehicle.id in data["sensors"]:
+                    for sensor in data["sensors"][vehicle.id].values():
+                        try:
+                            await sensor.async_update()
+                        except Exception as sensor_err:
+                            _LOGGER.debug(
+                                "Failed to update sensor %s: %s",
+                                getattr(sensor, "_attr_name", "unknown"),
+                                sensor_err,
                             )
-                            # Don't return, continue with other vehicles
-                        else:
-                            # Refresh failed, trigger reauth
-                            _LOGGER.warning("Token refresh failed - triggering reauth")
-                            hass.async_create_task(
-                                hass.config_entries.flow.async_init(
-                                    DOMAIN,
-                                    context={
-                                        "source": config_entries.SOURCE_REAUTH,
-                                        "entry_id": config_entry.entry_id,
-                                    },
-                                    data=config_entry.data,
-                                )
-                            )
-                            return
-        except Exception as err:
-            error_msg = str(err)
-            _LOGGER.error("Failed to refresh token: %s", error_msg)
-
-            # Check for authentication errors during the main refresh attempt
-            if "AUTHENTICATION" in error_msg or "authentication" in error_msg.lower():
-                _LOGGER.warning(
-                    "Authentication error during periodic refresh - triggering reauth"
-                )
-                hass.async_create_task(
-                    hass.config_entries.flow.async_init(
-                        DOMAIN,
-                        context={
-                            "source": config_entries.SOURCE_REAUTH,
-                            "entry_id": config_entry.entry_id,
-                        },
-                        data=config_entry.data,
-                    )
-                )
+            except Exception as err:
+                _LOGGER.error("Failed to update vehicle %s: %s", vehicle.vin, err)
 
     # Schedule periodic updates and store unsub function
     update_listener = async_track_time_interval(
