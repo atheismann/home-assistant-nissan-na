@@ -7,9 +7,6 @@ import logging
 from datetime import timedelta
 
 from homeassistant.components import webhook as ha_webhook
-from homeassistant.helpers.config_entry_oauth2_flow import (
-    async_get_config_entry_implementation,
-)
 from homeassistant import config_entries
 from homeassistant.const import CONF_WEBHOOK_ID
 from homeassistant.core import HomeAssistant
@@ -97,23 +94,14 @@ async def async_setup_entry(
         )
         return False
 
-    # Load client credentials from Application Credentials storage
-    try:
-        implementation = await async_get_config_entry_implementation(hass, config_entry)
-    except KeyError:
-        _LOGGER.error(
-            "OAuth implementation not found. "
-            "Please remove and re-add the integration."
-        )
-        return False
-
-    client_id = implementation.client_id
-    client_secret = implementation.client_secret
+    # Load client credentials from config entry data
+    client_id = config_entry.data.get("client_id")
+    client_secret = config_entry.data.get("client_secret")
 
     if not client_id or not client_secret:
         _LOGGER.error(
             "API credentials are not configured. "
-            "Please configure Application Credentials for Nissan NA."
+            "Please remove and re-add the integration."
         )
         return False
 

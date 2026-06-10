@@ -1,25 +1,50 @@
 {
   "config": {
     "step": {
-      "pick_implementation": {
-        "title": "Nissan North America (Smartcar)"
+      "user": {
+        "title": "Smartcar API Credentials",
+        "description": "Enter your Smartcar API credentials from the [Smartcar Dashboard]({dashboard_url}) → API Credentials tab.",
+        "data": {
+          "client_id": "Client ID",
+          "client_secret": "Client Secret"
+        }
+      },
+      "connect": {
+        "title": "Authorize Vehicle Access",
+        "description": "Open the Smartcar Connect link below to authorize your vehicle:\n\n[Open Smartcar Connect]({connect_url})\n\nAfter authorizing, Smartcar will redirect you to:\n`{redirect_uri}?user_id=...`\n\nCopy the `user_id` value from that URL and paste it below.",
+        "data": {
+          "user_id": "User ID (from redirect URL)"
+        }
       },
       "reauth_confirm": {
         "title": "Reauthorize Integration",
-        "description": "The Nissan NA integration needs to be reauthorized. Please confirm to continue."
+        "description": "The Nissan NA integration needs to be reauthorized. Click Submit to update your credentials."
+      },
+      "reauth_user": {
+        "title": "Update API Credentials",
+        "description": "Enter your Smartcar API credentials from the [Smartcar Dashboard]({dashboard_url}) → API Credentials tab.",
+        "data": {
+          "client_id": "Client ID",
+          "client_secret": "Client Secret"
+        }
+      },
+      "reauth_connect": {
+        "title": "Re-authorize Vehicle Access",
+        "description": "Open the Smartcar Connect link below to re-authorize your vehicle:\n\n[Open Smartcar Connect]({connect_url})\n\nAfter authorizing, copy the `user_id` from the redirect URL and paste it below.",
+        "data": {
+          "user_id": "User ID (from redirect URL)"
+        }
       }
     },
     "error": {
-      "connection_error": "Unable to connect to Smartcar. Please try again."
+      "invalid_credentials": "Invalid Client ID or Client Secret. Please check your Smartcar Dashboard.",
+      "connection_error": "Unable to connect to Smartcar. Please try again.",
+      "no_vehicles": "No vehicles found for this user ID. Ensure your vehicle is connected in Smartcar."
     },
     "abort": {
       "already_configured": "This Smartcar application is already configured",
-      "no_vehicles": "No vehicles found on your Smartcar account. Please ensure your Nissan vehicle is connected.",
-      "connection_error": "Failed to connect to Smartcar API. Please check your credentials and try again.",
-      "missing_credentials": "API credentials not configured. Please set up Application Credentials in Home Assistant settings first.",
-      "missing_user_id": "Smartcar Connect did not return a user ID. Ensure your application is using the v3 API in the Smartcar Dashboard.",
       "reauth_successful": "Reauthorization successful",
-      "reauth_triggered": "Reauthorization started. Please complete the OAuth flow in the notifications.",
+      "reauth_triggered": "Reauthorization started. Please follow the prompts.",
       "integration_not_loaded": "Integration data not found. Please reload the integration.",
       "no_sensors_found": "No sensors found to refresh.",
       "refresh_failed": "Failed to refresh sensors. Please check the logs for details.",
@@ -51,9 +76,6 @@
         }
       }
     }
-  },
-  "application_credentials": {
-    "description": "Follow these steps to set up your Smartcar API credentials:\n\n1. Visit [Smartcar Dashboard](https://dashboard.smartcar.com)\n2. Create or open your application\n3. Under **API Credentials**, click **Create Secret** to generate a Client ID and Client Secret\n4. Under **Redirect URIs**, add: `https://my.home-assistant.io/redirect/oauth`\n5. Copy your Client ID and Client Secret below\n\nAfter saving, you will be redirected to Smartcar Connect to authorize your vehicle. No token exchange is required — only the user ID from the redirect is captured.\n\nFor detailed instructions, see [setup guide]({more_info_url})"
   },
   "entity": {
     "sensor": {

@@ -25,7 +25,7 @@ class TestAuthorizationServer:
         """Test AUTHORIZATION_SERVER has correct token URL"""
         from custom_components.nissan_na.application_credentials import AUTHORIZATION_SERVER
         
-        assert AUTHORIZATION_SERVER.token_url == "https://connect.smartcar.com/oauth/token"
+        assert AUTHORIZATION_SERVER.token_url == "https://iam.smartcar.com/oauth2/token"
 
 
 class TestAsyncGetAuthorizationServer:

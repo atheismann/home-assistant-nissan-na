@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 # occurs — the redirect params are read directly by the config flow.
 AUTHORIZATION_SERVER = AuthorizationServer(
     authorize_url="https://connect.smartcar.com/oauth/authorize",
-    token_url="https://connect.smartcar.com/oauth/token",
+    token_url="https://iam.smartcar.com/oauth2/token",
 )
 
 
