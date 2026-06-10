@@ -84,7 +84,8 @@ class SmartcarApiClient:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 self._IAM_TOKEN_URL,
-                json={
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                data={
                     "grant_type": "client_credentials",
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
@@ -165,18 +166,11 @@ class SmartcarApiClient:
             data = resp.json()
 
         vehicles: List[Vehicle] = []
-        for conn in data.get("data", []):
-            # v3 JSON:API format: vehicleId is in relationships.vehicle.data.id
-            relationships = conn.get("relationships", {})
-            vehicle_id = (
-                relationships.get("vehicle", {}).get("data", {}).get("id")
-                or conn.get("vehicleId")
-                or conn.get("attributes", {}).get("vehicleId")
-            )
+        for conn in data.get("connections", []):
+            vehicle_id = conn.get("vehicleId")
             if not vehicle_id:
                 continue
-            # Vehicle make/model/year are embedded in attributes.vehicle — no extra round-trip needed
-            embedded = conn.get("attributes", {}).get("vehicle", {})
+            embedded: Dict[str, Any] = {}
             try:
                 vehicle = await self._fetch_vehicle_attributes(vehicle_id, headers, embedded)
                 vehicles.append(vehicle)

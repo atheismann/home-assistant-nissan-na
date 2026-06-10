@@ -164,7 +164,7 @@ class TestGetVehicleList:
         client = _make_client()
 
         connections_response = {
-            "data": [{"vehicleId": "vehicle_1"}, {"vehicleId": "vehicle_2"}]
+            "connections": [{"vehicleId": "vehicle_1"}, {"vehicleId": "vehicle_2"}]
         }
         attrs_response = {"data": {"attributes": {"make": "NISSAN", "model": "Pathfinder", "year": 2025}}}
         vin_response = {"data": {"attributes": {"vin": "TESTVIN123"}}}
