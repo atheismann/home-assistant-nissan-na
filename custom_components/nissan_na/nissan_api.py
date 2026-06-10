@@ -6,13 +6,13 @@ initial Smartcar Connect flow.  No per-user refresh tokens are stored —
 a short-lived application token is fetched automatically as needed.
 """
 
-import asyncio
+import base64
 import logging
 import time
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlencode
 
-import aiohttp
-import smartcar
+import httpx
 from pydantic import BaseModel
 
 _LOGGER = logging.getLogger(__name__)
@@ -52,6 +52,7 @@ class SmartcarApiClient:
     """
 
     _IAM_TOKEN_URL = "https://iam.smartcar.com/oauth2/token"
+    _USER_URL = "https://api.smartcar.com/v2.0/user"
     _V3_BASE = "https://vehicle.api.smartcar.com/v3"
 
     def __init__(
@@ -84,8 +85,8 @@ class SmartcarApiClient:
         if self._cc_token and time.monotonic() < self._cc_token_expires_at:
             return self._cc_token
 
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
                 self._IAM_TOKEN_URL,
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
                 data={
@@ -93,13 +94,12 @@ class SmartcarApiClient:
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
                 },
-            ) as resp:
-                if resp.status != 200:
-                    text = await resp.text()
-                    raise ValueError(
-                        f"Client-credentials token request failed ({resp.status}): {text}"
-                    )
-                data = await resp.json()
+            )
+            if resp.status_code != 200:
+                raise ValueError(
+                    f"Client-credentials token request failed ({resp.status_code}): {resp.text}"
+                )
+            data = resp.json()
 
         token: str = data["access_token"]
         self._cc_token = token
@@ -117,17 +117,44 @@ class SmartcarApiClient:
         return headers
 
     # ------------------------------------------------------------------
+    # Generic v3 HTTP helpers
+    # ------------------------------------------------------------------
+
+    async def _v3_get(self, vehicle_id: str, path: str) -> Dict[str, Any]:
+        """GET a v3 vehicle endpoint and return the attributes dict."""
+        headers = await self._api_headers()
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{self._V3_BASE}/vehicles/{vehicle_id}/{path}",
+                headers=headers,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        node = data.get("data", {})
+        if isinstance(node, dict):
+            return node.get("attributes", data)
+        return data
+
+    async def _v3_post(
+        self, vehicle_id: str, path: str, body: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """POST to a v3 vehicle endpoint and return the full JSON response."""
+        headers = await self._api_headers()
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"{self._V3_BASE}/vehicles/{vehicle_id}/{path}",
+                headers=headers,
+                json=body,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+    # ------------------------------------------------------------------
     # Initial OAuth flow (Smartcar Connect — runs once to capture user_id)
     # ------------------------------------------------------------------
 
     def get_auth_url(self, state: Optional[str] = None) -> str:
         """Generate Smartcar OAuth authorization URL."""
-        client = smartcar.AuthClient(
-            client_id=self.client_id,
-            client_secret=self.client_secret,
-            redirect_uri=self.redirect_uri,
-            mode="test" if self.test_mode else "live",
-        )
         scope = [
             "required:read_vehicle_info",
             "required:read_location",
@@ -139,25 +166,54 @@ class SmartcarApiClient:
             "control_charge",
             "read_fuel",
         ]
-        options: Dict[str, Any] = {"make_bypass": "NISSAN"}
+        params: Dict[str, Any] = {
+            "response_type": "code",
+            "client_id": self.client_id,
+            "redirect_uri": self.redirect_uri,
+            "scope": " ".join(scope),
+            "mode": "test" if self.test_mode else "live",
+            "make": "NISSAN",
+        }
         if state:
-            options["state"] = state
-        return client.get_auth_url(scope=scope, options=options)
+            params["state"] = state
+        return f"https://connect.smartcar.com/oauth/authorize?{urlencode(params)}"
 
     async def authenticate(self, code: str) -> Dict[str, Any]:
         """Exchange authorization code and capture user_id.
 
-        The access/refresh tokens from the code exchange are discarded after
-        extracting the user_id.  Subsequent calls use client-credentials tokens.
+        The access token from the code exchange is used only to fetch user_id
+        and then discarded.  All subsequent calls use client-credentials tokens.
         """
-        auth_client = smartcar.AuthClient(
-            client_id=self.client_id,
-            client_secret=self.client_secret,
-            redirect_uri=self.redirect_uri,
-        )
-        tokens = await asyncio.to_thread(auth_client.exchange_code, code)
-        user_resp = await asyncio.to_thread(smartcar.get_user, tokens.access_token)
-        self.user_id = user_resp.id
+        credentials = base64.b64encode(
+            f"{self.client_id}:{self.client_secret}".encode()
+        ).decode()
+
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                self._IAM_TOKEN_URL,
+                headers={
+                    "Authorization": f"Basic {credentials}",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                data={
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": self.redirect_uri,
+                },
+            )
+            if resp.status_code != 200:
+                raise ValueError(f"Code exchange failed ({resp.status_code}): {resp.text}")
+            token_data = resp.json()
+
+            resp = await client.get(
+                self._USER_URL,
+                headers={"Authorization": f"Bearer {token_data['access_token']}"},
+            )
+            if resp.status_code != 200:
+                raise ValueError(f"User fetch failed ({resp.status_code}): {resp.text}")
+            user_data = resp.json()
+
+        self.user_id = user_data.get("id")
         _LOGGER.debug("Smartcar Connect complete — user_id: %s", self.user_id)
         self._vehicle_signals_cache.clear()
         self._permission_denied_signals.clear()
@@ -173,24 +229,31 @@ class SmartcarApiClient:
             raise ValueError("user_id is not set. Run authenticate() first.")
 
         headers = await self._api_headers()
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
                 f"{self._V3_BASE}/connections",
                 headers=headers,
                 params={"filter[user_id]": self.user_id},
-            ) as resp:
-                if resp.status != 200:
-                    text = await resp.text()
-                    raise ValueError(f"Connections API failed ({resp.status}): {text}")
-                data = await resp.json()
+            )
+            if resp.status_code != 200:
+                raise ValueError(f"Connections API failed ({resp.status_code}): {resp.text}")
+            data = resp.json()
 
         vehicles: List[Vehicle] = []
         for conn in data.get("data", []):
-            vehicle_id = conn.get("vehicleId") or conn.get("attributes", {}).get("vehicleId")
+            # v3 JSON:API format: vehicleId is in relationships.vehicle.data.id
+            relationships = conn.get("relationships", {})
+            vehicle_id = (
+                relationships.get("vehicle", {}).get("data", {}).get("id")
+                or conn.get("vehicleId")
+                or conn.get("attributes", {}).get("vehicleId")
+            )
             if not vehicle_id:
                 continue
+            # Vehicle make/model/year are embedded in attributes.vehicle — no extra round-trip needed
+            embedded = conn.get("attributes", {}).get("vehicle", {})
             try:
-                vehicle = await self._fetch_vehicle_attributes(vehicle_id, headers)
+                vehicle = await self._fetch_vehicle_attributes(vehicle_id, headers, embedded)
                 vehicles.append(vehicle)
                 self._vehicle_model_cache[vehicle_id] = vehicle
             except Exception as err:
@@ -199,22 +262,46 @@ class SmartcarApiClient:
         return vehicles
 
     async def _fetch_vehicle_attributes(
-        self, vehicle_id: str, headers: Optional[Dict[str, str]] = None
+        self, vehicle_id: str, headers: Optional[Dict[str, str]] = None,
+        embedded: Optional[Dict[str, Any]] = None,
     ) -> Vehicle:
-        """Fetch make/model/year and VIN via direct v3 HTTP calls."""
+        """Fetch make/model/year and VIN via v3 HTTP calls.
+
+        If `embedded` is provided (from the connections response attributes),
+        only a VIN fetch is performed if the VIN is absent from the embedded data.
+        """
         if headers is None:
             headers = await self._api_headers()
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                f"{self._V3_BASE}/vehicles/{vehicle_id}", headers=headers
-            ) as resp:
-                attrs_data = await resp.json() if resp.status == 200 else {}
+        # Use embedded vehicle info from connections payload if available
+        if embedded:
+            make = embedded.get("make")
+            model = embedded.get("model")
+            year_raw = embedded.get("year")
+            vin = embedded.get("vin", "")
 
-            async with session.get(
+            # If VIN is missing, fetch it separately
+            if not vin:
+                async with httpx.AsyncClient() as client:
+                    resp = await client.get(
+                        f"{self._V3_BASE}/vehicles/{vehicle_id}/vin", headers=headers
+                    )
+                    vin_data = resp.json() if resp.status_code == 200 else {}
+                vin = vin_data.get("data", {}).get("attributes", {}).get("vin", "")
+
+            year = int(year_raw) if year_raw else None
+            return Vehicle(id=vehicle_id, vin=vin, make=make, model=model, year=year)
+
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
+                f"{self._V3_BASE}/vehicles/{vehicle_id}", headers=headers
+            )
+            attrs_data = resp.json() if resp.status_code == 200 else {}
+
+            resp = await client.get(
                 f"{self._V3_BASE}/vehicles/{vehicle_id}/vin", headers=headers
-            ) as resp:
-                vin_data = await resp.json() if resp.status == 200 else {}
+            )
+            vin_data = resp.json() if resp.status_code == 200 else {}
 
         attrs = attrs_data.get("data", {}).get("attributes", {})
         vin_attrs = vin_data.get("data", {}).get("attributes", {})
@@ -242,118 +329,99 @@ class SmartcarApiClient:
         return {"id": vehicle_id, "make": vehicle.make, "model": vehicle.model, "year": vehicle.year, "vin": vehicle.vin}
 
     # ------------------------------------------------------------------
-    # SDK-based read methods (use cc token via smartcar.Vehicle)
+    # Read methods (direct v3 HTTP)
     # ------------------------------------------------------------------
-
-    async def _sdk_vehicle(self, vehicle_id: str) -> smartcar.Vehicle:
-        """Return a smartcar.Vehicle instance with a fresh cc access token."""
-        token = await self._get_access_token()
-        return smartcar.Vehicle(vehicle_id, token)
 
     async def get_vehicle_location(self, vehicle_id: str) -> Dict[str, Any]:
-        vehicle = await self._sdk_vehicle(vehicle_id)
-        return _namedtuple_to_dict(await asyncio.to_thread(vehicle.location))
+        return await self._v3_get(vehicle_id, "location")
 
     async def get_battery_level(self, vehicle_id: str) -> Dict[str, Any]:
-        vehicle = await self._sdk_vehicle(vehicle_id)
-        return _namedtuple_to_dict(await asyncio.to_thread(vehicle.battery))
+        return await self._v3_get(vehicle_id, "battery")
 
     async def get_battery_capacity(self, vehicle_id: str) -> Dict[str, Any]:
-        vehicle = await self._sdk_vehicle(vehicle_id)
-        return _namedtuple_to_dict(await asyncio.to_thread(vehicle.battery_capacity))
+        return await self._v3_get(vehicle_id, "battery/capacity")
 
     async def get_charge_status(self, vehicle_id: str) -> Dict[str, Any]:
-        vehicle = await self._sdk_vehicle(vehicle_id)
-        return _namedtuple_to_dict(await asyncio.to_thread(vehicle.charge))
+        return await self._v3_get(vehicle_id, "charge")
 
     async def get_odometer(self, vehicle_id: str) -> Dict[str, Any]:
-        vehicle = await self._sdk_vehicle(vehicle_id)
-        return _namedtuple_to_dict(await asyncio.to_thread(vehicle.odometer))
+        return await self._v3_get(vehicle_id, "odometer")
 
     async def get_fuel_level(self, vehicle_id: str) -> Dict[str, Any]:
-        vehicle = await self._sdk_vehicle(vehicle_id)
-        return _namedtuple_to_dict(await asyncio.to_thread(vehicle.fuel))
+        return await self._v3_get(vehicle_id, "fuel")
 
     async def get_lock_status(self, vehicle_id: str) -> Dict[str, Any]:
-        vehicle = await self._sdk_vehicle(vehicle_id)
-        return _namedtuple_to_dict(await asyncio.to_thread(vehicle.lock_status))
+        return await self._v3_get(vehicle_id, "security")
 
     async def get_tire_pressure(self, vehicle_id: str) -> Dict[str, Any]:
-        vehicle = await self._sdk_vehicle(vehicle_id)
-        return _namedtuple_to_dict(await asyncio.to_thread(vehicle.tires))
+        return await self._v3_get(vehicle_id, "tires/pressure")
 
     async def get_engine_oil(self, vehicle_id: str) -> Dict[str, Any]:
-        vehicle = await self._sdk_vehicle(vehicle_id)
-        return _namedtuple_to_dict(await asyncio.to_thread(vehicle.engine_oil))
+        return await self._v3_get(vehicle_id, "engine/oil")
 
     async def get_permissions(self, vehicle_id: str) -> List[str]:
-        vehicle = await self._sdk_vehicle(vehicle_id)
-        response = await asyncio.to_thread(vehicle.permissions)
-        return _namedtuple_to_dict(response).get("permissions", [])
+        data = await self._v3_get(vehicle_id, "permissions")
+        return data.get("permissions", [])
 
     # ------------------------------------------------------------------
-    # Vehicle action methods
+    # Vehicle action methods (direct v3 HTTP)
     # ------------------------------------------------------------------
 
     async def lock_doors(self, vehicle_id: str) -> Dict[str, Any]:
-        vehicle = await self._sdk_vehicle(vehicle_id)
-        result = await asyncio.to_thread(vehicle.lock)
+        result = await self._v3_post(vehicle_id, "security", {"action": "LOCK"})
         _LOGGER.debug("Lock command sent for vehicle %s", vehicle_id)
-        return _namedtuple_to_dict(result)
+        return result
 
     async def unlock_doors(self, vehicle_id: str) -> Dict[str, Any]:
-        vehicle = await self._sdk_vehicle(vehicle_id)
-        result = await asyncio.to_thread(vehicle.unlock)
+        result = await self._v3_post(vehicle_id, "security", {"action": "UNLOCK"})
         _LOGGER.debug("Unlock command sent for vehicle %s", vehicle_id)
-        return _namedtuple_to_dict(result)
+        return result
 
     async def start_charge(self, vehicle_id: str) -> Dict[str, Any]:
-        vehicle = await self._sdk_vehicle(vehicle_id)
-        result = await asyncio.to_thread(vehicle.start_charge)
+        result = await self._v3_post(vehicle_id, "charge", {"action": "START"})
         _LOGGER.debug("Start charge command sent for vehicle %s", vehicle_id)
-        return _namedtuple_to_dict(result)
+        return result
 
     async def stop_charge(self, vehicle_id: str) -> Dict[str, Any]:
-        vehicle = await self._sdk_vehicle(vehicle_id)
-        result = await asyncio.to_thread(vehicle.stop_charge)
+        result = await self._v3_post(vehicle_id, "charge", {"action": "STOP"})
         _LOGGER.debug("Stop charge command sent for vehicle %s", vehicle_id)
-        return _namedtuple_to_dict(result)
+        return result
 
     # ------------------------------------------------------------------
-    # Climate control (direct HTTP — not in SDK)
+    # Climate control (direct HTTP)
     # ------------------------------------------------------------------
 
     async def start_climate(self, vehicle_id: str) -> Dict[str, Any]:
         headers = await self._api_headers()
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
                 f"{self._V3_BASE}/vehicles/{vehicle_id}/climate",
                 headers=headers,
                 json={"action": "START"},
-            ) as resp:
-                resp.raise_for_status()
-                return await resp.json()
+            )
+            resp.raise_for_status()
+            return resp.json()
 
     async def stop_climate(self, vehicle_id: str) -> Dict[str, Any]:
         headers = await self._api_headers()
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
                 f"{self._V3_BASE}/vehicles/{vehicle_id}/climate",
                 headers=headers,
                 json={"action": "STOP"},
-            ) as resp:
-                resp.raise_for_status()
-                return await resp.json()
+            )
+            resp.raise_for_status()
+            return resp.json()
 
     async def get_climate_status(self, vehicle_id: str) -> Dict[str, Any]:
         headers = await self._api_headers()
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(
                 f"{self._V3_BASE}/vehicles/{vehicle_id}/climate",
                 headers=headers,
-            ) as resp:
-                resp.raise_for_status()
-                return await resp.json()
+            )
+            resp.raise_for_status()
+            return resp.json()
 
     # ------------------------------------------------------------------
     # Disconnect
@@ -361,11 +429,11 @@ class SmartcarApiClient:
 
     async def disconnect(self, vehicle_id: str) -> bool:
         headers = await self._api_headers()
-        async with aiohttp.ClientSession() as session:
-            async with session.delete(
+        async with httpx.AsyncClient() as client:
+            resp = await client.delete(
                 f"{self._V3_BASE}/vehicles/{vehicle_id}", headers=headers
-            ) as resp:
-                success = resp.status in (200, 204)
+            )
+            success = resp.status_code in (200, 204)
         if success:
             self._vehicle_model_cache.pop(vehicle_id, None)
             self._vehicle_signals_cache.pop(vehicle_id, None)
@@ -380,11 +448,11 @@ class SmartcarApiClient:
         url = "https://compatibility.api.smartcar.com/v3/compatible-vehicles"
         params = {"filter[make]": make.upper(), "filter[region]": "US"}
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, params=params) as resp:
-                    if resp.status != 200:
-                        return []
-                    data = await resp.json()
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, params=params)
+                if resp.status_code != 200:
+                    return []
+                data = resp.json()
         except Exception as err:
             _LOGGER.debug("Compatibility API error: %s", err)
             return []
@@ -422,11 +490,11 @@ class SmartcarApiClient:
         url = f"{self._V3_BASE}/vehicles/{vehicle_id}/signals"
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers) as resp:
-                    if resp.status == 200:
-                        data = await resp.json()
-                        if "data" in data and isinstance(data["data"], list):
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, headers=headers)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    if "data" in data and isinstance(data["data"], list):
                             all_sigs = data["data"]
 
                             permission_codes = [
@@ -461,12 +529,12 @@ class SmartcarApiClient:
                                 )
                                 self._vehicle_signals_cache[vehicle_id] = signals
                                 return signals
-                    else:
-                        _LOGGER.debug(
-                            "v3 signals endpoint returned %d for vehicle %s — "
-                            "falling back to compatibility API",
-                            resp.status, vehicle_id,
-                        )
+                else:
+                    _LOGGER.debug(
+                        "v3 signals endpoint returned %d for vehicle %s — "
+                        "falling back to compatibility API",
+                        resp.status_code, vehicle_id,
+                    )
         except Exception as err:
             _LOGGER.debug("v3 signals endpoint error for %s: %s", vehicle_id, err)
 
@@ -663,15 +731,15 @@ class SmartcarApiClient:
         url = f"{self._V3_BASE}/vehicles/{vehicle_id}/signals"
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, headers=headers) as resp:
-                    if resp.status != 200:
-                        _LOGGER.warning(
-                            "Signals endpoint returned %d for vehicle %s",
-                            resp.status, vehicle_id,
-                        )
-                        return {}
-                    data = await resp.json()
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, headers=headers)
+                if resp.status_code != 200:
+                    _LOGGER.warning(
+                        "Signals endpoint returned %d for vehicle %s",
+                        resp.status_code, vehicle_id,
+                    )
+                    return {}
+                data = resp.json()
         except Exception as err:
             _LOGGER.error("Failed to fetch vehicle status for %s: %s", vehicle_id, err)
             return {}

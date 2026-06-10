@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, AsyncMock, patch
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import config_entry_oauth2_flow
 from custom_components.nissan_na.config_flow import (
     OAuth2FlowHandler,
     NissanNAOptionsFlowHandler,
@@ -34,17 +35,67 @@ class TestOAuth2FlowHandler:
         assert "read_battery" in extra_data["scope"]
         assert "control_charge" in extra_data["scope"]
 
-    async def test_async_oauth_create_entry_success(self):
-        """Test successful OAuth entry creation captures user_id via client-credentials."""
+    async def test_async_oauth_create_entry_user_id_from_redirect(self):
+        """Test user_id is taken from Connect redirect URL (new auth flow) with no API call."""
         flow = OAuth2FlowHandler()
         flow.hass = MagicMock()
         flow.flow_impl = MagicMock()
         flow.flow_impl.client_id = "test_client_id"
         flow.flow_impl.client_secret = "test_client_secret"
         flow.flow_impl.redirect_uri = "https://example.com/redirect"
+        # Simulate userId captured from the Connect redirect
+        flow._smartcar_user_id = "redirect_user_456"
 
-        mock_user = MagicMock()
-        mock_user.id = "sc_user_123"
+        mock_vehicle = MagicMock()
+        mock_vehicle.id = "vehicle_123"
+
+        data = {
+            "token": {
+                "access_token": "test_access",
+                "refresh_token": "test_refresh",
+            }
+        }
+
+        with patch("custom_components.nissan_na.config_flow.SmartcarApiClient") as mock_client_class:
+            mock_client = MagicMock()
+            mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
+            mock_client_class.return_value = mock_client
+
+            result = await flow.async_oauth_create_entry(data)
+
+            assert result["type"] == "create_entry"
+            assert result["data"]["user_id"] == "redirect_user_456"
+            # httpx should NOT have been called — userId came from redirect
+            mock_client_class.assert_called_once_with(
+                client_id="test_client_id",
+                client_secret="test_client_secret",
+                redirect_uri="https://example.com/redirect",
+                user_id="redirect_user_456",
+            )
+
+    async def test_async_step_creation_captures_user_id(self):
+        """Test async_step_creation extracts userId from external_data."""
+        flow = OAuth2FlowHandler()
+        flow.external_data = {"code": "authcode", "state": "abc", "userId": "ext_user_789"}
+
+        with patch.object(
+            config_entry_oauth2_flow.AbstractOAuth2FlowHandler,
+            "async_step_creation",
+            new=AsyncMock(return_value={"type": "create_entry"}),
+        ):
+            await flow.async_step_creation()
+
+        assert flow._smartcar_user_id == "ext_user_789"
+
+    async def test_async_oauth_create_entry_success_fallback_to_user_endpoint(self):
+        """Test fallback to /v2.0/user when userId is not in the redirect URL."""
+        flow = OAuth2FlowHandler()
+        flow.hass = MagicMock()
+        flow.flow_impl = MagicMock()
+        flow.flow_impl.client_id = "test_client_id"
+        flow.flow_impl.client_secret = "test_client_secret"
+        flow.flow_impl.redirect_uri = "https://example.com/redirect"
+        flow._smartcar_user_id = None  # no userId from redirect
 
         mock_vehicle = MagicMock()
         mock_vehicle.id = "vehicle_123"
@@ -57,15 +108,22 @@ class TestOAuth2FlowHandler:
         }
 
         with (
-            patch("custom_components.nissan_na.config_flow.smartcar.get_user", return_value=mock_user),
-            patch("custom_components.nissan_na.config_flow.asyncio.to_thread", new=AsyncMock(return_value=mock_user)),
             patch("custom_components.nissan_na.config_flow.SmartcarApiClient") as mock_client_class,
         ):
+            mock_httpx_client = AsyncMock()
+            mock_httpx_client.__aenter__ = AsyncMock(return_value=mock_httpx_client)
+            mock_httpx_client.__aexit__ = AsyncMock(return_value=None)
+            mock_user_response = MagicMock()
+            mock_user_response.status_code = 200
+            mock_user_response.json.return_value = {"id": "sc_user_123"}
+            mock_httpx_client.get = AsyncMock(return_value=mock_user_response)
+
             mock_client = MagicMock()
             mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
             mock_client_class.return_value = mock_client
 
-            result = await flow.async_oauth_create_entry(data)
+            with patch("custom_components.nissan_na.config_flow.httpx.AsyncClient", return_value=mock_httpx_client):
+                result = await flow.async_oauth_create_entry(data)
 
             assert result["type"] == "create_entry"
             assert result["title"] == "Nissan (Smartcar)"
@@ -80,9 +138,6 @@ class TestOAuth2FlowHandler:
         flow.flow_impl.client_secret = "test_client_secret"
         flow.flow_impl.redirect_uri = "https://example.com/redirect"
 
-        mock_user = MagicMock()
-        mock_user.id = "sc_user_123"
-
         data = {
             "token": {
                 "access_token": "test_access",
@@ -91,14 +146,22 @@ class TestOAuth2FlowHandler:
         }
 
         with (
-            patch("custom_components.nissan_na.config_flow.asyncio.to_thread", new=AsyncMock(return_value=mock_user)),
             patch("custom_components.nissan_na.config_flow.SmartcarApiClient") as mock_client_class,
         ):
+            mock_httpx_client = AsyncMock()
+            mock_httpx_client.__aenter__ = AsyncMock(return_value=mock_httpx_client)
+            mock_httpx_client.__aexit__ = AsyncMock(return_value=None)
+            mock_user_response = MagicMock()
+            mock_user_response.status_code = 200
+            mock_user_response.json.return_value = {"id": "sc_user_123"}
+            mock_httpx_client.get = AsyncMock(return_value=mock_user_response)
+
             mock_client = MagicMock()
             mock_client.get_vehicle_list = AsyncMock(return_value=[])
             mock_client_class.return_value = mock_client
 
-            result = await flow.async_oauth_create_entry(data)
+            with patch("custom_components.nissan_na.config_flow.httpx.AsyncClient", return_value=mock_httpx_client):
+                result = await flow.async_oauth_create_entry(data)
 
             assert result["type"] == "abort"
             assert result["reason"] == "no_vehicles"
@@ -127,9 +190,6 @@ class TestOAuth2FlowHandler:
         flow.flow_impl.client_secret = "test_client_secret"
         flow.flow_impl.redirect_uri = "https://example.com/redirect"
 
-        mock_user = MagicMock()
-        mock_user.id = "sc_user_123"
-
         data = {
             "token": {
                 "access_token": "test_access",
@@ -138,14 +198,22 @@ class TestOAuth2FlowHandler:
         }
 
         with (
-            patch("custom_components.nissan_na.config_flow.asyncio.to_thread", new=AsyncMock(return_value=mock_user)),
             patch("custom_components.nissan_na.config_flow.SmartcarApiClient") as mock_client_class,
         ):
+            mock_httpx_client = AsyncMock()
+            mock_httpx_client.__aenter__ = AsyncMock(return_value=mock_httpx_client)
+            mock_httpx_client.__aexit__ = AsyncMock(return_value=None)
+            mock_user_response = MagicMock()
+            mock_user_response.status_code = 200
+            mock_user_response.json.return_value = {"id": "sc_user_123"}
+            mock_httpx_client.get = AsyncMock(return_value=mock_user_response)
+
             mock_client = MagicMock()
             mock_client.get_vehicle_list = AsyncMock(side_effect=Exception("Connection failed"))
             mock_client_class.return_value = mock_client
 
-            result = await flow.async_oauth_create_entry(data)
+            with patch("custom_components.nissan_na.config_flow.httpx.AsyncClient", return_value=mock_httpx_client):
+                result = await flow.async_oauth_create_entry(data)
 
             assert result["type"] == "abort"
             assert result["reason"] == "connection_error"

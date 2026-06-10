@@ -1,6 +1,7 @@
 """Number for Nissan NA integration."""
 import logging
 
+import httpx
 from homeassistant.components.number import NumberEntity
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
@@ -179,30 +180,30 @@ class NissanChargeLimitNumber(NumberEntity):
             # Smartcar API expects integer 0-100
             limit = int(max(0, min(100, value)))
             # Make API call to set charge limit
-            url = f"https://api.smartcar.com/v2.0/vehicles/{self._vehicle.id}/charge/limit"
+            url = f"https://vehicle.api.smartcar.com/v3/vehicles/{self._vehicle.id}/charge/limit"
+            access_token = await self._client._get_access_token()
             headers = {
-                "Authorization": f"Bearer {self._client.access_token}"
+                "Authorization": f"Bearer {access_token}"
             }
             data = {"limit": limit}
-            
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, headers=headers, json=data) as response:
-                    if response.status in (200, 204):
-                        self._attr_native_value = limit
-                        self.async_write_ha_state()
-                        _LOGGER.info(
-                            "Set charge limit to %s%% for vehicle %s",
-                            limit,
-                            self._vehicle.id,
-                        )
-                    else:
-                        _LOGGER.error(
-                            "Failed to set charge limit: %s",
-                            response.status,
-                        )
-                        self._attr_available = False
-                        self.async_write_ha_state()
+
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, headers=headers, json=data)
+                if response.status_code in (200, 204):
+                    self._attr_native_value = limit
+                    self.async_write_ha_state()
+                    _LOGGER.info(
+                        "Set charge limit to %s%% for vehicle %s",
+                        limit,
+                        self._vehicle.id,
+                    )
+                else:
+                    _LOGGER.error(
+                        "Failed to set charge limit: %s",
+                        response.status_code,
+                    )
+                    self._attr_available = False
+                    self.async_write_ha_state()
         except Exception as err:
             _LOGGER.error("Failed to set charge limit: %s", err)
             self._attr_available = False
