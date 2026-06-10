@@ -1,9 +1,8 @@
-"""Config flow for Nissan North America integration using Smartcar OAuth2."""
+"""Config flow for Nissan North America integration using Smartcar API Authentication."""
 
 import logging
 from typing import Any
 
-import httpx
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.helpers import config_entry_oauth2_flow
@@ -72,54 +71,49 @@ class OAuth2FlowHandler(
     async def async_step_creation(
         self, user_input: dict | None = None
     ) -> dict:
-        """Intercept creation step to capture userId from the Connect redirect URL.
+        """Skip the OAuth code→token exchange entirely.
 
-        Smartcar includes `userId` as a query parameter alongside the auth code:
-        https://example.com/callback?code=CODE&userId=UUID&state=STATE
-
-        HA stores the raw redirect params in self.external_data before calling
-        async_resolve_external_data (the token exchange), so we can read the
-        userId here and avoid a round-trip to the /v2.0/user endpoint entirely.
+        Under Smartcar's v3 API Authentication flow, the Connect redirect URL
+        includes a `userId` query parameter directly — no auth code exchange is
+        needed.  We read `userId` from the raw redirect params stored in
+        `self.external_data` and call `async_oauth_create_entry` without ever
+        requesting a token from Smartcar's IAM endpoint.
         """
         external = getattr(self, "external_data", None) or {}
-        redirect_user_id = external.get("userId") or external.get("user_id")
-        if redirect_user_id:
-            self._smartcar_user_id: str | None = redirect_user_id
-            _LOGGER.debug("Captured userId from Connect redirect: %s", redirect_user_id)
-        else:
-            self._smartcar_user_id = None
-        return await super().async_step_creation(user_input)
+        user_id = external.get("userId") or external.get("user_id")
+        if not user_id:
+            _LOGGER.error(
+                "Smartcar Connect redirect did not include a userId. "
+                "Ensure your application is using the v3 API. Params received: %s",
+                list(external.keys()),
+            )
+            return self.async_abort(reason="missing_user_id")
+        # Store for use in async_oauth_create_entry
+        self._smartcar_user_id: str = user_id
+        _LOGGER.debug("Captured userId from Connect redirect: %s", user_id)
+        # Call create entry directly — bypass super() which would do the token exchange
+        return await self.async_oauth_create_entry(
+            {"auth_implementation": self.flow_impl.domain}
+        )
 
     async def async_oauth_create_entry(self, data: dict) -> dict:
-        """Create an entry for Nissan NA after OAuth is complete."""
+        """Create a config entry after Connect completes.
+
+        All subsequent API calls use the client-credentials grant (fetched
+        automatically by SmartcarApiClient).  No OAuth tokens are stored.
+        """
         if not self.flow_impl.client_id or not self.flow_impl.client_secret:
             _LOGGER.error("OAuth credentials not configured.")
             return self.async_abort(reason="missing_credentials")
 
-        # Prefer the userId from the Connect redirect URL (new auth flow).
-        # Fall back to a /v2.0/user call using the initial access token.
         user_id: str | None = getattr(self, "_smartcar_user_id", None)
         if not user_id:
-            token = data.get("token", {})
-            try:
-                async with httpx.AsyncClient() as client:
-                    resp = await client.get(
-                        "https://api.smartcar.com/v2.0/user",
-                        headers={"Authorization": f"Bearer {token['access_token']}"},
-                    )
-                    if resp.status_code != 200:
-                        raise ValueError(f"User fetch failed ({resp.status_code}): {resp.text}")
-                    user_id = resp.json()["id"]
-                _LOGGER.debug("Captured user_id from /v2.0/user fallback: %s", user_id)
-            except Exception as err:
-                _LOGGER.error("Failed to retrieve user_id from Smartcar: %s", err, exc_info=True)
-                return self.async_abort(reason="connection_error")
+            return self.async_abort(reason="missing_user_id")
 
-        # Build a client-credentials client and verify we can reach the vehicle list
+        # Verify credentials by fetching the vehicle list
         client = SmartcarApiClient(
             client_id=self.flow_impl.client_id,
             client_secret=self.flow_impl.client_secret,
-            redirect_uri=self.flow_impl.redirect_uri,
             user_id=user_id,
         )
         try:
@@ -130,9 +124,11 @@ class OAuth2FlowHandler(
             _LOGGER.error("Error fetching vehicles: %s", err, exc_info=True)
             return self.async_abort(reason="connection_error")
 
-        # Store user_id in config entry; keep token block so HA's OAuth2
-        # scaffolding stays happy, but we never use it for API calls.
-        entry_data = {**data, CONF_USER_ID: user_id}
+        # Store only what we need — no OAuth tokens
+        entry_data = {
+            "auth_implementation": data["auth_implementation"],
+            CONF_USER_ID: user_id,
+        }
 
         if self.source == config_entries.SOURCE_REAUTH:
             reauth_entry = self._get_reauth_entry()

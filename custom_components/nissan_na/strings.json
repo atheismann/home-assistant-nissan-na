@@ -16,7 +16,8 @@
       "already_configured": "This Smartcar application is already configured",
       "no_vehicles": "No vehicles found on your Smartcar account. Please ensure your Nissan vehicle is connected.",
       "connection_error": "Failed to connect to Smartcar API. Please check your credentials and try again.",
-      "missing_credentials": "OAuth credentials not configured. Please set up Application Credentials in Home Assistant settings first.",
+      "missing_credentials": "API credentials not configured. Please set up Application Credentials in Home Assistant settings first.",
+      "missing_user_id": "Smartcar Connect did not return a user ID. Ensure your application is using the v3 API in the Smartcar Dashboard.",
       "reauth_successful": "Reauthorization successful",
       "reauth_triggered": "Reauthorization started. Please complete the OAuth flow in the notifications.",
       "integration_not_loaded": "Integration data not found. Please reload the integration.",
@@ -52,7 +53,7 @@
     }
   },
   "application_credentials": {
-    "description": "Follow these steps to create a Smartcar application and obtain your credentials:\n\n1. Visit [Smartcar Dashboard](https://dashboard.smartcar.com)\n2. Create a new application\n3. Set redirect URI to: `https://my.home-assistant.io/redirect/oauth`\n4. Copy your Client ID and Client Secret\n\nFor detailed instructions, see [setup guide]({more_info_url})"
+    "description": "Follow these steps to set up your Smartcar API credentials:\n\n1. Visit [Smartcar Dashboard](https://dashboard.smartcar.com)\n2. Create or open your application\n3. Under **API Credentials**, click **Create Secret** to generate a Client ID and Client Secret\n4. Under **Redirect URIs**, add: `https://my.home-assistant.io/redirect/oauth`\n5. Copy your Client ID and Client Secret below\n\nAfter saving, you will be redirected to Smartcar Connect to authorize your vehicle. No token exchange is required — only the user ID from the redirect is captured.\n\nFor detailed instructions, see [setup guide]({more_info_url})"
   },
   "entity": {
     "sensor": {

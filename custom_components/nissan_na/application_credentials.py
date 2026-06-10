@@ -3,6 +3,9 @@
 from homeassistant.components.application_credentials import AuthorizationServer
 from homeassistant.core import HomeAssistant
 
+# Smartcar Connect is still used once to authorize the user's vehicle and
+# capture the userId from the redirect URL.  No auth-code token exchange
+# occurs — the redirect params are read directly by the config flow.
 AUTHORIZATION_SERVER = AuthorizationServer(
     authorize_url="https://connect.smartcar.com/oauth/authorize",
     token_url="https://connect.smartcar.com/oauth/token",

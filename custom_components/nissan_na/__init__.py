@@ -7,7 +7,9 @@ import logging
 from datetime import timedelta
 
 from homeassistant.components import webhook as ha_webhook
-from homeassistant.components.application_credentials import config_entry_oauth2_flow
+from homeassistant.helpers.config_entry_oauth2_flow import (
+    async_get_config_entry_implementation,
+)
 from homeassistant import config_entries
 from homeassistant.const import CONF_WEBHOOK_ID
 from homeassistant.core import HomeAssistant
@@ -79,15 +81,7 @@ async def async_setup_entry(
             "Configure this URL in your Smartcar Dashboard to receive real-time updates"
         )
 
-    # Check if config entry has auth_implementation (OAuth2 flow)
-    if "auth_implementation" not in config_entry.data:
-        _LOGGER.error(
-            "Config entry is missing auth_implementation. "
-            "Please remove and re-add the integration."
-        )
-        return False
-
-    # user_id is captured once during the Smartcar Connect flow and stored in the entry
+    # Check for user_id — required for all API calls
     user_id = config_entry.data.get(CONF_USER_ID)
     if not user_id:
         _LOGGER.warning(
@@ -103,13 +97,9 @@ async def async_setup_entry(
         )
         return False
 
-    # Get client credentials from the application_credentials implementation
+    # Load client credentials from Application Credentials storage
     try:
-        implementation = (
-            await config_entry_oauth2_flow.async_get_config_entry_implementation(
-                hass, config_entry
-            )
-        )
+        implementation = await async_get_config_entry_implementation(hass, config_entry)
     except KeyError:
         _LOGGER.error(
             "OAuth implementation not found. "
@@ -119,11 +109,10 @@ async def async_setup_entry(
 
     client_id = implementation.client_id
     client_secret = implementation.client_secret
-    redirect_uri = implementation.redirect_uri
 
     if not client_id or not client_secret:
         _LOGGER.error(
-            "OAuth credentials are not configured. "
+            "API credentials are not configured. "
             "Please configure Application Credentials for Nissan NA."
         )
         return False
@@ -132,7 +121,6 @@ async def async_setup_entry(
     client = SmartcarApiClient(
         client_id=client_id,
         client_secret=client_secret,
-        redirect_uri=redirect_uri,
         user_id=user_id,
     )
 

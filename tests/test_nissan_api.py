@@ -14,7 +14,6 @@ def _make_client(**kwargs) -> SmartcarApiClient:
     client = SmartcarApiClient(
         client_id=kwargs.get("client_id", "test_client_id"),
         client_secret=kwargs.get("client_secret", "test_secret"),
-        redirect_uri=kwargs.get("redirect_uri", "https://example.com/callback"),
         user_id=kwargs.get("user_id", "test_user_id"),
         test_mode=kwargs.get("test_mode", False),
     )
@@ -80,11 +79,9 @@ class TestSmartcarApiClientInit:
         client = SmartcarApiClient(
             client_id="test_client_id",
             client_secret="test_secret",
-            redirect_uri="https://example.com/callback",
         )
         assert client.client_id == "test_client_id"
         assert client.client_secret == "test_secret"
-        assert client.redirect_uri == "https://example.com/callback"
         assert client.user_id is None
         assert client.test_mode is False
         assert client._cc_token is None
@@ -93,7 +90,6 @@ class TestSmartcarApiClientInit:
         client = SmartcarApiClient(
             client_id="test_client_id",
             client_secret="test_secret",
-            redirect_uri="https://example.com/callback",
             user_id="sc_user_abc123",
         )
         assert client.user_id == "sc_user_abc123"
@@ -102,7 +98,6 @@ class TestSmartcarApiClientInit:
         client = SmartcarApiClient(
             client_id="test_client_id",
             client_secret="test_secret",
-            redirect_uri="https://example.com/callback",
             test_mode=True,
         )
         assert client.test_mode is True
@@ -111,7 +106,6 @@ class TestSmartcarApiClientInit:
         client = SmartcarApiClient(
             client_id="test_client_id",
             client_secret="test_secret",
-            redirect_uri="https://example.com/callback",
         )
         assert client._vehicle_model_cache == {}
         assert client._vehicle_signals_cache == {}
@@ -135,191 +129,20 @@ class TestGetAccessToken:
         client._cc_token_expires_at = 0.0
 
         response_data = {"access_token": "fresh_token", "expires_in": 3600}
-        with patch("custom_components.nissan_na.nissan_api.aiohttp.ClientSession") as mock_sess_cls:
-            mock_resp = AsyncMock()
-            mock_resp.status = 200
-            mock_resp.json = AsyncMock(return_value=response_data)
-            mock_resp.text = AsyncMock(return_value="")
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = response_data
 
-            mock_ctx = AsyncMock()
-            mock_ctx.__aenter__ = AsyncMock(return_value=mock_resp)
-            mock_ctx.__aexit__ = AsyncMock(return_value=None)
+        mock_httpx = AsyncMock()
+        mock_httpx.__aenter__ = AsyncMock(return_value=mock_httpx)
+        mock_httpx.__aexit__ = AsyncMock(return_value=None)
+        mock_httpx.post = AsyncMock(return_value=mock_resp)
 
-            mock_sess = AsyncMock()
-            mock_sess.post = Mock(return_value=mock_ctx)
-            mock_sess.__aenter__ = AsyncMock(return_value=mock_sess)
-            mock_sess.__aexit__ = AsyncMock(return_value=None)
-            mock_sess_cls.return_value = mock_sess
-
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=mock_httpx):
             token = await client._get_access_token()
 
         assert token == "fresh_token"
         assert client._cc_token == "fresh_token"
-
-
-class TestGetAuthUrl:
-    """Tests for get_auth_url method"""
-
-    @patch("custom_components.nissan_na.nissan_api.smartcar.AuthClient")
-    def test_get_auth_url_without_state(self, mock_auth_client_class):
-        mock_instance = Mock()
-        mock_instance.get_auth_url.return_value = "https://smartcar.com/auth?params"
-        mock_auth_client_class.return_value = mock_instance
-
-        url = _make_client().get_auth_url()
-
-        assert url == "https://smartcar.com/auth?params"
-        mock_auth_client_class.assert_called_once_with(
-            client_id="test_client_id",
-            client_secret="test_secret",
-            redirect_uri="https://example.com/callback",
-            mode="live",
-        )
-
-    @patch("custom_components.nissan_na.nissan_api.smartcar.AuthClient")
-    def test_get_auth_url_with_state(self, mock_auth_client_class):
-        mock_instance = Mock()
-        mock_instance.get_auth_url.return_value = "https://smartcar.com/auth?state=test123"
-        mock_auth_client_class.return_value = mock_instance
-
-        url = _make_client().get_auth_url(state="test123")
-
-        assert url == "https://smartcar.com/auth?state=test123"
-        call_args = mock_instance.get_auth_url.call_args
-        assert call_args.kwargs["options"]["state"] == "test123"
-
-    @patch("custom_components.nissan_na.nissan_api.smartcar.AuthClient")
-    def test_get_auth_url_test_mode(self, mock_auth_client_class):
-        mock_instance = Mock()
-        mock_instance.get_auth_url.return_value = "https://smartcar.com/test/auth"
-        mock_auth_client_class.return_value = mock_instance
-
-        _make_client(test_mode=True).get_auth_url()
-
-        mock_auth_client_class.assert_called_once_with(
-            client_id="test_client_id",
-            client_secret="test_secret",
-            redirect_uri="https://example.com/callback",
-            mode="test",
-        )
-
-    @patch("custom_components.nissan_na.nissan_api.smartcar.AuthClient")
-    def test_get_auth_url_includes_nissan_make_bypass(self, mock_auth_client_class):
-        mock_instance = Mock()
-        mock_instance.get_auth_url.return_value = "https://smartcar.com/auth"
-        mock_auth_client_class.return_value = mock_instance
-
-        _make_client().get_auth_url()
-
-        call_args = mock_instance.get_auth_url.call_args
-        assert call_args.kwargs["options"]["make_bypass"] == "NISSAN"
-
-    @patch("custom_components.nissan_na.nissan_api.smartcar.AuthClient")
-    def test_get_auth_url_includes_required_scopes(self, mock_auth_client_class):
-        mock_instance = Mock()
-        mock_instance.get_auth_url.return_value = "https://smartcar.com/auth"
-        mock_auth_client_class.return_value = mock_instance
-
-        _make_client().get_auth_url()
-
-        scopes = mock_instance.get_auth_url.call_args.kwargs["scope"]
-        assert "required:read_vehicle_info" in scopes
-        assert "required:read_location" in scopes
-        assert "required:read_odometer" in scopes
-        assert "read_battery" in scopes
-        assert "read_charge" in scopes
-        assert "control_charge" in scopes
-        assert "read_fuel" in scopes
-
-
-class TestAuthenticate:
-    """Tests for authenticate method"""
-
-    @pytest.mark.asyncio
-    @patch("custom_components.nissan_na.nissan_api.asyncio.to_thread")
-    @patch("custom_components.nissan_na.nissan_api.smartcar.AuthClient")
-    async def test_authenticate_success(self, mock_auth_client_class, mock_to_thread):
-        """authenticate() captures user_id and returns it."""
-        AccessResponse = namedtuple(
-            "AccessResponse",
-            ["access_token", "refresh_token", "expires_in", "token_type", "expiration", "refresh_expiration"],
-        )
-        UserResponse = namedtuple("UserResponse", ["id"])
-
-        tokens = AccessResponse(
-            access_token="tmp_access",
-            refresh_token="tmp_refresh",
-            expires_in=3600,
-            token_type="Bearer",
-            expiration="2024-01-01T00:00:00Z",
-            refresh_expiration="2024-02-01T00:00:00Z",
-        )
-        user = UserResponse(id="sc_user_abc123")
-
-        mock_auth_client_class.return_value = Mock()
-        call_count = {"n": 0}
-
-        async def to_thread_side_effect(func, *args):
-            call_count["n"] += 1
-            return tokens if call_count["n"] == 1 else user
-
-        mock_to_thread.side_effect = to_thread_side_effect
-
-        client = SmartcarApiClient(
-            client_id="test_client_id",
-            client_secret="test_secret",
-            redirect_uri="https://example.com/callback",
-        )
-        result = await client.authenticate("test_code")
-
-        assert result == {"user_id": "sc_user_abc123"}
-        assert client.user_id == "sc_user_abc123"
-
-    @pytest.mark.asyncio
-    @patch("custom_components.nissan_na.nissan_api.asyncio.to_thread")
-    @patch("custom_components.nissan_na.nissan_api.smartcar.AuthClient")
-    async def test_authenticate_clears_caches(self, mock_auth_client_class, mock_to_thread):
-        """authenticate() clears signal caches."""
-        AccessResponse = namedtuple("AccessResponse", ["access_token", "refresh_token", "expires_in", "token_type", "expiration", "refresh_expiration"])
-        UserResponse = namedtuple("UserResponse", ["id"])
-
-        tokens = AccessResponse("tmp", "tmp_r", 3600, "Bearer", "x", "y")
-        user = UserResponse(id="user_123")
-
-        mock_auth_client_class.return_value = Mock()
-        call_count = {"n": 0}
-
-        async def side_effect(func, *args):
-            call_count["n"] += 1
-            return tokens if call_count["n"] == 1 else user
-
-        mock_to_thread.side_effect = side_effect
-
-        client = SmartcarApiClient(
-            client_id="test_client_id",
-            client_secret="test_secret",
-            redirect_uri="https://example.com/callback",
-        )
-        client._vehicle_signals_cache["v1"] = ["some_signal"]
-
-        await client.authenticate("test_code")
-
-        assert client._vehicle_signals_cache == {}
-
-
-class TestSdkVehicle:
-    """Tests for _sdk_vehicle helper"""
-
-    @pytest.mark.asyncio
-    @patch("custom_components.nissan_na.nissan_api.smartcar.Vehicle")
-    async def test_sdk_vehicle_uses_cc_token(self, mock_vehicle_class):
-        mock_vehicle_class.return_value = Mock()
-        client = _make_client()
-
-        vehicle = await client._sdk_vehicle("vehicle_123")
-
-        mock_vehicle_class.assert_called_once_with("vehicle_123", "mock_cc_token")
-        assert vehicle == mock_vehicle_class.return_value
 
 
 class TestV3BaseUrl:
@@ -346,34 +169,27 @@ class TestGetVehicleList:
         attrs_response = {"data": {"attributes": {"make": "NISSAN", "model": "Pathfinder", "year": 2025}}}
         vin_response = {"data": {"attributes": {"vin": "TESTVIN123"}}}
 
-        call_n = {"n": 0}
-
         def make_resp(body):
-            resp = AsyncMock()
-            resp.status = 200
-            resp.json = AsyncMock(return_value=body)
-            ctx = AsyncMock()
-            ctx.__aenter__ = AsyncMock(return_value=resp)
-            ctx.__aexit__ = AsyncMock(return_value=None)
-            return ctx
+            resp = MagicMock()
+            resp.status_code = 200
+            resp.json.return_value = body
+            return resp
 
-        with patch("custom_components.nissan_na.nissan_api.aiohttp.ClientSession") as mock_cls:
-            mock_session = AsyncMock()
-            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-            mock_session.__aexit__ = AsyncMock(return_value=None)
+        mock_httpx = AsyncMock()
+        mock_httpx.__aenter__ = AsyncMock(return_value=mock_httpx)
+        mock_httpx.__aexit__ = AsyncMock(return_value=None)
 
-            def get_side_effect(url, **kwargs):
-                call_n["n"] += 1
-                if "connections" in url:
-                    return make_resp(connections_response)
-                elif "/vin" in url:
-                    return make_resp(vin_response)
-                else:
-                    return make_resp(attrs_response)
+        def get_side_effect(url, **kwargs):
+            if "connections" in url:
+                return make_resp(connections_response)
+            elif "/vin" in url:
+                return make_resp(vin_response)
+            else:
+                return make_resp(attrs_response)
 
-            mock_session.get = Mock(side_effect=get_side_effect)
-            mock_cls.return_value = mock_session
+        mock_httpx.get = AsyncMock(side_effect=get_side_effect)
 
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=mock_httpx):
             vehicles = await client.get_vehicle_list()
 
         assert len(vehicles) == 2
@@ -388,7 +204,6 @@ class TestGetVehicleList:
         client = SmartcarApiClient(
             client_id="test_client_id",
             client_secret="test_secret",
-            redirect_uri="https://example.com/callback",
         )
         client._cc_token = "mock"
         client._cc_token_expires_at = float("inf")
@@ -424,42 +239,57 @@ class TestGetVehicleInfo:
         vin_resp = {"data": {"attributes": {"vin": "TESTVIN999"}}}
 
         def make_resp(body):
-            resp = AsyncMock()
-            resp.status = 200
-            resp.json = AsyncMock(return_value=body)
-            ctx = AsyncMock()
-            ctx.__aenter__ = AsyncMock(return_value=resp)
-            ctx.__aexit__ = AsyncMock(return_value=None)
-            return ctx
+            r = MagicMock()
+            r.status_code = 200
+            r.json.return_value = body
+            return r
 
-        with patch("custom_components.nissan_na.nissan_api.aiohttp.ClientSession") as mock_cls:
-            mock_session = AsyncMock()
-            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-            mock_session.__aexit__ = AsyncMock(return_value=None)
-            mock_session.get = Mock(side_effect=lambda url, **kw: make_resp(vin_resp if "/vin" in url else attrs_resp))
-            mock_cls.return_value = mock_session
+        mock_httpx = AsyncMock()
+        mock_httpx.__aenter__ = AsyncMock(return_value=mock_httpx)
+        mock_httpx.__aexit__ = AsyncMock(return_value=None)
+        mock_httpx.get = AsyncMock(side_effect=lambda url, **kw: make_resp(vin_resp if "/vin" in url else attrs_resp))
 
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=mock_httpx):
             info = await client.get_vehicle_info("vehicle_1")
 
         assert info["make"] == "NISSAN"
         assert info["vin"] == "TESTVIN999"
 
 
+def _make_v3_get_mock(response_body: dict):
+    """Return a mock httpx client that responds to any GET with response_body."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = response_body
+    mock_resp.raise_for_status = MagicMock()
+    mock_httpx = AsyncMock()
+    mock_httpx.__aenter__ = AsyncMock(return_value=mock_httpx)
+    mock_httpx.__aexit__ = AsyncMock(return_value=None)
+    mock_httpx.get = AsyncMock(return_value=mock_resp)
+    return mock_httpx
+
+
+def _make_v3_post_mock(response_body: dict):
+    """Return a mock httpx client that responds to any POST with response_body."""
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = response_body
+    mock_resp.raise_for_status = MagicMock()
+    mock_httpx = AsyncMock()
+    mock_httpx.__aenter__ = AsyncMock(return_value=mock_httpx)
+    mock_httpx.__aexit__ = AsyncMock(return_value=None)
+    mock_httpx.post = AsyncMock(return_value=mock_resp)
+    return mock_httpx
+
+
 class TestGetVehicleLocation:
     """Tests for get_vehicle_location method"""
 
     @pytest.mark.asyncio
-    @patch("custom_components.nissan_na.nissan_api.asyncio.to_thread")
-    @patch("custom_components.nissan_na.nissan_api.smartcar.Vehicle")
-    async def test_get_vehicle_location_success(self, mock_vehicle_class, mock_to_thread):
-        LocationResponse = namedtuple("LocationResponse", ["latitude", "longitude"])
-        location = LocationResponse(latitude=37.7749, longitude=-122.4194)
-
-        mock_vehicle_class.return_value = Mock()
-        mock_to_thread.return_value = location
-
-        result = await _make_client().get_vehicle_location("vehicle_1")
-
+    async def test_get_vehicle_location_success(self):
+        body = {"data": {"attributes": {"latitude": 37.7749, "longitude": -122.4194}}}
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=_make_v3_get_mock(body)):
+            result = await _make_client().get_vehicle_location("vehicle_1")
         assert result["latitude"] == 37.7749
         assert result["longitude"] == -122.4194
 
@@ -468,15 +298,10 @@ class TestGetBatteryLevel:
     """Tests for get_battery_level method"""
 
     @pytest.mark.asyncio
-    @patch("custom_components.nissan_na.nissan_api.asyncio.to_thread")
-    @patch("custom_components.nissan_na.nissan_api.smartcar.Vehicle")
-    async def test_get_battery_level_success(self, mock_vehicle_class, mock_to_thread):
-        BatteryResponse = namedtuple("BatteryResponse", ["percentRemaining", "range"])
-        mock_vehicle_class.return_value = Mock()
-        mock_to_thread.return_value = BatteryResponse(percentRemaining=85.0, range=280)
-
-        result = await _make_client().get_battery_level("vehicle_1")
-
+    async def test_get_battery_level_success(self):
+        body = {"data": {"attributes": {"percentRemaining": 85.0, "range": 280}}}
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=_make_v3_get_mock(body)):
+            result = await _make_client().get_battery_level("vehicle_1")
         assert result["percentRemaining"] == 85.0
         assert result["range"] == 280
 
@@ -485,15 +310,10 @@ class TestGetBatteryCapacity:
     """Tests for get_battery_capacity method"""
 
     @pytest.mark.asyncio
-    @patch("custom_components.nissan_na.nissan_api.asyncio.to_thread")
-    @patch("custom_components.nissan_na.nissan_api.smartcar.Vehicle")
-    async def test_get_battery_capacity_success(self, mock_vehicle_class, mock_to_thread):
-        CapacityResponse = namedtuple("CapacityResponse", ["capacity"])
-        mock_vehicle_class.return_value = Mock()
-        mock_to_thread.return_value = CapacityResponse(capacity=62.0)
-
-        result = await _make_client().get_battery_capacity("vehicle_1")
-
+    async def test_get_battery_capacity_success(self):
+        body = {"data": {"attributes": {"capacity": 62.0}}}
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=_make_v3_get_mock(body)):
+            result = await _make_client().get_battery_capacity("vehicle_1")
         assert result["capacity"] == 62.0
 
 
@@ -501,15 +321,10 @@ class TestGetChargeStatus:
     """Tests for get_charge_status method"""
 
     @pytest.mark.asyncio
-    @patch("custom_components.nissan_na.nissan_api.asyncio.to_thread")
-    @patch("custom_components.nissan_na.nissan_api.smartcar.Vehicle")
-    async def test_get_charge_status_success(self, mock_vehicle_class, mock_to_thread):
-        ChargeResponse = namedtuple("ChargeResponse", ["isPluggedIn", "state"])
-        mock_vehicle_class.return_value = Mock()
-        mock_to_thread.return_value = ChargeResponse(isPluggedIn=True, state="CHARGING")
-
-        result = await _make_client().get_charge_status("vehicle_1")
-
+    async def test_get_charge_status_success(self):
+        body = {"data": {"attributes": {"isPluggedIn": True, "state": "CHARGING"}}}
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=_make_v3_get_mock(body)):
+            result = await _make_client().get_charge_status("vehicle_1")
         assert result["isPluggedIn"] is True
         assert result["state"] == "CHARGING"
 
@@ -518,15 +333,10 @@ class TestGetOdometer:
     """Tests for get_odometer method"""
 
     @pytest.mark.asyncio
-    @patch("custom_components.nissan_na.nissan_api.asyncio.to_thread")
-    @patch("custom_components.nissan_na.nissan_api.smartcar.Vehicle")
-    async def test_get_odometer_success(self, mock_vehicle_class, mock_to_thread):
-        OdometerResponse = namedtuple("OdometerResponse", ["distance"])
-        mock_vehicle_class.return_value = Mock()
-        mock_to_thread.return_value = OdometerResponse(distance=15000)
-
-        result = await _make_client().get_odometer("vehicle_1")
-
+    async def test_get_odometer_success(self):
+        body = {"data": {"attributes": {"distance": 15000}}}
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=_make_v3_get_mock(body)):
+            result = await _make_client().get_odometer("vehicle_1")
         assert result["distance"] == 15000
 
 
@@ -534,15 +344,10 @@ class TestGetFuelLevel:
     """Tests for get_fuel_level method"""
 
     @pytest.mark.asyncio
-    @patch("custom_components.nissan_na.nissan_api.asyncio.to_thread")
-    @patch("custom_components.nissan_na.nissan_api.smartcar.Vehicle")
-    async def test_get_fuel_level_success(self, mock_vehicle_class, mock_to_thread):
-        FuelResponse = namedtuple("FuelResponse", ["percentRemaining", "range"])
-        mock_vehicle_class.return_value = Mock()
-        mock_to_thread.return_value = FuelResponse(percentRemaining=75.0, range=400)
-
-        result = await _make_client().get_fuel_level("vehicle_1")
-
+    async def test_get_fuel_level_success(self):
+        body = {"data": {"attributes": {"percentRemaining": 75.0, "range": 400}}}
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=_make_v3_get_mock(body)):
+            result = await _make_client().get_fuel_level("vehicle_1")
         assert result["percentRemaining"] == 75.0
         assert result["range"] == 400
 
@@ -551,15 +356,10 @@ class TestGetLockStatus:
     """Tests for get_lock_status method"""
 
     @pytest.mark.asyncio
-    @patch("custom_components.nissan_na.nissan_api.asyncio.to_thread")
-    @patch("custom_components.nissan_na.nissan_api.smartcar.Vehicle")
-    async def test_get_lock_status_success(self, mock_vehicle_class, mock_to_thread):
-        LockResponse = namedtuple("LockResponse", ["is_locked"])
-        mock_vehicle_class.return_value = Mock()
-        mock_to_thread.return_value = LockResponse(is_locked=True)
-
-        result = await _make_client().get_lock_status("vehicle_1")
-
+    async def test_get_lock_status_success(self):
+        body = {"data": {"attributes": {"is_locked": True}}}
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=_make_v3_get_mock(body)):
+            result = await _make_client().get_lock_status("vehicle_1")
         assert result["is_locked"] is True
 
 
@@ -567,15 +367,10 @@ class TestGetTirePressure:
     """Tests for get_tire_pressure method"""
 
     @pytest.mark.asyncio
-    @patch("custom_components.nissan_na.nissan_api.asyncio.to_thread")
-    @patch("custom_components.nissan_na.nissan_api.smartcar.Vehicle")
-    async def test_get_tire_pressure_success(self, mock_vehicle_class, mock_to_thread):
-        TireResponse = namedtuple("TireResponse", ["frontLeft", "frontRight", "backLeft", "backRight"])
-        mock_vehicle_class.return_value = Mock()
-        mock_to_thread.return_value = TireResponse(frontLeft=32.5, frontRight=32.5, backLeft=30.0, backRight=30.0)
-
-        result = await _make_client().get_tire_pressure("vehicle_1")
-
+    async def test_get_tire_pressure_success(self):
+        body = {"data": {"attributes": {"frontLeft": 32.5, "frontRight": 32.5, "backLeft": 30.0, "backRight": 30.0}}}
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=_make_v3_get_mock(body)):
+            result = await _make_client().get_tire_pressure("vehicle_1")
         assert result["frontLeft"] == 32.5
         assert result["backLeft"] == 30.0
 
@@ -584,15 +379,10 @@ class TestGetEngineOil:
     """Tests for get_engine_oil method"""
 
     @pytest.mark.asyncio
-    @patch("custom_components.nissan_na.nissan_api.asyncio.to_thread")
-    @patch("custom_components.nissan_na.nissan_api.smartcar.Vehicle")
-    async def test_get_engine_oil_success(self, mock_vehicle_class, mock_to_thread):
-        OilResponse = namedtuple("OilResponse", ["percentRemaining"])
-        mock_vehicle_class.return_value = Mock()
-        mock_to_thread.return_value = OilResponse(percentRemaining=85.0)
-
-        result = await _make_client().get_engine_oil("vehicle_1")
-
+    async def test_get_engine_oil_success(self):
+        body = {"data": {"attributes": {"percentRemaining": 85.0}}}
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=_make_v3_get_mock(body)):
+            result = await _make_client().get_engine_oil("vehicle_1")
         assert result["percentRemaining"] == 85.0
 
 
@@ -600,15 +390,10 @@ class TestLockDoors:
     """Tests for lock_doors method"""
 
     @pytest.mark.asyncio
-    @patch("custom_components.nissan_na.nissan_api.asyncio.to_thread")
-    @patch("custom_components.nissan_na.nissan_api.smartcar.Vehicle")
-    async def test_lock_doors_success(self, mock_vehicle_class, mock_to_thread):
-        ActionResponse = namedtuple("ActionResponse", ["status"])
-        mock_vehicle_class.return_value = Mock()
-        mock_to_thread.return_value = ActionResponse(status="success")
-
-        result = await _make_client().lock_doors("vehicle_1")
-
+    async def test_lock_doors_success(self):
+        body = {"status": "success"}
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=_make_v3_post_mock(body)):
+            result = await _make_client().lock_doors("vehicle_1")
         assert result["status"] == "success"
 
 
@@ -616,14 +401,10 @@ class TestUnlockDoors:
     """Tests for unlock_doors method"""
 
     @pytest.mark.asyncio
-    @patch("custom_components.nissan_na.nissan_api.asyncio.to_thread")
-    @patch("custom_components.nissan_na.nissan_api.smartcar.Vehicle")
-    async def test_unlock_doors_success(self, mock_vehicle_class, mock_to_thread):
-        ActionResponse = namedtuple("ActionResponse", ["status"])
-        mock_vehicle_class.return_value = Mock()
-        mock_to_thread.return_value = ActionResponse(status="success")
-
-        result = await _make_client().unlock_doors("vehicle_1")
+    async def test_unlock_doors_success(self):
+        body = {"status": "success"}
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=_make_v3_post_mock(body)):
+            result = await _make_client().unlock_doors("vehicle_1")
 
         assert result["status"] == "success"
 
@@ -632,15 +413,10 @@ class TestStartCharge:
     """Tests for start_charge method"""
 
     @pytest.mark.asyncio
-    @patch("custom_components.nissan_na.nissan_api.asyncio.to_thread")
-    @patch("custom_components.nissan_na.nissan_api.smartcar.Vehicle")
-    async def test_start_charge_success(self, mock_vehicle_class, mock_to_thread):
-        ActionResponse = namedtuple("ActionResponse", ["status"])
-        mock_vehicle_class.return_value = Mock()
-        mock_to_thread.return_value = ActionResponse(status="success")
-
-        result = await _make_client().start_charge("vehicle_1")
-
+    async def test_start_charge_success(self):
+        body = {"status": "success"}
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=_make_v3_post_mock(body)):
+            result = await _make_client().start_charge("vehicle_1")
         assert result["status"] == "success"
 
 
@@ -648,15 +424,10 @@ class TestStopCharge:
     """Tests for stop_charge method"""
 
     @pytest.mark.asyncio
-    @patch("custom_components.nissan_na.nissan_api.asyncio.to_thread")
-    @patch("custom_components.nissan_na.nissan_api.smartcar.Vehicle")
-    async def test_stop_charge_success(self, mock_vehicle_class, mock_to_thread):
-        ActionResponse = namedtuple("ActionResponse", ["status"])
-        mock_vehicle_class.return_value = Mock()
-        mock_to_thread.return_value = ActionResponse(status="success")
-
-        result = await _make_client().stop_charge("vehicle_1")
-
+    async def test_stop_charge_success(self):
+        body = {"status": "success"}
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=_make_v3_post_mock(body)):
+            result = await _make_client().stop_charge("vehicle_1")
         assert result["status"] == "success"
 
 
@@ -664,15 +435,10 @@ class TestGetPermissions:
     """Tests for get_permissions method"""
 
     @pytest.mark.asyncio
-    @patch("custom_components.nissan_na.nissan_api.asyncio.to_thread")
-    @patch("custom_components.nissan_na.nissan_api.smartcar.Vehicle")
-    async def test_get_permissions_success(self, mock_vehicle_class, mock_to_thread):
-        PermissionsResponse = namedtuple("PermissionsResponse", ["permissions"])
-        mock_vehicle_class.return_value = Mock()
-        mock_to_thread.return_value = PermissionsResponse(permissions=["read_location", "control_security"])
-
-        result = await _make_client().get_permissions("vehicle_1")
-
+    async def test_get_permissions_success(self):
+        body = {"data": {"attributes": {"permissions": ["read_location", "control_security"]}}}
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=_make_v3_get_mock(body)):
+            result = await _make_client().get_permissions("vehicle_1")
         assert len(result) == 2
         assert "read_location" in result
         assert "control_security" in result
@@ -686,18 +452,14 @@ class TestDisconnect:
         client = _make_client()
         client._vehicle_model_cache["vehicle_1"] = Mock()
 
-        with patch("custom_components.nissan_na.nissan_api.aiohttp.ClientSession") as mock_cls:
-            mock_resp = AsyncMock()
-            mock_resp.status = 200
-            mock_ctx = AsyncMock()
-            mock_ctx.__aenter__ = AsyncMock(return_value=mock_resp)
-            mock_ctx.__aexit__ = AsyncMock(return_value=None)
-            mock_sess = AsyncMock()
-            mock_sess.delete = Mock(return_value=mock_ctx)
-            mock_sess.__aenter__ = AsyncMock(return_value=mock_sess)
-            mock_sess.__aexit__ = AsyncMock(return_value=None)
-            mock_cls.return_value = mock_sess
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_httpx = AsyncMock()
+        mock_httpx.__aenter__ = AsyncMock(return_value=mock_httpx)
+        mock_httpx.__aexit__ = AsyncMock(return_value=None)
+        mock_httpx.delete = AsyncMock(return_value=mock_resp)
 
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=mock_httpx):
             result = await client.disconnect("vehicle_1")
 
         assert result is True
@@ -719,20 +481,15 @@ class TestGetVehicleSignals:
                 {"attributes": {"code": "internalcombustionengine-fuellevel", "status": {"value": "ERROR"}}},
             ]
         }
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = response_data
+        mock_httpx = AsyncMock()
+        mock_httpx.__aenter__ = AsyncMock(return_value=mock_httpx)
+        mock_httpx.__aexit__ = AsyncMock(return_value=None)
+        mock_httpx.get = AsyncMock(return_value=mock_resp)
 
-        with patch("custom_components.nissan_na.nissan_api.aiohttp.ClientSession") as mock_cls:
-            mock_resp = AsyncMock()
-            mock_resp.status = 200
-            mock_resp.json = AsyncMock(return_value=response_data)
-            mock_ctx = AsyncMock()
-            mock_ctx.__aenter__ = AsyncMock(return_value=mock_resp)
-            mock_ctx.__aexit__ = AsyncMock(return_value=None)
-            mock_sess = AsyncMock()
-            mock_sess.get = Mock(return_value=mock_ctx)
-            mock_sess.__aenter__ = AsyncMock(return_value=mock_sess)
-            mock_sess.__aexit__ = AsyncMock(return_value=None)
-            mock_cls.return_value = mock_sess
-
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=mock_httpx):
             result = await client.get_vehicle_signals("vehicle_1")
 
         assert len(result) == 3
@@ -744,18 +501,14 @@ class TestGetVehicleSignals:
     async def test_get_vehicle_signals_api_error(self):
         client = _make_client()
 
-        with patch("custom_components.nissan_na.nissan_api.aiohttp.ClientSession") as mock_cls:
-            mock_resp = AsyncMock()
-            mock_resp.status = 404
-            mock_ctx = AsyncMock()
-            mock_ctx.__aenter__ = AsyncMock(return_value=mock_resp)
-            mock_ctx.__aexit__ = AsyncMock(return_value=None)
-            mock_sess = AsyncMock()
-            mock_sess.get = Mock(return_value=mock_ctx)
-            mock_sess.__aenter__ = AsyncMock(return_value=mock_sess)
-            mock_sess.__aexit__ = AsyncMock(return_value=None)
-            mock_cls.return_value = mock_sess
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        mock_httpx = AsyncMock()
+        mock_httpx.__aenter__ = AsyncMock(return_value=mock_httpx)
+        mock_httpx.__aexit__ = AsyncMock(return_value=None)
+        mock_httpx.get = AsyncMock(return_value=mock_resp)
 
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=mock_httpx):
             result = await client.get_vehicle_signals("vehicle_1")
 
         assert result == []
@@ -764,7 +517,7 @@ class TestGetVehicleSignals:
     async def test_get_vehicle_signals_exception(self):
         client = _make_client()
 
-        with patch("custom_components.nissan_na.nissan_api.aiohttp.ClientSession", side_effect=Exception("Connection error")):
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", side_effect=Exception("Connection error")):
             result = await client.get_vehicle_signals("vehicle_1")
 
         assert result == []
@@ -804,19 +557,15 @@ class TestGetVehicleStatus:
             ]
         }
 
-        with patch("custom_components.nissan_na.nissan_api.aiohttp.ClientSession") as mock_cls:
-            mock_resp = AsyncMock()
-            mock_resp.status = 200
-            mock_resp.json = AsyncMock(return_value=bulk_response)
-            mock_ctx = AsyncMock()
-            mock_ctx.__aenter__ = AsyncMock(return_value=mock_resp)
-            mock_ctx.__aexit__ = AsyncMock(return_value=None)
-            mock_sess = AsyncMock()
-            mock_sess.get = Mock(return_value=mock_ctx)
-            mock_sess.__aenter__ = AsyncMock(return_value=mock_sess)
-            mock_sess.__aexit__ = AsyncMock(return_value=None)
-            mock_cls.return_value = mock_sess
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = bulk_response
+        mock_httpx = AsyncMock()
+        mock_httpx.__aenter__ = AsyncMock(return_value=mock_httpx)
+        mock_httpx.__aexit__ = AsyncMock(return_value=None)
+        mock_httpx.get = AsyncMock(return_value=mock_resp)
 
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=mock_httpx):
             result = await client.get_vehicle_status("vehicle_1")
 
         assert "odometer" in result
@@ -852,19 +601,15 @@ class TestGetVehicleStatus:
             ]
         }
 
-        with patch("custom_components.nissan_na.nissan_api.aiohttp.ClientSession") as mock_cls:
-            mock_resp = AsyncMock()
-            mock_resp.status = 200
-            mock_resp.json = AsyncMock(return_value=bulk_response)
-            mock_ctx = AsyncMock()
-            mock_ctx.__aenter__ = AsyncMock(return_value=mock_resp)
-            mock_ctx.__aexit__ = AsyncMock(return_value=None)
-            mock_sess = AsyncMock()
-            mock_sess.get = Mock(return_value=mock_ctx)
-            mock_sess.__aenter__ = AsyncMock(return_value=mock_sess)
-            mock_sess.__aexit__ = AsyncMock(return_value=None)
-            mock_cls.return_value = mock_sess
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = bulk_response
+        mock_httpx = AsyncMock()
+        mock_httpx.__aenter__ = AsyncMock(return_value=mock_httpx)
+        mock_httpx.__aexit__ = AsyncMock(return_value=None)
+        mock_httpx.get = AsyncMock(return_value=mock_resp)
 
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=mock_httpx):
             result = await client.get_vehicle_status("vehicle_1")
 
         assert "odometer" in result
@@ -875,36 +620,23 @@ class TestGetVehicleStatus:
 class TestClimateControl:
     """Tests for climate control methods"""
 
-    def _mock_session(self, method, response_body):
-        mock_resp = AsyncMock()
-        mock_resp.json = AsyncMock(return_value=response_body)
-        mock_resp.raise_for_status = Mock()
-        mock_ctx = AsyncMock()
-        mock_ctx.__aenter__ = AsyncMock(return_value=mock_resp)
-        mock_ctx.__aexit__ = AsyncMock(return_value=None)
-        mock_sess = AsyncMock()
-        setattr(mock_sess, method, Mock(return_value=mock_ctx))
-        mock_sess.__aenter__ = AsyncMock(return_value=mock_sess)
-        mock_sess.__aexit__ = AsyncMock(return_value=None)
-        return mock_sess
-
     @pytest.mark.asyncio
     async def test_start_climate_success(self):
-        with patch("custom_components.nissan_na.nissan_api.aiohttp.ClientSession") as mock_cls:
-            mock_cls.return_value = self._mock_session("post", {"status": "success"})
+        body = {"status": "success"}
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=_make_v3_post_mock(body)):
             result = await _make_client().start_climate("vehicle_1")
         assert result["status"] == "success"
 
     @pytest.mark.asyncio
     async def test_stop_climate_success(self):
-        with patch("custom_components.nissan_na.nissan_api.aiohttp.ClientSession") as mock_cls:
-            mock_cls.return_value = self._mock_session("post", {"status": "success"})
+        body = {"status": "success"}
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=_make_v3_post_mock(body)):
             result = await _make_client().stop_climate("vehicle_1")
         assert result["status"] == "success"
 
     @pytest.mark.asyncio
     async def test_get_climate_status_success(self):
-        with patch("custom_components.nissan_na.nissan_api.aiohttp.ClientSession") as mock_cls:
-            mock_cls.return_value = self._mock_session("get", {"state": "ACTIVE"})
+        body = {"state": "ACTIVE"}
+        with patch("custom_components.nissan_na.nissan_api.httpx.AsyncClient", return_value=_make_v3_get_mock(body)):
             result = await _make_client().get_climate_status("vehicle_1")
         assert result["state"] == "ACTIVE"

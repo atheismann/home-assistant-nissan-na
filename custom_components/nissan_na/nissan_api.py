@@ -6,11 +6,9 @@ initial Smartcar Connect flow.  No per-user refresh tokens are stored —
 a short-lived application token is fetched automatically as needed.
 """
 
-import base64
 import logging
 import time
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlencode
 
 import httpx
 from pydantic import BaseModel
@@ -59,13 +57,11 @@ class SmartcarApiClient:
         self,
         client_id: str,
         client_secret: str,
-        redirect_uri: str,
         user_id: Optional[str] = None,
         test_mode: bool = False,
     ):
         self.client_id = client_id
         self.client_secret = client_secret
-        self.redirect_uri = redirect_uri
         self.user_id = user_id
         self.test_mode = test_mode
         # Client-credentials token cache
@@ -150,83 +146,13 @@ class SmartcarApiClient:
             return resp.json()
 
     # ------------------------------------------------------------------
-    # Initial OAuth flow (Smartcar Connect — runs once to capture user_id)
-    # ------------------------------------------------------------------
-
-    def get_auth_url(self, state: Optional[str] = None) -> str:
-        """Generate Smartcar OAuth authorization URL."""
-        scope = [
-            "required:read_vehicle_info",
-            "required:read_location",
-            "required:read_odometer",
-            "read_security",
-            "control_security",
-            "read_battery",
-            "read_charge",
-            "control_charge",
-            "read_fuel",
-        ]
-        params: Dict[str, Any] = {
-            "response_type": "code",
-            "client_id": self.client_id,
-            "redirect_uri": self.redirect_uri,
-            "scope": " ".join(scope),
-            "mode": "test" if self.test_mode else "live",
-            "make": "NISSAN",
-        }
-        if state:
-            params["state"] = state
-        return f"https://connect.smartcar.com/oauth/authorize?{urlencode(params)}"
-
-    async def authenticate(self, code: str) -> Dict[str, Any]:
-        """Exchange authorization code and capture user_id.
-
-        The access token from the code exchange is used only to fetch user_id
-        and then discarded.  All subsequent calls use client-credentials tokens.
-        """
-        credentials = base64.b64encode(
-            f"{self.client_id}:{self.client_secret}".encode()
-        ).decode()
-
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                self._IAM_TOKEN_URL,
-                headers={
-                    "Authorization": f"Basic {credentials}",
-                    "Content-Type": "application/x-www-form-urlencoded",
-                },
-                data={
-                    "grant_type": "authorization_code",
-                    "code": code,
-                    "redirect_uri": self.redirect_uri,
-                },
-            )
-            if resp.status_code != 200:
-                raise ValueError(f"Code exchange failed ({resp.status_code}): {resp.text}")
-            token_data = resp.json()
-
-            resp = await client.get(
-                self._USER_URL,
-                headers={"Authorization": f"Bearer {token_data['access_token']}"},
-            )
-            if resp.status_code != 200:
-                raise ValueError(f"User fetch failed ({resp.status_code}): {resp.text}")
-            user_data = resp.json()
-
-        self.user_id = user_data.get("id")
-        _LOGGER.debug("Smartcar Connect complete — user_id: %s", self.user_id)
-        self._vehicle_signals_cache.clear()
-        self._permission_denied_signals.clear()
-        return {"user_id": self.user_id}
-
-    # ------------------------------------------------------------------
     # Vehicle list (Connections API)
     # ------------------------------------------------------------------
 
     async def get_vehicle_list(self) -> List[Vehicle]:
         """Return all vehicles connected for this user via the Connections API."""
         if not self.user_id:
-            raise ValueError("user_id is not set. Run authenticate() first.")
+            raise ValueError("user_id is not set.")
 
         headers = await self._api_headers()
         async with httpx.AsyncClient() as client:

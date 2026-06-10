@@ -208,22 +208,19 @@ class TestNissanChargeLimitNumber:
         
         # Mock async_write_ha_state
         number.async_write_ha_state = MagicMock()
-        # Mock the access token
-        mock_client.access_token = "test_token"
-        
+        mock_client._get_access_token = AsyncMock(return_value="test_token")
+
         mock_response = MagicMock()
-        mock_response.status = 200
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-        
-        mock_session = AsyncMock()
-        mock_session.post = MagicMock(return_value=mock_response)
-        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_session.__aexit__ = AsyncMock(return_value=False)
-        
-        with patch("aiohttp.ClientSession", return_value=mock_session):
+        mock_response.status_code = 200
+
+        mock_httpx = AsyncMock()
+        mock_httpx.__aenter__ = AsyncMock(return_value=mock_httpx)
+        mock_httpx.__aexit__ = AsyncMock(return_value=False)
+        mock_httpx.post = AsyncMock(return_value=mock_response)
+
+        with patch("custom_components.nissan_na.number.httpx.AsyncClient", return_value=mock_httpx):
             await number.async_set_native_value(85.0)
-        
+
         assert number._attr_native_value == 85
         number.async_write_ha_state.assert_called_once()
 
@@ -239,24 +236,21 @@ class TestNissanChargeLimitNumber:
         
         # Mock async_write_ha_state
         number.async_write_ha_state = MagicMock()
-        # Mock the access token
-        mock_client.access_token = "test_token"
-        
+        mock_client._get_access_token = AsyncMock(return_value="test_token")
+
         mock_response = MagicMock()
-        mock_response.status = 200
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-        
-        mock_session = AsyncMock()
-        mock_session.post = MagicMock(return_value=mock_response)
-        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_session.__aexit__ = AsyncMock(return_value=False)
-        
-        with patch("aiohttp.ClientSession", return_value=mock_session):
+        mock_response.status_code = 200
+
+        mock_httpx = AsyncMock()
+        mock_httpx.__aenter__ = AsyncMock(return_value=mock_httpx)
+        mock_httpx.__aexit__ = AsyncMock(return_value=False)
+        mock_httpx.post = AsyncMock(return_value=mock_response)
+
+        with patch("custom_components.nissan_na.number.httpx.AsyncClient", return_value=mock_httpx):
             # Test upper bound
             await number.async_set_native_value(150.0)
             assert number._attr_native_value == 100
-            
+
             # Test lower bound
             await number.async_set_native_value(-10.0)
             assert number._attr_native_value == 0
@@ -273,22 +267,19 @@ class TestNissanChargeLimitNumber:
         
         # Mock async_write_ha_state
         number.async_write_ha_state = MagicMock()
-        # Mock the access token
-        mock_client.access_token = "test_token"
-        
+        mock_client._get_access_token = AsyncMock(return_value="test_token")
+
         mock_response = MagicMock()
-        mock_response.status = 500
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-        
-        mock_session = AsyncMock()
-        mock_session.post = MagicMock(return_value=mock_response)
-        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_session.__aexit__ = AsyncMock(return_value=False)
-        
-        with patch("aiohttp.ClientSession", return_value=mock_session):
+        mock_response.status_code = 500
+
+        mock_httpx = AsyncMock()
+        mock_httpx.__aenter__ = AsyncMock(return_value=mock_httpx)
+        mock_httpx.__aexit__ = AsyncMock(return_value=False)
+        mock_httpx.post = AsyncMock(return_value=mock_response)
+
+        with patch("custom_components.nissan_na.number.httpx.AsyncClient", return_value=mock_httpx):
             await number.async_set_native_value(90.0)
-        
+
         assert number._attr_available is False
 
     @pytest.mark.asyncio
@@ -303,10 +294,10 @@ class TestNissanChargeLimitNumber:
         
         # Mock async_write_ha_state
         number.async_write_ha_state = MagicMock()
-        
-        with patch("aiohttp.ClientSession", side_effect=Exception("Connection error")):
+
+        with patch("custom_components.nissan_na.number.httpx.AsyncClient", side_effect=Exception("Connection error")):
             await number.async_set_native_value(90.0)
-        
+
         assert number._attr_available is False
 
 
@@ -549,19 +540,17 @@ class TestNumberPropertiesAndAttributes:
         )
         
         number.async_write_ha_state = MagicMock()
-        mock_client.access_token = "test_token"
-        
+        mock_client._get_access_token = AsyncMock(return_value="test_token")
+
         mock_response = MagicMock()
-        mock_response.status = 204
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=False)
-        
-        mock_session = AsyncMock()
-        mock_session.post = MagicMock(return_value=mock_response)
-        mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-        mock_session.__aexit__ = AsyncMock(return_value=False)
-        
-        with patch("aiohttp.ClientSession", return_value=mock_session):
+        mock_response.status_code = 204
+
+        mock_httpx = AsyncMock()
+        mock_httpx.__aenter__ = AsyncMock(return_value=mock_httpx)
+        mock_httpx.__aexit__ = AsyncMock(return_value=False)
+        mock_httpx.post = AsyncMock(return_value=mock_response)
+
+        with patch("custom_components.nissan_na.number.httpx.AsyncClient", return_value=mock_httpx):
             await number.async_set_native_value(75.0)
         
         assert number._attr_native_value == 75
