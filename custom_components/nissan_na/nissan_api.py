@@ -964,29 +964,24 @@ class SmartcarApiClient:
             status.setdefault("security", {})["engineCover"] = body
 
         elif code == "diagnostics-mil":
-            status.setdefault("diagnostics", {})["mil"] = (
-                body.get("isActive") or body.get("mil") or body.get("value")
-            )
+            # Body: {"status": "OK"|"ACTIVE", "description": null}
+            status.setdefault("diagnostics", {})["mil"] = body.get("status")
 
         elif code == "diagnostics-abs":
-            status.setdefault("diagnostics", {})["abs"] = (
-                body.get("isActive") or body.get("abs") or body.get("value")
-            )
+            # Body: {"status": "OK"|"ACTIVE", "description": null}
+            status.setdefault("diagnostics", {})["abs"] = body.get("status")
 
         elif code == "diagnostics-brakefluid":
-            status.setdefault("diagnostics", {})["brakeFluid"] = (
-                body.get("isLow") or body.get("brakeFluid") or body.get("value")
-            )
+            # Body: {"status": "OK"|"LOW", "description": null}
+            status.setdefault("diagnostics", {})["brakeFluid"] = body.get("status")
 
         elif code == "diagnostics-airbag":
-            status.setdefault("diagnostics", {})["airbag"] = (
-                body.get("isDeployed") or body.get("airbag") or body.get("value")
-            )
+            # Body: {"status": "OK"|"DEPLOYED", "description": null}
+            status.setdefault("diagnostics", {})["airbag"] = body.get("status")
 
         elif code == "diagnostics-oilpressure":
-            status.setdefault("diagnostics", {})["oilPressure"] = (
-                body.get("isLow") or body.get("oilPressure") or body.get("value")
-            )
+            # Body: {"status": "OK"|"LOW", "description": null}
+            status.setdefault("diagnostics", {})["oilPressure"] = body.get("status")
 
         elif code == "tractionbattery-stateofcharge":
             status.setdefault("battery", {})["percentRemaining"] = (
