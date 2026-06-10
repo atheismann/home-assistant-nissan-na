@@ -84,8 +84,7 @@ class SmartcarApiClient:
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 self._IAM_TOKEN_URL,
-                headers={"Content-Type": "application/x-www-form-urlencoded"},
-                data={
+                json={
                     "grant_type": "client_credentials",
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
