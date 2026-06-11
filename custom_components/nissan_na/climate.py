@@ -21,7 +21,8 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 
         try:
             permissions = await client.get_permissions(vehicle.id)
-            # Only skip if we got a valid, non-empty permission list without control_climate
+            # Only skip if we got a valid, non-empty permission list
+            # without control_climate
             if (
                 permissions
                 and len(permissions) > 0

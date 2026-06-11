@@ -27,7 +27,8 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 
         try:
             permissions = await client.get_permissions(vehicle.id)
-            # Only skip if we got a valid, non-empty permission list without read_location
+            # Only skip if we got a valid, non-empty permission list
+            # without read_location
             if (
                 permissions
                 and len(permissions) > 0
@@ -82,7 +83,7 @@ class NissanVehicleTracker(TrackerEntity):
     async def async_added_to_hass(self):
         """Subscribe to webhook updates when entity is added to hass."""
         await super().async_added_to_hass()
-        
+
         # Subscribe to webhook data updates for this vehicle
         self._unsub_dispatcher = async_dispatcher_connect(
             self.hass,
@@ -103,7 +104,7 @@ class NissanVehicleTracker(TrackerEntity):
 
     def _handle_webhook_data(self, data: dict):
         """Handle webhook data update from Smartcar.
-        
+
         Args:
             data: Dictionary containing updated vehicle data from webhook
         """
@@ -116,7 +117,7 @@ class NissanVehicleTracker(TrackerEntity):
             "Webhook fields: %s",
             list(data.keys()) if isinstance(data, dict) else "N/A",
         )
-        
+
         # Update the status dict with webhook data
         if isinstance(data, dict):
             old_location = self._status.get("location")
@@ -135,7 +136,9 @@ class NissanVehicleTracker(TrackerEntity):
                     )
             # Trigger state update
             self.async_write_ha_state()
-            _LOGGER.debug("Location state written for device tracker %s", self._attr_name)
+            _LOGGER.debug(
+                "Location state written for device tracker %s", self._attr_name
+            )
         else:
             _LOGGER.warning(
                 "Invalid webhook data type for %s: %s",
@@ -150,7 +153,7 @@ class NissanVehicleTracker(TrackerEntity):
 
     async def async_update(self):
         """Fetch the latest location from the vehicle.
-        
+
         This method can be called manually to refresh device tracker state,
         or automatically on boot to ensure fresh initial data.
         """
@@ -165,7 +168,9 @@ class NissanVehicleTracker(TrackerEntity):
                 self._attr_name,
             )
         except Exception as err:
-            _LOGGER.error("Failed to update device tracker %s: %s", self._attr_name, err)
+            _LOGGER.error(
+                "Failed to update device tracker %s: %s", self._attr_name, err
+            )
 
     @property
     def latitude(self):

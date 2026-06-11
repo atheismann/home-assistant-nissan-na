@@ -1,4 +1,5 @@
 """Number for Nissan NA integration."""
+
 import logging
 
 import httpx
@@ -19,14 +20,14 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
     client = data["client"]
     vehicles = await client.get_vehicle_list()
     entities = []
-    
+
     # Track created number entities per vehicle
     if "numbers" not in data:
         data["numbers"] = {}
 
     for vehicle in vehicles:
         _LOGGER.info("Setting up number entities for vehicle %s", vehicle.id)
-        
+
         # Get available signals from Smartcar API
         available_signals = set()
         try:
@@ -38,20 +39,22 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                 vehicle.id,
                 err,
             )
-        
+
         # Check permissions for charging control
         permissions = []
         try:
             permissions = await client.get_permissions(vehicle.id)
         except Exception:
             pass
-        
+
         # Initialize tracking dict for this vehicle
         if vehicle.id not in data["numbers"]:
             data["numbers"][vehicle.id] = {}
 
         # Create charge limit number if signal is available and permission granted
-        if ("charge.limit" in available_signals or not available_signals) and "control_charge" in permissions:
+        if (
+            "charge.limit" in available_signals or not available_signals
+        ) and "control_charge" in permissions:
             _LOGGER.info(
                 "Creating charge limit number for vehicle %s",
                 vehicle.id,
@@ -64,31 +67,30 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             )
             entities.append(number)
             data["numbers"][vehicle.id]["charge_limit"] = number
-    
+
     async_add_entities(entities)
-    
+
     # Set up webhook handler for updates
     async def handle_webhook_for_numbers(vehicle_id: str, webhook_data: dict):
         """Update numbers from webhook data."""
         if vehicle_id not in data["numbers"]:
             return
-        
+
         _LOGGER.debug(
             "Webhook data for numbers on vehicle %s: %s fields",
             vehicle_id,
             len(webhook_data) if isinstance(webhook_data, dict) else 0,
         )
-    
+
     from homeassistant.core import callback
-    
+
     for vehicle in vehicles:
+
         @callback
         def handle_webhook_signal(webhook_data: dict, vehicle_id: str = vehicle.id):
             """Callback to handle webhook data updates."""
-            hass.async_create_task(
-                handle_webhook_for_numbers(vehicle_id, webhook_data)
-            )
-        
+            hass.async_create_task(handle_webhook_for_numbers(vehicle_id, webhook_data))
+
         async_dispatcher_connect(
             hass,
             f"{SIGNAL_WEBHOOK_DATA}_{vehicle.id}",
@@ -108,7 +110,7 @@ class NissanChargeLimitNumber(NumberEntity):
         self._attr_native_value = 80  # Default charge limit
         self._attr_available = True
         self._unsub_dispatcher = None
-        
+
         # Build device name
         nickname = getattr(vehicle, "nickname", None)
         if nickname:
@@ -121,7 +123,7 @@ class NissanChargeLimitNumber(NumberEntity):
                 display_name = f"{year} {make} {model}"
             else:
                 display_name = vehicle.vin
-        
+
         self._attr_name = f"{display_name} Charge Limit"
         self._attr_unique_id = f"{self._vehicle.vin}_charge_limit"
         self._attr_native_min_value = 0
@@ -136,7 +138,7 @@ class NissanChargeLimitNumber(NumberEntity):
     async def async_added_to_hass(self):
         """Subscribe to webhook updates."""
         await super().async_added_to_hass()
-        
+
         self._unsub_dispatcher = async_dispatcher_connect(
             self.hass,
             f"{SIGNAL_WEBHOOK_DATA}_{self._vehicle.id}",
@@ -157,7 +159,7 @@ class NissanChargeLimitNumber(NumberEntity):
         """Handle webhook data updates."""
         if not isinstance(data, dict):
             return
-        
+
         try:
             if "charge" in data and isinstance(data["charge"], dict):
                 charge_data = data["charge"]
@@ -180,11 +182,12 @@ class NissanChargeLimitNumber(NumberEntity):
             # Smartcar API expects integer 0-100
             limit = int(max(0, min(100, value)))
             # Make API call to set charge limit
-            url = f"https://vehicle.api.smartcar.com/v3/vehicles/{self._vehicle.id}/charge/limit"
+            url = (
+                f"https://vehicle.api.smartcar.com/v3"
+                f"/vehicles/{self._vehicle.id}/charge/limit"
+            )
             access_token = await self._client._get_access_token()
-            headers = {
-                "Authorization": f"Bearer {access_token}"
-            }
+            headers = {"Authorization": f"Bearer {access_token}"}
             data = {"limit": limit}
 
             async with httpx.AsyncClient() as client:

@@ -5,7 +5,7 @@
 ![GitHub last commit](https://img.shields.io/github/last-commit/atheismann/home-assistant-nissan-na?style=flat-square)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)
 ![HACS badge](https://img.shields.io/badge/HACS-Custom-blue?style=flat-square)
-![Python](https://img.shields.io/badge/python-3.12%2B-blue?style=flat-square)
+![Python](https://img.shields.io/badge/python-3.14%2B-blue?style=flat-square)
 
 Easily control and monitor your Nissan vehicle from Home Assistant using the **Smartcar API**! This integration provides reliable, standardized access to your vehicle's features through Smartcar's platform, supporting lock/unlock, battery monitoring, location tracking, charging control, and more.
 
@@ -14,7 +14,7 @@ Easily control and monitor your Nissan vehicle from Home Assistant using the **S
 ## Table of Contents
 
 - [Features](#features)
-- [Recent Updates & Improvements](#recent-updates--improvements)
+- [Recent Updates & Improvements](#whats-new)
 - [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Setup](#setup)
@@ -96,6 +96,7 @@ All features depend on your vehicle model and Smartcar's support for your specif
 ### ⚡ What You Can Monitor & Control
 
 **Battery & Charging** (EVs):
+
 - Battery percentage, range, and capacity
 - Charging state, voltage, current, and power
 - Time to full charge and max current
@@ -103,18 +104,21 @@ All features depend on your vehicle model and Smartcar's support for your specif
 - Charging switch (start/stop)
 
 **Doors & Security**:
+
 - All 4 doors (open status + lock status)
 - All 4 windows (open status)
 - Front and rear trunks (open + lock)
 - Engine cover and sunroof
 
 **Vehicle Status**:
+
 - Tire pressure (all 4 wheels)
 - Current gear, oil life, software version
 - GPS location (latitude/longitude)
 - Odometer and fuel level
 
 **Connectivity**:
+
 - Vehicle online/offline status
 - Sleep mode status
 - Digital key pairing
@@ -194,6 +198,7 @@ You can adjust settings after setup:
 ### Sensor Management Philosophy
 
 **At Boot**: The integration only **adds new sensors** - existing sensors are never automatically removed. This ensures:
+
 - ✅ Your automations continue working
 - ✅ No unexpected sensor disappearances
 - ✅ Stable entity IDs across restarts
@@ -252,7 +257,8 @@ You can adjust settings after setup:
 | Just want to add new sensors safely | ❌ No | ✅ Yes |
 | First time setup | N/A | N/A |
 
-**Quick Rule**: 
+**Quick Rule**:
+
 - Use **Rebuild** when you need to clean up sensors
 - Use **Re-load** when you just want to add new sensors
 
@@ -306,7 +312,6 @@ The integration supports Smartcar webhooks for real-time vehicle updates instead
 2. **Smartcar Application Management Token**
    - Available in your Smartcar Dashboard
    - Required for webhook signature verification
-
 
 ### Setup Steps
 
@@ -716,6 +721,7 @@ The integration creates up to **58 entities** for your vehicle. **Entity availab
 ⚠️ **Smart Entity Discovery**: The integration automatically detects which entities your vehicle supports using Smartcar's signals API. Only compatible entities will appear - you won't see unavailable entities for features your vehicle doesn't have.
 
 🔍 **Missing Expected Entities?**
+
 - Check [Smartcar's compatibility page](https://smartcar.com/docs/api-reference/compatibility/) for your vehicle
 - EV-specific sensors only appear on electric vehicles
 - Door/window sensors require your vehicle to support those signals
@@ -732,6 +738,7 @@ This section documents how Smartcar v3 API signals are mapped to Home Assistant 
 **Reference**: https://smartcar.com/docs/api-reference/signals/schema
 
 ### Fuel & Engine Signals
+
 | API Signal Code | Sensor Definition | Description | Unit | Status |
 |---|---|---|---|---|
 | `internalcombustionengine-fuellevel` | `fuel.percentRemaining` | Current fuel level percentage | % | ✅ Mapped |
@@ -740,11 +747,13 @@ This section documents how Smartcar v3 API signals are mapped to Home Assistant 
 | `internalcombustionengine-oillife` | `engine.oilLifeRemaining` | Engine oil life remaining | % | ✅ Mapped |
 
 ### Odometer Signals
+
 | API Signal Code | Sensor Definition | Description | Unit | Status |
 |---|---|---|---|---|
 | `odometer-traveleddistance` | `odometer.distance` | Total distance traveled | km/mi | ✅ Mapped |
 
 ### Charging Signals
+
 | API Signal Code | Sensor Definition | Description | Unit | Status |
 |---|---|---|---|---|
 | `charge-amperagemax` | `charge.amperageMax` | Max available amperage | A | ✅ Mapped |
@@ -754,21 +763,25 @@ This section documents how Smartcar v3 API signals are mapped to Home Assistant 
 | `charge-limit` | `charge.limit` | Charge limit percentage | % | ✅ Mapped |
 
 ### Location Signals
+
 | API Signal Code | Sensor Definition | Description | Unit | Status |
 |---|---|---|---|---|
 | `location-preciselocation` | `location.latitude`, `location.longitude` | GPS coordinates + heading | °/N/S/E/W | ✅ Mapped |
 
 ### Tire & Wheel Signals
+
 | API Signal Code | Sensor Definition | Description | Unit | Status |
 |---|---|---|---|---|
 | `wheel-tires` | `tires.frontLeft.pressure`, etc. | Tire pressure all wheels | psi/bar | ✅ Mapped |
 
 ### Transmission Signals
+
 | API Signal Code | Sensor Definition | Description | Unit | Status |
 |---|---|---|---|---|
 | `transmission-gearstate` | `transmission.gear` | Current gear (P/R/N/D) | - | ✅ Mapped |
 
 ### Connectivity & Software Signals
+
 | API Signal Code | Sensor Definition | Description | Unit | Status |
 |---|---|---|---|---|
 | `connectivitysoftware-currentfirmwareversion` | `connectivity.softwareVersion` | Firmware version | - | ✅ Mapped |
@@ -777,11 +790,13 @@ This section documents how Smartcar v3 API signals are mapped to Home Assistant 
 | `connectivitystatus-isdigitalkeypaired` | `connectivity.isDigitalKeyPaired` | Is digital key paired | - | ✅ Mapped |
 
 ### Surveillance Signals
+
 | API Signal Code | Sensor Definition | Description | Unit | Status |
 |---|---|---|---|---|
 | `surveillance-isenabled` | `surveillance.isEnabled` | Is surveillance enabled | - | ✅ Mapped |
 
 ### Traction Battery Signals
+
 | API Signal Code | Sensor Definition | Description | Unit | Status |
 |---|---|---|---|---|
 | `tractionbattery-isheateractive` | `tractionBattery.isHeaterActive` | Is battery heater active | - | ✅ Mapped |
@@ -806,7 +821,6 @@ The following signals are available from Smartcar but don't have sensor definiti
 ---
 
 ## Services
-
 
 Call these services from automations or the Developer Tools:
 
@@ -967,6 +981,7 @@ Log in to your Smartcar Dashboard at https://dashboard.smartcar.com to see which
 ### Sensors Not Updating or Showing as Unavailable
 
 #### Scenario 1: Many Unavailable Sensors
+
 If you have multiple unavailable sensors that shouldn't exist:
 
 1. Go to **Settings > Devices & Services**
@@ -975,6 +990,7 @@ If you have multiple unavailable sensors that shouldn't exist:
 4. This will validate all sensors against your vehicle's current capabilities
 
 #### Scenario 2: Missing New Sensors After Upgrade
+
 If you upgraded and don't see new sensors:
 
 1. Go to **Settings > Devices & Services**
@@ -983,6 +999,7 @@ If you upgraded and don't see new sensors:
 4. New sensors will be discovered and added
 
 #### Scenario 3: Sensors Stopped Updating
+
 If sensors exist but aren't updating:
 
 1. Try **Refresh All Sensors** in the configuration menu
@@ -1025,14 +1042,16 @@ logger:
 ### What to Look For in Logs
 
 #### Webhook Setup and Verification
-```
+
+```text
 INFO - Webhook registered at: http://10.1.0.96:8123/api/webhook/...
 INFO - Configure this URL in your Smartcar Dashboard to receive real-time updates
 INFO - Webhook VERIFY challenge verified successfully
 ```
 
 #### Successful Webhook Data Reception
-```
+
+```text
 INFO - Webhook signature verified for vehicle af1ff81d-...
 INFO - Vehicle state update received for af1ff81d-... with 3 data fields
 DEBUG - Vehicle state data: {'odometer': {...}, 'location': {...}, 'battery': {...}}
@@ -1042,21 +1061,25 @@ INFO - Sensor 2025 NISSAN PATHFINDER Odometer updated via webhook: 6218.5 -> 622
 
 #### Common Errors to Debug
 
-**"No config entry found for webhook"**
+##### "No config entry found for webhook"
+
 - Webhook ID doesn't match configured webhook
 - Webhook not properly registered during integration setup
 
-**"Invalid webhook signature"**
+##### "Invalid webhook signature"
+
 - Management token is incorrect
 - Management token was regenerated in Smartcar Dashboard
 - Solution: Re-enter Management Token in integration configuration
 
-**"Missing SC-Signature header"**
+##### "Missing SC-Signature header"
+
 - Webhook not being sent from Smartcar
 - Smartcar Dashboard webhook configuration issue
 - Solution: Delete and recreate webhook in Smartcar Dashboard
 
-**"Webhook data received but sensors not updating"**
+##### "Webhook data received but sensors not updating"
+
 - Sensors not subscribed to webhook signal (should see DEBUG logs)
 - State not being written to Home Assistant
 - Check for errors in Home Assistant logs
@@ -1074,6 +1097,7 @@ The Smartcar API returns nested responses with metadata. The integration automat
 ```
 
 The integration extracts and properly handles:
+
 - Simple values: `{"level": 85}` → `85`
 - Nested with metadata: `{"distance": 6218.5, "meta": {...}}` → `6218.5`
 - Location objects: `{"lat": 37.7749, "lon": -122.4194}` → `"37.7749,-122.4194"`

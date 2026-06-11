@@ -1,18 +1,14 @@
-"""Unit tests for config flow."""
+"""Unit tests for config flow (OAuth2FlowHandler + NissanNAOptionsFlowHandler)."""
+
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 import voluptuous as vol
 from homeassistant import config_entries
 from custom_components.nissan_na.config_flow import (
-    NissanNAConfigFlow,
+    OAuth2FlowHandler,
     NissanNAOptionsFlowHandler,
-    _build_connect_url,
-    _CONNECT_AUTHORIZE_URL,
-    _CONNECT_REDIRECT_URI,
 )
 from custom_components.nissan_na.const import (
-    CONF_CLIENT_ID,
-    CONF_CLIENT_SECRET,
     CONF_USER_ID,
     DOMAIN,
     CONF_MANAGEMENT_TOKEN,
@@ -21,115 +17,217 @@ from custom_components.nissan_na.const import (
     UNIT_SYSTEM_IMPERIAL,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_flow():
-    flow = NissanNAConfigFlow()
+
+def _make_oauth_flow(user_id=None, client_id="cid", client_secret="sec"):
+    """Create an OAuth2FlowHandler with a mocked flow_impl."""
+    flow = OAuth2FlowHandler()
     flow.hass = MagicMock()
-    flow.context = {}
+    flow.context = {"source": config_entries.SOURCE_USER}
+    mock_impl = MagicMock()
+    mock_impl.domain = "nissan_na"
+    mock_impl.client_id = client_id
+    mock_impl.client_secret = client_secret
+    flow.flow_impl = mock_impl
+
+    if user_id:
+        flow._smartcar_user_id = user_id
+        flow.external_data = {"user_id": user_id, "state": "abc123"}
+
     return flow
 
 
 # ---------------------------------------------------------------------------
-# _build_connect_url
+# async_step_creation — captures user_id from Connect redirect
 # ---------------------------------------------------------------------------
 
-class TestBuildConnectUrl:
-    def test_contains_client_id(self):
-        url = _build_connect_url("my_client")
-        assert "client_id=my_client" in url
-
-    def test_starts_with_authorize_url(self):
-        url = _build_connect_url("cid")
-        assert url.startswith(_CONNECT_AUTHORIZE_URL)
-
-    def test_contains_redirect_uri(self):
-        url = _build_connect_url("cid")
-        assert "redirect_uri=" in url
-
-    def test_response_type_code(self):
-        url = _build_connect_url("cid")
-        assert "response_type=code" in url
-
-
-# ---------------------------------------------------------------------------
-# async_step_user
-# ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-class TestAsyncStepUser:
-    async def test_shows_form_when_no_input(self):
-        flow = _make_flow()
-        result = await flow.async_step_user()
-        assert result["type"] == "form"
-        assert result["step_id"] == "user"
+class TestAsyncStepCreation:
+    async def test_captures_user_id_from_new_api_redirect(self):
+        """New API Auth: redirect has `user_id` (lowercase with underscore)."""
+        flow = _make_oauth_flow()
+        flow.external_data = {"user_id": "uid_abc", "state": "xyz"}
 
-    async def test_validates_credentials_and_advances(self):
-        flow = _make_flow()
+        mock_vehicle = MagicMock()
+        with patch.object(
+            flow,
+            "async_oauth_create_entry",
+            new=AsyncMock(
+                return_value={"type": "create_entry", "data": {CONF_USER_ID: "uid_abc"}}
+            ),
+        ) as mock_create:
+            result = await flow.async_step_creation()
+
+        mock_create.assert_called_once()
+        assert flow._smartcar_user_id == "uid_abc"
+
+    async def test_captures_userId_from_migration_redirect(self):
+        """Migration flow: redirect has `userId` (camelCase)."""
+        flow = _make_oauth_flow()
+        flow.external_data = {"code": "CODE", "userId": "uid_migration", "state": "xyz"}
+
+        with patch.object(
+            flow,
+            "async_oauth_create_entry",
+            new=AsyncMock(
+                return_value={
+                    "type": "create_entry",
+                    "data": {CONF_USER_ID: "uid_migration"},
+                }
+            ),
+        ):
+            result = await flow.async_step_creation()
+
+        assert flow._smartcar_user_id == "uid_migration"
+
+    async def test_user_id_takes_priority_over_userId(self):
+        """If both `user_id` and `userId` are present, `user_id` wins."""
+        flow = _make_oauth_flow()
+        flow.external_data = {"user_id": "new_uid", "userId": "old_uid", "state": "xyz"}
+
+        with patch.object(
+            flow,
+            "async_oauth_create_entry",
+            new=AsyncMock(return_value={"type": "create_entry", "data": {}}),
+        ):
+            await flow.async_step_creation()
+
+        assert flow._smartcar_user_id == "new_uid"
+
+    async def test_aborts_when_no_user_id_in_redirect(self):
+        """If Connect redirect has no user_id / userId, abort."""
+        flow = _make_oauth_flow()
+        flow.external_data = {"code": "CODE", "state": "xyz"}  # no user_id
+
+        result = await flow.async_step_creation()
+
+        assert result["type"] == "abort"
+        assert result["reason"] == "missing_user_id"
+
+    async def test_aborts_when_external_data_empty(self):
+        flow = _make_oauth_flow()
+        flow.external_data = {}
+
+        result = await flow.async_step_creation()
+
+        assert result["type"] == "abort"
+        assert result["reason"] == "missing_user_id"
+
+    async def test_aborts_when_external_data_missing(self):
+        flow = _make_oauth_flow()
+        if hasattr(flow, "external_data"):
+            del flow.external_data
+
+        result = await flow.async_step_creation()
+
+        assert result["type"] == "abort"
+        assert result["reason"] == "missing_user_id"
+
+
+# ---------------------------------------------------------------------------
+# async_oauth_create_entry — validates vehicles and creates the config entry
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+class TestAsyncOauthCreateEntry:
+    async def test_creates_entry_with_user_id(self):
+        flow = _make_oauth_flow(user_id="uid_123")
+
+        mock_vehicle = MagicMock()
         with patch(
             "custom_components.nissan_na.config_flow.SmartcarApiClient"
         ) as mock_cls:
             mock_client = MagicMock()
-            mock_client._get_access_token = AsyncMock(return_value="tok")
+            mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
             mock_cls.return_value = mock_client
-
-            result = await flow.async_step_user(
-                {CONF_CLIENT_ID: "cid", CONF_CLIENT_SECRET: "sec"}
+            flow.async_create_entry = MagicMock(
+                return_value={
+                    "type": "create_entry",
+                    "title": "Nissan (Smartcar)",
+                    "data": {},
+                }
             )
 
-        assert result["type"] == "form"
-        assert result["step_id"] == "connect"
-        assert flow._client_id == "cid"
-        assert flow._client_secret == "sec"
+            result = await flow.async_oauth_create_entry(
+                {"auth_implementation": "nissan_na"}
+            )
 
-    async def test_returns_error_on_invalid_credentials(self):
-        flow = _make_flow()
+        assert result["type"] == "create_entry"
+        flow.async_create_entry.assert_called_once()
+        call_kwargs = flow.async_create_entry.call_args
+        assert call_kwargs.kwargs["data"][CONF_USER_ID] == "uid_123"
+
+    async def test_aborts_no_vehicles(self):
+        flow = _make_oauth_flow(user_id="uid_123")
+
         with patch(
             "custom_components.nissan_na.config_flow.SmartcarApiClient"
         ) as mock_cls:
             mock_client = MagicMock()
-            mock_client._get_access_token = AsyncMock(side_effect=Exception("401"))
+            mock_client.get_vehicle_list = AsyncMock(return_value=[])
             mock_cls.return_value = mock_client
 
-            result = await flow.async_step_user(
-                {CONF_CLIENT_ID: "bad", CONF_CLIENT_SECRET: "bad"}
+            result = await flow.async_oauth_create_entry(
+                {"auth_implementation": "nissan_na"}
             )
 
-        assert result["type"] == "form"
-        assert result["step_id"] == "user"
-        assert "base" in result["errors"]
-        assert result["errors"]["base"] == "invalid_credentials"
+        assert result["type"] == "abort"
+        assert result["reason"] == "no_vehicles"
 
+    async def test_aborts_connection_error(self):
+        flow = _make_oauth_flow(user_id="uid_123")
 
-# ---------------------------------------------------------------------------
-# async_step_connect
-# ---------------------------------------------------------------------------
+        with patch(
+            "custom_components.nissan_na.config_flow.SmartcarApiClient"
+        ) as mock_cls:
+            mock_client = MagicMock()
+            mock_client.get_vehicle_list = AsyncMock(side_effect=Exception("timeout"))
+            mock_cls.return_value = mock_client
 
-@pytest.mark.asyncio
-class TestAsyncStepConnect:
-    async def test_shows_form_when_no_input(self):
-        flow = _make_flow()
-        flow._client_id = "cid"
-        flow._client_secret = "sec"
-        result = await flow.async_step_connect()
-        assert result["type"] == "form"
-        assert result["step_id"] == "connect"
+            result = await flow.async_oauth_create_entry(
+                {"auth_implementation": "nissan_na"}
+            )
 
-    async def test_connect_url_in_placeholders(self):
-        flow = _make_flow()
-        flow._client_id = "cid"
-        flow._client_secret = "sec"
-        result = await flow.async_step_connect()
-        assert "connect_url" in result["description_placeholders"]
-        assert "cid" in result["description_placeholders"]["connect_url"]
+        assert result["type"] == "abort"
+        assert result["reason"] == "connection_error"
 
-    async def test_creates_entry_on_valid_user_id(self):
-        flow = _make_flow()
-        flow._client_id = "cid"
-        flow._client_secret = "sec"
+    async def test_aborts_missing_credentials(self):
+        flow = _make_oauth_flow(user_id="uid_123", client_id="", client_secret="")
+
+        result = await flow.async_oauth_create_entry(
+            {"auth_implementation": "nissan_na"}
+        )
+
+        assert result["type"] == "abort"
+        assert result["reason"] == "missing_credentials"
+
+    async def test_aborts_missing_user_id(self):
+        flow = _make_oauth_flow()  # no user_id set
+
+        result = await flow.async_oauth_create_entry(
+            {"auth_implementation": "nissan_na"}
+        )
+
+        assert result["type"] == "abort"
+        assert result["reason"] == "missing_user_id"
+
+    async def test_reauth_updates_entry(self):
+        flow = _make_oauth_flow(user_id="uid_new")
+        flow.context["source"] = config_entries.SOURCE_REAUTH
+
+        mock_reauth_entry = MagicMock()
+        mock_reauth_entry.entry_id = "existing_entry"
+        flow._get_reauth_entry = MagicMock(return_value=mock_reauth_entry)
+        flow.hass.config_entries.async_update_entry = MagicMock()
+        flow.hass.config_entries.async_reload = AsyncMock()
+        flow.async_abort = MagicMock(
+            return_value={"type": "abort", "reason": "reauth_successful"}
+        )
 
         mock_vehicle = MagicMock()
         with patch(
@@ -139,55 +237,51 @@ class TestAsyncStepConnect:
             mock_client.get_vehicle_list = AsyncMock(return_value=[mock_vehicle])
             mock_cls.return_value = mock_client
 
-            result = await flow.async_step_connect({CONF_USER_ID: "user_123"})
+            result = await flow.async_oauth_create_entry(
+                {"auth_implementation": "nissan_na"}
+            )
 
-        assert result["type"] == "create_entry"
-        assert result["title"] == "Nissan (Smartcar)"
-        assert result["data"][CONF_CLIENT_ID] == "cid"
-        assert result["data"][CONF_CLIENT_SECRET] == "sec"
-        assert result["data"][CONF_USER_ID] == "user_123"
+        flow.hass.config_entries.async_update_entry.assert_called_once()
+        flow.hass.config_entries.async_reload.assert_called_once()
+        flow.async_abort.assert_called_with(reason="reauth_successful")
 
-    async def test_no_vehicles_shows_error(self):
-        flow = _make_flow()
-        flow._client_id = "cid"
-        flow._client_secret = "sec"
 
-        with patch(
-            "custom_components.nissan_na.config_flow.SmartcarApiClient"
-        ) as mock_cls:
-            mock_client = MagicMock()
-            mock_client.get_vehicle_list = AsyncMock(return_value=[])
-            mock_cls.return_value = mock_client
+# ---------------------------------------------------------------------------
+# extra_authorize_data — scopes and Smartcar-specific params
+# ---------------------------------------------------------------------------
 
-            result = await flow.async_step_connect({CONF_USER_ID: "user_123"})
 
-        assert result["type"] == "form"
-        assert result["errors"]["base"] == "no_vehicles"
+class TestExtraAuthorizeData:
+    def test_contains_make_nissan(self):
+        flow = _make_oauth_flow()
+        data = flow.extra_authorize_data
+        assert data.get("make") == "NISSAN"
 
-    async def test_connection_error_shows_error(self):
-        flow = _make_flow()
-        flow._client_id = "cid"
-        flow._client_secret = "sec"
+    def test_contains_single_select(self):
+        flow = _make_oauth_flow()
+        data = flow.extra_authorize_data
+        assert data.get("single_select") == "true"
 
-        with patch(
-            "custom_components.nissan_na.config_flow.SmartcarApiClient"
-        ) as mock_cls:
-            mock_client = MagicMock()
-            mock_client.get_vehicle_list = AsyncMock(side_effect=Exception("timeout"))
-            mock_cls.return_value = mock_client
+    def test_scope_includes_required_vehicle_info(self):
+        flow = _make_oauth_flow()
+        data = flow.extra_authorize_data
+        assert "required:read_vehicle_info" in data["scope"]
 
-            result = await flow.async_step_connect({CONF_USER_ID: "user_123"})
-
-        assert result["type"] == "form"
-        assert result["errors"]["base"] == "connection_error"
+    def test_scope_includes_climate_control(self):
+        flow = _make_oauth_flow()
+        data = flow.extra_authorize_data
+        assert "control_climate" in data["scope"]
 
 
 # ---------------------------------------------------------------------------
 # Options flow
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
-@pytest.mark.xfail(reason="Home Assistant deprecates setting config_entry directly in tests", run=True)
+@pytest.mark.xfail(
+    reason="Home Assistant deprecates setting config_entry directly in tests", run=True
+)
 class TestOptionsFlow:
     async def test_async_step_init_menu(self):
         mock_entry = MagicMock()
@@ -211,7 +305,9 @@ class TestOptionsFlow:
         flow.hass.config_entries.async_update_entry = MagicMock()
         flow.hass.config_entries.async_reload = AsyncMock()
 
-        result = await flow.async_step_unit_system({CONF_UNIT_SYSTEM: UNIT_SYSTEM_METRIC})
+        result = await flow.async_step_unit_system(
+            {CONF_UNIT_SYSTEM: UNIT_SYSTEM_METRIC}
+        )
         assert result["type"] in ("create_entry", "form", "abort")
 
     async def test_async_step_unit_system_save_imperial(self):
@@ -225,7 +321,9 @@ class TestOptionsFlow:
         flow.hass.config_entries.async_update_entry = MagicMock()
         flow.hass.config_entries.async_reload = AsyncMock()
 
-        result = await flow.async_step_unit_system({CONF_UNIT_SYSTEM: UNIT_SYSTEM_IMPERIAL})
+        result = await flow.async_step_unit_system(
+            {CONF_UNIT_SYSTEM: UNIT_SYSTEM_IMPERIAL}
+        )
         assert result["type"] in ("create_entry", "form", "abort")
 
     async def test_async_step_webhook_config_show_form(self):
@@ -250,7 +348,9 @@ class TestOptionsFlow:
         flow.hass = MagicMock()
         flow.hass.config_entries.async_update_entry = MagicMock()
 
-        result = await flow.async_step_webhook_config({CONF_MANAGEMENT_TOKEN: "token_abc"})
+        result = await flow.async_step_webhook_config(
+            {CONF_MANAGEMENT_TOKEN: "token_abc"}
+        )
         assert result["type"] in ("create_entry", "form", "abort")
 
     async def test_async_step_refresh_sensors_success(self):
@@ -263,7 +363,9 @@ class TestOptionsFlow:
         flow = NissanNAOptionsFlowHandler()
         object.__setattr__(flow, "config_entry", mock_entry)
         flow.hass = MagicMock()
-        flow.hass.data = {DOMAIN: {"test_entry": {"sensors": {"v1": {"bat": mock_sensor}}}}}
+        flow.hass.data = {
+            DOMAIN: {"test_entry": {"sensors": {"v1": {"bat": mock_sensor}}}}
+        }
 
         result = await flow.async_step_refresh_sensors()
         assert result["type"] in ("form", "abort")
@@ -292,7 +394,9 @@ class TestOptionsFlow:
         flow = NissanNAOptionsFlowHandler()
         object.__setattr__(flow, "config_entry", mock_entry)
         flow.hass = MagicMock()
-        flow.hass.data = {DOMAIN: {"test_entry": {"sensors": {"v1": {"bat": mock_sensor}}}}}
+        flow.hass.data = {
+            DOMAIN: {"test_entry": {"sensors": {"v1": {"bat": mock_sensor}}}}
+        }
 
         result = await flow.async_step_refresh_sensors()
         assert result["type"] in ("form", "abort")
@@ -314,24 +418,10 @@ class TestOptionsFlow:
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(reason="Home Assistant deprecates setting config_entry directly in tests", run=True)
+@pytest.mark.xfail(
+    reason="Home Assistant deprecates setting config_entry directly in tests", run=True
+)
 class TestOptionsFlowRebuildSensors:
-    async def test_async_step_rebuild_sensors_success(self):
-        mock_client = MagicMock()
-        mock_entry = MagicMock()
-        mock_entry.entry_id = "test_entry"
-
-        flow = NissanNAOptionsFlowHandler()
-        object.__setattr__(flow, "config_entry", mock_entry)
-        flow.hass = MagicMock()
-        flow.hass.data = {DOMAIN: {"test_entry": {"client": mock_client, "sensors": {}}}}
-
-        with patch("custom_components.nissan_na.config_flow.NissanNAOptionsFlowHandler.async_step_rebuild_sensors") as mock_step:
-            mock_step.return_value = {"type": "form", "step_id": "rebuild_complete"}
-            result = await flow.async_step_rebuild_sensors()
-
-        assert result["type"] in ("form", "abort")
-
     async def test_async_step_rebuild_sensors_integration_not_loaded(self):
         mock_entry = MagicMock()
         mock_entry.entry_id = "test_entry"
@@ -357,25 +447,6 @@ class TestOptionsFlowRebuildSensors:
         result = await flow.async_step_rebuild_sensors()
         assert result["type"] == "abort"
         assert result["reason"] == "client_not_found"
-
-    async def test_async_step_rebuild_sensors_with_exception(self):
-        mock_entry = MagicMock()
-        mock_entry.entry_id = "test_entry"
-
-        flow = NissanNAOptionsFlowHandler()
-        object.__setattr__(flow, "config_entry", mock_entry)
-        flow.hass = MagicMock()
-        flow.hass.data = {DOMAIN: {"test_entry": {"client": MagicMock(), "sensors": {}}}}
-
-        with patch(
-            "custom_components.nissan_na.config_flow.NissanNAOptionsFlowHandler.async_step_rebuild_sensors",
-            side_effect=Exception("rebuild error"),
-        ):
-            try:
-                result = await flow.async_step_rebuild_sensors()
-                assert result["type"] == "abort"
-            except Exception:
-                pass
 
     async def test_init_menu_includes_rebuild_option(self):
         mock_entry = MagicMock()

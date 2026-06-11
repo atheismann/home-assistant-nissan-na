@@ -37,7 +37,8 @@ def _parse_smartcar_signals(signals: list) -> dict:
     - meta: Metadata with timestamps
 
     This function converts the signal array to a flat dictionary mapping
-    signal codes to their body values for compatibility with the rest of the integration.
+    signal codes to their body values for compatibility with the rest
+    of the integration.
 
     Args:
         signals: List of signal objects from Smartcar webhook
@@ -74,9 +75,9 @@ def _parse_smartcar_signals(signals: list) -> dict:
         # Smartcar uses lowercase with hyphens: "charge-ischarging"
         # We want: "charge.isCharging" (dot-separated, camelCase)
         # For now, we'll store the raw code and let the entity handle conversion
-        
+
         _LOGGER.debug("Processing signal %s with body: %s", code, body)
-        
+
         # Store the body content - it could be a simple value or a dict with nested data
         if isinstance(body, dict):
             # For complex objects like location, battery, etc.
@@ -161,7 +162,10 @@ async def async_handle_webhook(
 
         if not entry:
             _LOGGER.error("No config entry found for webhook %s", webhook_id)
-            _LOGGER.debug("Available config entries: %s", [ce.entry_id for ce in hass.config_entries.async_entries(DOMAIN)])
+            _LOGGER.debug(
+                "Available config entries: %s",
+                [ce.entry_id for ce in hass.config_entries.async_entries(DOMAIN)],
+            )
             return web.Response(status=HTTPStatus.NOT_FOUND)
 
         management_token = entry.data.get(CONF_MANAGEMENT_TOKEN)
@@ -181,13 +185,14 @@ async def async_handle_webhook(
             return web.Response(status=HTTPStatus.BAD_REQUEST)
 
         event_type = payload.get("eventType")
-        
-        # Extract vehicle_id from either the old format (top-level) or new format (nested in data.vehicle.id)
+
+        # Extract vehicle_id from either the old format (top-level)
+        # or new format (nested in data.vehicle.id)
         vehicle_id = payload.get("vehicleId")  # Old format
         if not vehicle_id:
             # New format with vehicle nested in data
             vehicle_id = payload.get("data", {}).get("vehicle", {}).get("id", "N/A")
-        
+
         _LOGGER.debug("Webhook event_type: %s, vehicle_id: %s", event_type, vehicle_id)
 
         # Handle VERIFY event (no signature verification needed for initial setup)
@@ -233,25 +238,35 @@ async def async_handle_webhook(
         _LOGGER.info("Webhook signature verified for vehicle %s", vehicle_id)
 
         # Process the webhook event
-        _LOGGER.debug("Processing %s webhook event for vehicle %s", event_type, vehicle_id)
+        _LOGGER.debug(
+            "Processing %s webhook event for vehicle %s", event_type, vehicle_id
+        )
 
         if event_type == EVENT_TYPE_VEHICLE_STATE:
             # Extract vehicle data from webhook
             data = payload.get("data", {})
-            
+
             # Check if this is the new signal-based format (contains "signals" array)
             # vs the old flat dictionary format
             if "signals" in data and isinstance(data["signals"], list):
                 _LOGGER.info("Received vehicle state with signal array format")
                 # Parse the signal array format to flat dictionary
                 parsed_data = _parse_smartcar_signals(data["signals"])
-                _LOGGER.info("Vehicle state update received for %s with %d signals", vehicle_id, len(data["signals"]))
+                _LOGGER.info(
+                    "Vehicle state update received for %s with %d signals",
+                    vehicle_id,
+                    len(data["signals"]),
+                )
                 _LOGGER.debug("Parsed signals: %s", list(parsed_data.keys()))
             else:
                 # Old flat dictionary format or empty
                 parsed_data = data
-                _LOGGER.info("Vehicle state update received for %s with %d data fields", vehicle_id, len(data))
-            
+                _LOGGER.info(
+                    "Vehicle state update received for %s with %d data fields",
+                    vehicle_id,
+                    len(data),
+                )
+
             _LOGGER.debug("Webhook data to dispatch: %s", parsed_data)
 
             # Send signal to update coordinators
@@ -275,8 +290,10 @@ async def async_handle_webhook(
         return web.Response(status=HTTPStatus.OK)
 
     except Exception:  # pylint: disable=broad-except
-        vehicle_id_str = vehicle_id if 'vehicle_id' in locals() else "unknown"
-        _LOGGER.exception("Error processing Smartcar webhook for vehicle %s", vehicle_id_str)
+        vehicle_id_str = vehicle_id if "vehicle_id" in locals() else "unknown"
+        _LOGGER.exception(
+            "Error processing Smartcar webhook for vehicle %s", vehicle_id_str
+        )
         _LOGGER.debug("Exception details:", exc_info=True)
         # Still return 200 to prevent retries on our errors
         return web.Response(status=HTTPStatus.OK)

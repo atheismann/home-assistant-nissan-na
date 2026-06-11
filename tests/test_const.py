@@ -1,4 +1,5 @@
 """Unit tests for constants module."""
+
 from custom_components.nissan_na.const import (
     DOMAIN,
     CONF_CLIENT_ID,

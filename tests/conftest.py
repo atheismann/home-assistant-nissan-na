@@ -3,12 +3,13 @@
 Test Organization:
 - Core: test_const.py, test_unit_conversion.py
 - API: test_api.py, test_application_credentials.py, test_nissan_api.py, test_services.py
-- Platforms: test_binary_sensor.py, test_climate.py, test_config_flow.py, 
+- Platforms: test_binary_sensor.py, test_climate.py, test_config_flow.py,
              test_device_tracker.py, test_sensor.py, test_switch.py, test_webhook.py
 - System: test_acceptance.py, test_diagnostics.py, test_init.py
 
 This module provides shared fixtures used across all test files.
 """
+
 import pytest
 from unittest.mock import MagicMock, AsyncMock
 from homeassistant.core import HomeAssistant

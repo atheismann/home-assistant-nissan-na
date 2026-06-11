@@ -21,7 +21,8 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
 
         try:
             permissions = await client.get_permissions(vehicle.id)
-            # Only skip if we got a valid, non-empty permission list without control_security
+            # Only skip if we got a valid, non-empty permission list
+            # without control_security
             if (
                 permissions
                 and len(permissions) > 0
@@ -39,9 +40,11 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
                 lock_status = status.get("lock", {})
             except Exception:
                 lock_status = {}
-            
+
             entities.append(
-                NissanDoorLockEntity(vehicle, client, config_entry.entry_id, hass, lock_status)
+                NissanDoorLockEntity(
+                    vehicle, client, config_entry.entry_id, hass, lock_status
+                )
             )
 
     async_add_entities(entities)
@@ -99,7 +102,7 @@ class NissanDoorLockEntity(LockEntity):
 
     def _handle_webhook_data(self, data: dict):
         """Handle webhook data update from Smartcar.
-        
+
         Args:
             data: Dictionary containing updated vehicle data from webhook
         """

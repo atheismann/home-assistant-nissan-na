@@ -7,6 +7,7 @@ All notable changes to this project will be documented in this file.
 ### Added
 
 #### Comprehensive Sensor Coverage
+
 - **31 Sensors** (expanded from 7) covering:
   - **Battery**: Percentage, Range, Capacity, Low Voltage Battery
   - **Charging**: State, Voltage, Current, Power, Time to Complete, Max Current, Plugged In Status
@@ -18,6 +19,7 @@ All notable changes to this project will be documented in this file.
   - **Other**: Surveillance, Battery Heater, Charge Limit, Odometer
 
 #### Binary Sensors (NEW)
+
 - **25 Binary Sensors** covering:
   - **Doors**: All 4 doors (open + lock status)
   - **Windows**: All 4 windows (open status)
@@ -27,10 +29,12 @@ All notable changes to this project will be documented in this file.
   - **Other**: Sunroof, Engine cover, Battery heater, Surveillance
 
 #### Vehicle Control (NEW)
+
 - **Charging Switch**: Start/stop charging remotely
 - **Charge Limit Number**: Set target charge percentage (0-100%)
 
 #### Intelligent Signal Validation
+
 - **Dynamic entity creation** based on vehicle capabilities using Smartcar signals API
 - **Boot behavior**: Only adds new sensors, never removes existing ones for stability
 - **Rebuild Sensors option**: Manual validation and cleanup via configuration menu
@@ -42,18 +46,21 @@ All notable changes to this project will be documented in this file.
 - Clean sensor management without breaking existing automations
 
 #### Enhanced Configuration
+
 - **Entity Reload Option**: Discover and load new sensors after upgrades
 - **Signal Discovery**: Automatic detection of available vehicle features
 - **Diagnostics Support**: View webhook URL and integration status
 - **Entity Descriptions**: Comprehensive strings.json with all entity descriptions
 
 #### Webhook Enhancements
+
 - Real-time state updates for all entity types
 - Nested data structure parsing for complex signals
 - Async dispatcher pattern for efficient updates
 - Comprehensive webhook logging for troubleshooting
 
 #### Developer Features
+
 - Complete Home Assistant device classes and icons
 - Unique ID persistence for all entities
 - Device registry integration
@@ -75,7 +82,7 @@ All notable changes to this project will be documented in this file.
 - Signal coverage: **31/51** Smartcar signals (61%)
 - Code additions: ~1,200 lines
 - New platforms: binary_sensor, switch, number
-- Python requirement: 3.12+
+- Python requirement: 3.14+
 - Home Assistant: 2024.1+
   - Added read_charge_locations, read_charge_records for EV charging history
   - Added control_navigation for sending destinations to vehicle
@@ -126,6 +133,9 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **Python 3.14**: Minimum required Python version raised from 3.12 to 3.14.
+  Updated `Pipfile`, `pyproject.toml` (Black `target-version`), `manifest.json`
+  (`requirements_python`), and CI workflow (`pr-validation.yml`).
 - **BREAKING**: Migrated to OAuth2 Application Credentials flow
   - Now uses Home Assistant's built-in OAuth2 framework
   - Requires adding application credentials before integration setup

@@ -5,7 +5,6 @@ name = "pypi"
 
 [packages]
 pydantic = "*"
-smartcar = "*"
 
 [dev-packages]
 pytest = "*"
@@ -17,7 +16,7 @@ isort = "*"
 pre-commit = "*"
 
 [requires]
-python_version = "3.12"
+python_version = "3.14"
 
 [scripts]
 format = "black ."

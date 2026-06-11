@@ -1,4 +1,5 @@
 """Unit tests for unit conversion module."""
+
 import pytest
 from custom_components.nissan_na.unit_conversion import (
     km_to_miles,
@@ -77,7 +78,7 @@ class TestConvertValue:
         """Test Celsius to Fahrenheit conversion in imperial system."""
         result = convert_value(0, "°C", UNIT_SYSTEM_IMPERIAL)
         assert result == 32.0
-        
+
         result = convert_value(100, "°C", UNIT_SYSTEM_IMPERIAL)
         assert result == 212.0
 
@@ -95,7 +96,7 @@ class TestConvertValue:
         """Test that unsupported units return original value."""
         result = convert_value(100, "%", UNIT_SYSTEM_IMPERIAL)
         assert result == 100
-        
+
         result = convert_value(50, "kW", UNIT_SYSTEM_IMPERIAL)
         assert result == 50
 
@@ -144,7 +145,7 @@ class TestEdgeCases:
         """Test conversion of negative values."""
         result = convert_value(-10, "°C", UNIT_SYSTEM_IMPERIAL)
         assert result == 14.0
-        
+
         # Negative distance shouldn't happen but should still convert
         result = convert_value(-100, "km", UNIT_SYSTEM_IMPERIAL)
         assert result < 0

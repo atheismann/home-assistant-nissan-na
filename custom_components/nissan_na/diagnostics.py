@@ -26,18 +26,18 @@ async def async_get_config_entry_diagnostics(
     """Return diagnostics for a config entry."""
     webhook_id = config_entry.data.get(CONF_WEBHOOK_ID, "Not configured")
     webhook_url = config_entry.data.get("webhook_url", "Not configured")
-    
+
     # Get vehicle count from hass.data if available
     vehicle_count = 0
     sensor_count = 0
     if DOMAIN in hass.data and config_entry.entry_id in hass.data[DOMAIN]:
         data = hass.data[DOMAIN][config_entry.entry_id]
         vehicle_count = len(data.get("vehicles", []))
-        
+
         # Count sensors
         sensors = data.get("sensors", {})
         sensor_count = sum(len(v) for v in sensors.values())
-    
+
     return {
         "config_entry": async_redact_data(config_entry.data, TO_REDACT),
         "webhook": {

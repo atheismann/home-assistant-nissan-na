@@ -93,7 +93,8 @@ class SmartcarApiClient:
             )
             if resp.status_code != 200:
                 raise ValueError(
-                    f"Client-credentials token request failed ({resp.status_code}): {resp.text}"
+                    f"Client-credentials token request failed"
+                    f" ({resp.status_code}): {resp.text}"
                 )
             data = resp.json()
 
@@ -162,7 +163,9 @@ class SmartcarApiClient:
                 params={"filter[user_id]": self.user_id},
             )
             if resp.status_code != 200:
-                raise ValueError(f"Connections API failed ({resp.status_code}): {resp.text}")
+                raise ValueError(
+                    f"Connections API failed ({resp.status_code}): {resp.text}"
+                )
             data = resp.json()
 
         vehicles: List[Vehicle] = []
@@ -172,16 +175,22 @@ class SmartcarApiClient:
                 continue
             embedded: Dict[str, Any] = {}
             try:
-                vehicle = await self._fetch_vehicle_attributes(vehicle_id, headers, embedded)
+                vehicle = await self._fetch_vehicle_attributes(
+                    vehicle_id, headers, embedded
+                )
                 vehicles.append(vehicle)
                 self._vehicle_model_cache[vehicle_id] = vehicle
             except Exception as err:
-                _LOGGER.warning("Failed to get attributes for vehicle %s: %s", vehicle_id, err)
+                _LOGGER.warning(
+                    "Failed to get attributes for vehicle %s: %s", vehicle_id, err
+                )
 
         return vehicles
 
     async def _fetch_vehicle_attributes(
-        self, vehicle_id: str, headers: Optional[Dict[str, str]] = None,
+        self,
+        vehicle_id: str,
+        headers: Optional[Dict[str, str]] = None,
         embedded: Optional[Dict[str, Any]] = None,
     ) -> Vehicle:
         """Fetch make/model/year and VIN via v3 HTTP calls.
@@ -242,10 +251,22 @@ class SmartcarApiClient:
         """Get vehicle information (make, model, year, VIN)."""
         if vehicle_id in self._vehicle_model_cache:
             v = self._vehicle_model_cache[vehicle_id]
-            return {"id": vehicle_id, "make": v.make, "model": v.model, "year": v.year, "vin": v.vin}
+            return {
+                "id": vehicle_id,
+                "make": v.make,
+                "model": v.model,
+                "year": v.year,
+                "vin": v.vin,
+            }
         vehicle = await self._fetch_vehicle_attributes(vehicle_id)
         self._vehicle_model_cache[vehicle_id] = vehicle
-        return {"id": vehicle_id, "make": vehicle.make, "model": vehicle.model, "year": vehicle.year, "vin": vehicle.vin}
+        return {
+            "id": vehicle_id,
+            "make": vehicle.make,
+            "model": vehicle.model,
+            "year": vehicle.year,
+            "vin": vehicle.vin,
+        }
 
     # ------------------------------------------------------------------
     # Read methods (direct v3 HTTP)
@@ -362,8 +383,12 @@ class SmartcarApiClient:
     # Signals / compatibility
     # ------------------------------------------------------------------
 
-    async def get_compatibility_signals(self, make: str, model: str, year: int) -> List[str]:
-        """Get supported signal codes from the public compatibility API (no auth needed)."""
+    async def get_compatibility_signals(
+        self, make: str, model: str, year: int
+    ) -> List[str]:
+        """Get supported signal codes from the public compatibility API.
+        No auth needed.
+        """
         url = "https://compatibility.api.smartcar.com/v3/compatible-vehicles"
         params = {"filter[make]": make.upper(), "filter[region]": "US"}
         try:
@@ -392,14 +417,19 @@ class SmartcarApiClient:
             if signals:
                 _LOGGER.info(
                     "Compatibility API: %d signals for %s %s %d",
-                    len(signals), make, model, year,
+                    len(signals),
+                    make,
+                    model,
+                    year,
                 )
                 return signals
 
         _LOGGER.debug("No compatibility match for %s %s %d", make, model, year)
         return []
 
-    async def get_vehicle_signals(self, vehicle_id: str, vehicle: Any = None) -> List[str]:
+    async def get_vehicle_signals(
+        self, vehicle_id: str, vehicle: Any = None
+    ) -> List[str]:
         """Return available signal codes for a vehicle (cached after first call)."""
         if vehicle_id in self._vehicle_signals_cache:
             return self._vehicle_signals_cache[vehicle_id]
@@ -414,45 +444,56 @@ class SmartcarApiClient:
                 if resp.status_code == 200:
                     data = resp.json()
                     if "data" in data and isinstance(data["data"], list):
-                            all_sigs = data["data"]
+                        all_sigs = data["data"]
 
-                            permission_codes = [
-                                sig["attributes"]["code"]
-                                for sig in all_sigs
-                                if isinstance(sig, dict)
-                                and "attributes" in sig
-                                and "code" in sig.get("attributes", {})
-                                and sig["attributes"].get("status", {}).get("error", {}).get("type") == "PERMISSION"
-                            ]
-                            if permission_codes:
-                                self._permission_denied_signals[vehicle_id] = permission_codes
-                                _LOGGER.warning(
-                                    "Vehicle %s: %d signal(s) have PERMISSION errors: %s",
-                                    vehicle_id, len(permission_codes), permission_codes,
-                                )
-                            else:
-                                self._permission_denied_signals.pop(vehicle_id, None)
+                        permission_codes = [
+                            sig["attributes"]["code"]
+                            for sig in all_sigs
+                            if isinstance(sig, dict)
+                            and "attributes" in sig
+                            and "code" in sig.get("attributes", {})
+                            and sig["attributes"]
+                            .get("status", {})
+                            .get("error", {})
+                            .get("type")
+                            == "PERMISSION"
+                        ]
+                        if permission_codes:
+                            self._permission_denied_signals[vehicle_id] = (
+                                permission_codes
+                            )
+                            _LOGGER.warning(
+                                "Vehicle %s: %d signal(s) have PERMISSION errors: %s",
+                                vehicle_id,
+                                len(permission_codes),
+                                permission_codes,
+                            )
+                        else:
+                            self._permission_denied_signals.pop(vehicle_id, None)
 
-                            signals = [
-                                sig["attributes"]["code"]
-                                for sig in all_sigs
-                                if isinstance(sig, dict)
-                                and "attributes" in sig
-                                and "code" in sig["attributes"]
-                                and sig["attributes"].get("status", {}).get("value") == "SUCCESS"
-                            ]
-                            if signals:
-                                _LOGGER.info(
-                                    "v3 signals endpoint: %d signals for vehicle %s",
-                                    len(signals), vehicle_id,
-                                )
-                                self._vehicle_signals_cache[vehicle_id] = signals
-                                return signals
+                        signals = [
+                            sig["attributes"]["code"]
+                            for sig in all_sigs
+                            if isinstance(sig, dict)
+                            and "attributes" in sig
+                            and "code" in sig["attributes"]
+                            and sig["attributes"].get("status", {}).get("value")
+                            == "SUCCESS"
+                        ]
+                        if signals:
+                            _LOGGER.info(
+                                "v3 signals endpoint: %d signals for vehicle %s",
+                                len(signals),
+                                vehicle_id,
+                            )
+                            self._vehicle_signals_cache[vehicle_id] = signals
+                            return signals
                 else:
                     _LOGGER.debug(
                         "v3 signals endpoint returned %d for vehicle %s — "
                         "falling back to compatibility API",
-                        resp.status_code, vehicle_id,
+                        resp.status_code,
+                        vehicle_id,
                     )
         except Exception as err:
             _LOGGER.debug("v3 signals endpoint error for %s: %s", vehicle_id, err)
@@ -465,7 +506,10 @@ class SmartcarApiClient:
                 self._vehicle_signals_cache[vehicle_id] = signals
                 return signals
 
-        _LOGGER.warning("Could not determine signals for vehicle %s — no sensors will be created", vehicle_id)
+        _LOGGER.warning(
+            "Could not determine signals for vehicle %s — no sensors will be created",
+            vehicle_id,
+        )
         self._vehicle_signals_cache[vehicle_id] = []
         return []
 
@@ -493,7 +537,9 @@ class SmartcarApiClient:
             return attrs["body"] or {}
         return body
 
-    def _apply_signal_to_status(self, status: dict, signal_code: str, body: dict) -> None:
+    def _apply_signal_to_status(
+        self, status: dict, signal_code: str, body: dict
+    ) -> None:
         """Map a v3 signal response body into the shared status dict."""
         if not body:
             return
@@ -503,22 +549,26 @@ class SmartcarApiClient:
 
         if code == "odometer-traveleddistance":
             status.setdefault("odometer", {})["distance"] = (
-                body.get("traveledDistance") or body.get("distance") or body.get("value")
+                body.get("traveledDistance")
+                or body.get("distance")
+                or body.get("value")
             )
 
         elif code == "internalcombustionengine-fuellevel":
             status.setdefault("fuel", {})["percentRemaining"] = (
-                body.get("fuelLevel") or body.get("percentRemaining") or body.get("value")
+                body.get("fuelLevel")
+                or body.get("percentRemaining")
+                or body.get("value")
             )
 
         elif code == "internalcombustionengine-amountremaining":
-            status.setdefault("fuel", {})["amountRemaining"] = (
-                body.get("amountRemaining") or body.get("value")
-            )
+            status.setdefault("fuel", {})["amountRemaining"] = body.get(
+                "amountRemaining"
+            ) or body.get("value")
 
         elif code == "internalcombustionengine-range":
-            status.setdefault("fuel", {})["range"] = (
-                body.get("range") or body.get("value")
+            status.setdefault("fuel", {})["range"] = body.get("range") or body.get(
+                "value"
             )
 
         elif code == "location-preciselocation":
@@ -545,14 +595,20 @@ class SmartcarApiClient:
                     if entry.get("tirePressure") is not None
                     else entry.get("pressure")
                 )
-                pos = _ROW_COL_TO_POS.get((row, col)) if row is not None and col is not None else None
+                pos = (
+                    _ROW_COL_TO_POS.get((row, col))
+                    if row is not None and col is not None
+                    else None
+                )
                 if pos and pressure is not None:
                     tires[pos] = {"pressure": pressure}
             if tires:
                 status["tires"] = tires
 
         elif code == "diagnostics-tirepressure":
-            status.setdefault("diagnostics", {})["tirePressureWarning"] = body.get("status")
+            status.setdefault("diagnostics", {})["tirePressureWarning"] = body.get(
+                "status"
+            )
 
         elif code == "closure-islocked":
             status.setdefault("security", {})["isLocked"] = body.get("isLocked")
@@ -585,67 +641,69 @@ class SmartcarApiClient:
             status.setdefault("diagnostics", {})["oilPressure"] = body.get("status")
 
         elif code == "tractionbattery-stateofcharge":
-            status.setdefault("battery", {})["percentRemaining"] = (
-                body.get("stateOfCharge") or body.get("percentRemaining")
-            )
+            status.setdefault("battery", {})["percentRemaining"] = body.get(
+                "stateOfCharge"
+            ) or body.get("percentRemaining")
 
         elif code == "tractionbattery-range":
             status.setdefault("battery", {})["range"] = body.get("range")
 
         elif code == "tractionbattery-nominalcapacity":
-            status.setdefault("battery", {})["capacityKwh"] = (
-                body.get("capacity") or body.get("nominalCapacity")
-            )
+            status.setdefault("battery", {})["capacityKwh"] = body.get(
+                "capacity"
+            ) or body.get("nominalCapacity")
 
         elif code == "charge-ischarging":
-            status.setdefault("charge", {})["isCharging"] = (
-                body.get("isCharging") or body.get("value")
-            )
+            status.setdefault("charge", {})["isCharging"] = body.get(
+                "isCharging"
+            ) or body.get("value")
 
         elif code == "charge-ischargingcableconnected":
-            status.setdefault("charge", {})["isPluggedIn"] = (
-                body.get("isChargingCableConnected") or body.get("value")
-            )
+            status.setdefault("charge", {})["isPluggedIn"] = body.get(
+                "isChargingCableConnected"
+            ) or body.get("value")
 
         elif code == "charge-timetocomplete":
-            status.setdefault("charge", {})["timeToComplete"] = (
-                body.get("timeToComplete") or body.get("value")
-            )
+            status.setdefault("charge", {})["timeToComplete"] = body.get(
+                "timeToComplete"
+            ) or body.get("value")
 
         elif code == "charge-detailedchargingstatus":
             status.setdefault("charge", {})["state"] = (
-                body.get("detailedChargingStatus") or body.get("status") or body.get("value")
+                body.get("detailedChargingStatus")
+                or body.get("status")
+                or body.get("value")
             )
 
         elif code == "charge-chargetimers":
             status.setdefault("charge", {})["chargeTimers"] = body
 
         elif code == "charge-voltage":
-            status.setdefault("charge", {})["voltage"] = (
-                body.get("voltage") or body.get("value")
-            )
+            status.setdefault("charge", {})["voltage"] = body.get(
+                "voltage"
+            ) or body.get("value")
 
         elif code == "charge-wattage":
-            status.setdefault("charge", {})["wattage"] = (
-                body.get("wattage") or body.get("value")
-            )
+            status.setdefault("charge", {})["wattage"] = body.get(
+                "wattage"
+            ) or body.get("value")
 
         elif code == "hvac-cabintargettemperature":
-            status.setdefault("hvac", {})["targetTemperature"] = (
-                body.get("cabinTargetTemperature") or body.get("value")
-            )
+            status.setdefault("hvac", {})["targetTemperature"] = body.get(
+                "cabinTargetTemperature"
+            ) or body.get("value")
 
         elif code == "hvac-iscabinhvacactive":
-            status.setdefault("hvac", {})["isActive"] = (
-                body.get("isCabinHVACActive") or body.get("value")
-            )
+            status.setdefault("hvac", {})["isActive"] = body.get(
+                "isCabinHVACActive"
+            ) or body.get("value")
 
         else:
             _LOGGER.debug("No status mapping for signal %s — storing raw body", code)
             status[code] = body
 
     async def get_vehicle_status(self, vehicle_id: str) -> Dict[str, Any]:
-        """Get comprehensive vehicle status via a single bulk call to the v3 signals endpoint."""
+        """Get comprehensive vehicle status via bulk call to v3 signals endpoint."""
         headers = await self._api_headers()
         url = f"{self._V3_BASE}/vehicles/{vehicle_id}/signals"
 
@@ -655,7 +713,8 @@ class SmartcarApiClient:
                 if resp.status_code != 200:
                     _LOGGER.warning(
                         "Signals endpoint returned %d for vehicle %s",
-                        resp.status_code, vehicle_id,
+                        resp.status_code,
+                        vehicle_id,
                     )
                     return {}
                 data = resp.json()
@@ -682,7 +741,8 @@ class SmartcarApiClient:
             if isinstance(sig, dict)
             and "attributes" in sig
             and "code" in sig.get("attributes", {})
-            and sig.get("attributes", {}).get("status", {}).get("error", {}).get("type") == "PERMISSION"
+            and sig.get("attributes", {}).get("status", {}).get("error", {}).get("type")
+            == "PERMISSION"
         ]
         if permission_codes:
             self._permission_denied_signals[vehicle_id] = permission_codes

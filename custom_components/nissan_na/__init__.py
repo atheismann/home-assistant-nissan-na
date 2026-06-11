@@ -7,6 +7,9 @@ import logging
 from datetime import timedelta
 
 from homeassistant.components import webhook as ha_webhook
+from homeassistant.helpers.config_entry_oauth2_flow import (
+    async_get_config_entry_implementation,
+)
 from homeassistant import config_entries
 from homeassistant.const import CONF_WEBHOOK_ID
 from homeassistant.core import HomeAssistant
@@ -34,7 +37,6 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     # Application Credentials are handled automatically by Home Assistant
     # No need to manually register OAuth2 implementation
     return True
-
 
 
 async def async_setup_entry(
@@ -83,25 +85,38 @@ async def async_setup_entry(
     if not user_id:
         _LOGGER.warning(
             "No user_id found in config entry — re-authorization required. "
-            "Go to Settings → Integrations → Nissan → Configure → Re-authorize Integration."
+            "Go to Settings → Integrations → Nissan"
+            " → Configure → Re-authorize Integration."
         )
         hass.async_create_task(
             hass.config_entries.flow.async_init(
                 DOMAIN,
-                context={"source": config_entries.SOURCE_REAUTH, "entry_id": config_entry.entry_id},
+                context={
+                    "source": config_entries.SOURCE_REAUTH,
+                    "entry_id": config_entry.entry_id,
+                },
                 data=config_entry.data,
             )
         )
         return False
 
-    # Load client credentials from config entry data
-    client_id = config_entry.data.get("client_id")
-    client_secret = config_entry.data.get("client_secret")
+    # Load client credentials from Application Credentials storage
+    try:
+        implementation = await async_get_config_entry_implementation(hass, config_entry)
+    except KeyError:
+        _LOGGER.error(
+            "OAuth implementation not found. "
+            "Please remove and re-add the integration."
+        )
+        return False
+
+    client_id = implementation.client_id
+    client_secret = implementation.client_secret
 
     if not client_id or not client_secret:
         _LOGGER.error(
             "API credentials are not configured. "
-            "Please remove and re-add the integration."
+            "Please configure Application Credentials for Nissan NA."
         )
         return False
 
@@ -164,7 +179,9 @@ async def async_setup_entry(
         """Update all vehicles periodically from API and refresh sensor entities."""
         data = hass.data[DOMAIN].get(config_entry.entry_id)
         if not data:
-            _LOGGER.warning("Integration data not found for entry %s", config_entry.entry_id)
+            _LOGGER.warning(
+                "Integration data not found for entry %s", config_entry.entry_id
+            )
             return
         client = data["client"]
 
