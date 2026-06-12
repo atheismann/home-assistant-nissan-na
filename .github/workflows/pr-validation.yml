@@ -79,7 +79,7 @@ jobs:
         run: pipenv run coverage xml
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         if: matrix.python-version == '3.14'
         with:
           files: ./coverage.xml
